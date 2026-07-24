@@ -550,19 +550,6 @@ function init() {
   if (dom.rangeStart) dom.rangeStart.addEventListener("input", onRangeChange);
   if (dom.rangeEnd) dom.rangeEnd.addEventListener("input", onRangeChange);
 
-  // Preset buttons
-  var presetBtns = qsa(".preset-buttons .btn");
-  for (var i = 0; i < presetBtns.length; i++) {
-    (function(btn) {
-      btn.addEventListener("click", function() {
-        var action = btn.dataset.action;
-        var offset = parseInt(btn.dataset.offset);
-        var duration = parseInt(btn.dataset.duration);
-        handlePreset(action, offset || duration);
-      });
-    })(presetBtns[i]);
-  }
-
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
 

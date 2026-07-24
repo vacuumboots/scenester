@@ -51,12 +51,12 @@
 
   <!-- Detail view (hidden until item selected) -->
   <div id="detail-view" style="display:none">
-    <button class="btn btn-back" id="btn-back">&larr; Back to Library</button>
+    <button class="btn btn-back" id="btn-back" onclick="goBack()">&larr; Back to Library</button>
 
     <div class="target-card">
       <div class="target-name" id="detail-title"></div>
       <div class="target-meta" id="detail-meta"></div>
-      <button class="btn btn-primary" id="btn-generate-proxy">Generate Preview</button>
+      <button class="btn btn-primary" id="btn-generate-proxy" onclick="generateProxy()">Generate Preview</button>
     </div>
 
     <!-- Proxy progress (shown during generation) -->
@@ -98,15 +98,15 @@
         </div>
 
         <div class="preset-buttons">
-          <button class="btn btn-small" data-action="shift-start" data-offset="-10">-10s</button>
-          <button class="btn btn-small" data-action="shift-start" data-offset="10">+10s</button>
+          <button class="btn btn-small" onclick="handlePreset('shift-start',-10)">-10s</button>
+          <button class="btn btn-small" onclick="handlePreset('shift-start',10)">+10s</button>
           <span class="preset-sep"></span>
-          <button class="btn btn-small" data-action="set-duration" data-duration="30">30s clip</button>
-          <button class="btn btn-small" data-action="set-duration" data-duration="60">1 min clip</button>
-          <button class="btn btn-small" data-action="set-duration" data-duration="120">2 min clip</button>
+          <button class="btn btn-small" onclick="handlePreset('set-duration',30)">30s clip</button>
+          <button class="btn btn-small" onclick="handlePreset('set-duration',60)">1 min clip</button>
+          <button class="btn btn-small" onclick="handlePreset('set-duration',120)">2 min clip</button>
         </div>
 
-        <button class="btn btn-primary btn-download" id="btn-download-clip" disabled>
+        <button class="btn btn-primary btn-download" id="btn-download-clip" disabled onclick="downloadClip()">
           &#11015; Download Clip
         </button>
         <div class="clip-status" id="clip-status"></div>

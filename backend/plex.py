@@ -31,16 +31,18 @@ def get_client() -> httpx.AsyncClient:
     return _client
 
 
-def _translate_path(plex_path: str) -> str:
+def _translate_path(mc: dict) -> str:
     """Convert Plex internal path to container bind-mount path.
 
-    Plex stores media at /data/media/movies/Film.mkv,
-    but the container sees /media/movies/Film.mkv via the bind mount.
+    Plex stores media at /data/media/movies/Film.mkv inside
+    Media[0].Part[0].file, but the container sees /media/movies/Film.mkv
+    via the bind mount.
     """
-    for part in plex_path.get("Part", []):
-        fp = part.get("file", "")
-        if fp:
-            return fp.replace("/data/media", "/media", 1)
+    for media in mc.get("Media", []):
+        for part in media.get("Part", []):
+            fp = part.get("file", "")
+            if fp:
+                return fp.replace("/data/media", "/media", 1)
     return ""
 
 
