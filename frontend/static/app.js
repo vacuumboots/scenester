@@ -75,7 +75,7 @@ function fmtDuration(ms) {
 
 async function loadLibrary() {
   try {
-    const resp = await fetch("/api/library");
+    const resp = await fetch("api/library");
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     state.items = data.items || [];
@@ -120,7 +120,7 @@ function renderCard(item) {
     : `${item.type || "movie"}${year}${dur}`;
 
   const thumbSrc = item.thumb
-    ? `/api/thumb/${item.media_id}`
+    ? `api/thumb/${item.media_id}`
     : "";
 
   const thumbHtml = thumbSrc
@@ -149,7 +149,7 @@ function escHtml(str) {
 
 async function selectItem(mediaId) {
   try {
-    const resp = await fetch(`/api/library/${mediaId}`);
+    const resp = await fetch(`api/library/${mediaId}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     state.currentItem = await resp.json();
     state.proxyReady = false;
@@ -201,7 +201,7 @@ let sessionPollTimer = null;
 
 async function pollSessions() {
   try {
-    const resp = await fetch("/api/sessions");
+    const resp = await fetch("api/sessions");
     if (!resp.ok) return;
     const data = await resp.json();
     const sessions = data.sessions || [];
@@ -257,7 +257,7 @@ async function generateProxy() {
 
   try {
     // Trigger generation
-    const startResp = await fetch(`/api/proxy/${mediaId}`, { method: "POST" });
+    const startResp = await fetch(`api/proxy/${mediaId}`, { method: "POST" });
     if (!startResp.ok) {
       const err = await startResp.json().catch(() => ({}));
       throw new Error(err.detail || `HTTP ${startResp.status}`);
@@ -282,7 +282,7 @@ async function pollProxyStatus(mediaId) {
     polls++;
 
     try {
-      const resp = await fetch(`/api/proxy/${mediaId}/status`);
+      const resp = await fetch(`api/proxy/${mediaId}/status`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const status = await resp.json();
 
@@ -321,7 +321,7 @@ function onProxyReady(mediaId) {
   state.proxyDuration = durationS;
 
   // Set up video player
-  dom.proxyVideo.src = `/api/proxy/${mediaId}/stream`;
+  dom.proxyVideo.src = `api/proxy/${mediaId}/stream`;
 
   // Set range inputs
   dom.rangeStart.max = Math.floor(durationS);
@@ -423,7 +423,7 @@ async function downloadClip() {
   dom.clipStatus.textContent = "Encoding clip (may take 10-30 seconds)...";
 
   try {
-    const resp = await fetch("/api/clip", {
+    const resp = await fetch("api/clip", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -440,9 +440,9 @@ async function downloadClip() {
 
     const data = await resp.json();
 
-    // Trigger browser download
+    // Trigger browser download (strip leading / to keep paths relative)
     const a = document.createElement("a");
-    a.href = data.url;
+    a.href = data.url.replace(/^\//, "");
     a.download = data.filename;
     document.body.appendChild(a);
     a.click();
