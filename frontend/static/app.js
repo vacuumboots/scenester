@@ -19,6 +19,7 @@ const state = {
   proxyReady: false,
   proxyDuration: 0,     // seconds (full movie)
   proxyStartSec: 0,     // seconds into movie where proxy starts
+  proxyEndSec: 0,       // seconds into movie where proxy ends (capped)
 };
 
 // ── Safe DOM access ────────────────────────────────────────────────────
@@ -268,6 +269,7 @@ function showDetailView() {
   state.proxyReady = false;
   state.proxyDuration = 0;
   state.proxyStartSec = 0;
+  state.proxyEndSec = 0;
 }
 
 function goBack() {
@@ -486,6 +488,7 @@ function onProxyReady(mediaId) {
 
   // Show proxy range info
   var proxyEndSec = Math.min(durationS, state.proxyStartSec + 600);
+  state.proxyEndSec = proxyEndSec;
   if (dom.proxyInfoText) {
     dom.proxyInfoText.textContent = "Preview: " + fmtTime(state.proxyStartSec) + " \u2013 " + fmtTime(proxyEndSec) + " of " + fmtTime(durationS);
   }
@@ -527,11 +530,15 @@ function onProxyReady(mediaId) {
 // ── Scrubber Controls ──────────────────────────────────────────────────
 
 function seekVideo(absoluteSec) {
-  // Convert absolute movie time to proxy-relative video time
+  // Convert absolute movie time to proxy-relative video time.
+  // Returns true if within proxy range, false if outside.
   var relSec = absoluteSec - state.proxyStartSec;
+  var proxyLen = state.proxyEndSec - state.proxyStartSec;
+  var inRange = relSec >= 0 && relSec <= proxyLen;
   if (dom.proxyVideo) {
-    dom.proxyVideo.currentTime = Math.max(0, relSec);
+    dom.proxyVideo.currentTime = Math.max(0, Math.min(relSec, proxyLen));
   }
+  return inRange;
 }
 
 function updateTimeDisplay() {
@@ -568,18 +575,23 @@ function updateTimeDisplay() {
   }
 }
 
-// Seek during drag — real-time visual feedback
+// During drag: seek but cap silently if outside proxy range
 function onRangeInput() {
   updateTimeDisplay();
   var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
   seekVideo(start);
 }
 
-// Seek on release
+// On release: if outside proxy range, auto-regenerate from new position
 function onStartReleased() {
   updateTimeDisplay();
   var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  seekVideo(start);
+  var inRange = seekVideo(start);
+  if (!inRange) {
+    // Outside proxy range — auto-regenerate
+    if (dom.proxyRegenStart) dom.proxyRegenStart.value = Math.floor(start / 60);
+    regenerateProxy();
+  }
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
