@@ -28,15 +28,7 @@ PROXY_DIR.mkdir(parents=True, exist_ok=True)
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Proxy job tracking ───────────────────────────────────────────────────
-# proxy_jobs[media_id] = {"progress": 0.5, "done": False, "error": None}
 proxy_jobs: dict[int, dict] = {}
-
-
-def _parse_ffmpeg_time(time_str: str) -> float:
-    """Parse ffmpeg 'HH:MM:SS.ms' to seconds."""
-    parts = time_str.split(":")
-    h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
-    return h * 3600 + m * 60 + s
 
 
 async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: float):
@@ -50,6 +42,7 @@ async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: flo
 
     cmd = [
         "ffmpeg", "-y",
+        "-progress", "pipe:2",
         "-ss", "0",
         "-i", file_path,
         "-t", str(total_duration_s),
@@ -65,15 +58,27 @@ async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: flo
         stdout=asyncio.subprocess.DEVNULL,
     )
 
-    time_pattern = re.compile(r"time=(\d+:\d+:\d+\.\d+)")
+    time_pattern = re.compile(r"out_time_us=(\d+)")
+    out_time_ms_pattern = re.compile(r"out_time_ms=(\d+)")
+    last_progress = 0.0
 
     async for line in proc.stderr:
         decoded = line.decode("utf-8", errors="ignore")
+
+        # Try out_time_us first (microseconds), fall back to out_time_ms
         match = time_pattern.search(decoded)
         if match:
-            current = _parse_ffmpeg_time(match.group(1))
-            if total_duration_s > 0:
-                proxy_jobs[media_id]["progress"] = min(current / total_duration_s, 0.99)
+            current = int(match.group(1)) / 1_000_000
+        else:
+            match = out_time_ms_pattern.search(decoded)
+            if match:
+                current = int(match.group(1)) / 1_000_000
+
+        if match and total_duration_s > 0:
+            pct = min(current / total_duration_s, 0.99)
+            if pct > last_progress:
+                last_progress = pct
+                proxy_jobs[media_id]["progress"] = pct
 
     await proc.wait()
 
