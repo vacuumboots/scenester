@@ -16,10 +16,7 @@
 const state = {
   items: [],            // all library items
   currentItem: null,    // selected item metadata
-  proxyReady: false,
-  proxyDuration: 0,     // seconds (full movie)
-  proxyStartSec: 0,     // seconds into movie where proxy starts
-  proxyEndSec: 0,       // seconds into movie where proxy ends (capped)
+  proxyDuration: 0,     // seconds (full movie duration for sliders)
 };
 
 // ── Safe DOM access ────────────────────────────────────────────────────
@@ -41,7 +38,6 @@ function getDom() {
     detailView:   qs("#detail-view"),
     detailTitle:  qs("#detail-title"),
     detailMeta:   qs("#detail-meta"),
-    btnGenProxy:  qs("#btn-generate-proxy"),
     btnBack:      qs("#btn-back"),
     nowPlaying:   qs("#now-playing"),
     npTitle:      qs("#np-title"),
@@ -51,16 +47,6 @@ function getDom() {
     npProgress:       qs("#np-progress"),
     npProgressFill:   qs("#np-progress-fill"),
     npProgressText:   qs("#np-progress-text"),
-    proxyProgress: qs("#proxy-progress"),
-    progressFill:  qs("#progress-fill"),
-    progressText:  qs("#progress-text"),
-    proxyError:    qs("#proxy-error"),
-    proxySection:  qs("#proxy-section"),
-    proxyVideo:   qs("#proxy-video"),
-    proxyInfo:        qs("#proxy-info"),
-    proxyInfoText:    qs("#proxy-info-text"),
-    proxyRegenStart:  qs("#proxy-regen-start"),
-    btnRegenProxy:    qs("#btn-regenerate-proxy"),
     // Frame preview
     framePreview:    qs("#frame-preview"),
     frameImg:        qs("#frame-img"),
@@ -243,7 +229,6 @@ async function selectItem(mediaId) {
     var resp = await fetch("api/library/" + mediaId);
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     state.currentItem = await resp.json();
-    state.proxyReady = false;
     showDetailView();
   } catch (err) {
     console.error("Failed to load item:", err);
@@ -268,35 +253,37 @@ function showDetailView() {
   if (item.duration) parts.push(fmtDuration(item.duration));
   if (dom.detailMeta) dom.detailMeta.textContent = parts.join(" \u00b7 ");
 
-  // Reset proxy state
-  if (dom.proxySection) dom.proxySection.style.display = "none";
-  if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
-  if (dom.proxyError) dom.proxyError.style.display = "none";
-  if (dom.btnGenProxy) dom.btnGenProxy.style.display = "inline-flex";
-  if (dom.btnDownload) dom.btnDownload.disabled = true;
-  if (dom.clipStatus) dom.clipStatus.textContent = "";
-  if (dom.clipProgress) dom.clipProgress.style.display = "none";
-  state.proxyReady = false;
-  state.proxyDuration = 0;
-  state.proxyStartSec = 0;
-  state.proxyEndSec = 0;
-
-  // Show frame preview immediately — no proxy needed
-  var mediaId = item.media_id || item.id;
   var durationS = (item.duration || 0) / 1000;
   state.proxyDuration = durationS;
-  state.proxyStartSec = 0;
-  state.proxyEndSec = durationS;  // frames work everywhere
 
+  // Show frame preview + scrubber immediately
   if (dom.framePreview) dom.framePreview.style.display = "block";
+  if (dom.clipProgress) dom.clipProgress.style.display = "none";
+  if (dom.clipStatus) dom.clipStatus.textContent = "";
+
   if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
   if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
-  if (dom.rangeStart) dom.rangeStart.value = 0;
-  if (dom.rangeEnd) dom.rangeEnd.value = Math.min(30, Math.floor(durationS));
+
+  // Handle jump-to-clip offset from session banner
+  if (window._jumpOffset != null) {
+    var offset = window._jumpOffset;
+    var start = Math.max(0, offset - 5);
+    var end = Math.min(durationS, offset + 25);
+    if (dom.rangeStart) dom.rangeStart.value = Math.floor(start);
+    if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(end);
+    window._jumpOffset = null;
+    window._jumpDuration = null;
+  } else {
+    if (dom.rangeStart) dom.rangeStart.value = 0;
+    if (dom.rangeEnd) dom.rangeEnd.value = Math.min(30, Math.floor(durationS));
+  }
+
   updateTimeDisplay();
+  if (dom.btnDownload) dom.btnDownload.disabled = false;
 
   // Load first frame
-  showFrame(0);
+  var startVal = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  showFrame(startVal);
 }
 
 function goBack() {
@@ -344,13 +331,9 @@ async function pollSessions() {
 }
 
 function jumpToClip(session) {
-  var durationS = session.duration / 1000;
-  var viewOffset = session.viewOffset;
-
-  selectItem(session.media_id).then(function() {
-    window._jumpOffset = viewOffset;
-    window._jumpDuration = durationS;
-  });
+  window._jumpOffset = session.viewOffset;
+  window._jumpDuration = session.duration / 1000;
+  selectItem(session.media_id);
 }
 
 async function quickClip() {
@@ -448,212 +431,6 @@ function pollQuickClipStatus(filename) {
 function startSessionPolling() {
   pollSessions();
   sessionPollTimer = setInterval(pollSessions, 5000);
-}
-
-// ── Proxy Generation ───────────────────────────────────────────────────
-
-async function generateProxy() {
-  // Safety: if dom isn't initialized at all, show alert
-  if (!dom) { alert("DOM not initialized — page may not have loaded fully. Please refresh."); return; }
-
-  // Immediate visual feedback — changes button text instantly
-  if (dom.btnGenProxy) {
-    dom.btnGenProxy.textContent = "Working...";
-    dom.btnGenProxy.disabled = true;
-  }
-
-  console.log("generateProxy called, currentItem:", state.currentItem);
-  if (!state.currentItem) {
-    if (dom.btnGenProxy) { dom.btnGenProxy.textContent = "Error: no item"; dom.btnGenProxy.disabled = false; }
-    return;
-  }
-
-  var mediaId = state.currentItem.media_id || state.currentItem.id;
-  console.log("mediaId:", mediaId);
-  if (!mediaId) {
-    if (dom.btnGenProxy) { dom.btnGenProxy.textContent = "Error: no media ID"; dom.btnGenProxy.disabled = false; }
-    return;
-  }
-
-  console.log("Hiding button, showing progress...");
-  if (dom.btnGenProxy) dom.btnGenProxy.style.display = "none";
-
-  // Read start offset in minutes
-  var startMin = parseInt(qs("#proxy-start") ? qs("#proxy-start").value : 0) || 0;
-  state.proxyStartSec = startMin * 60;
-
-  hideError();
-  if (dom.proxySection) dom.proxySection.style.display = "none";
-  if (dom.framePreview) dom.framePreview.style.display = "none";
-  if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
-  if (dom.progressFill) dom.progressFill.style.width = "0%";
-  if (dom.progressText) dom.progressText.textContent = "Starting proxy generation...";
-
-  try {
-    var url = "api/proxy/" + mediaId;
-    if (startMin > 0) url += "?start_min=" + startMin;
-    var startResp = await fetch(url, { method: "POST" });
-    if (!startResp.ok) {
-      var errData = await startResp.json().catch(function() { return {}; });
-      throw new Error(errData.detail || "HTTP " + startResp.status);
-    }
-
-    var startData = await startResp.json();
-
-    // Show warning if movie was too long
-    if (startData.warning) {
-      dom.progressText.textContent = startData.warning + " " + dom.progressText.textContent;
-    }
-
-    await pollProxyStatus(mediaId);
-  } catch (err) {
-    if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
-    if (dom.framePreview) dom.framePreview.style.display = "block";
-    showError(err.message);
-    if (dom.btnGenProxy) {
-      dom.btnGenProxy.style.display = "inline-flex";
-      dom.btnGenProxy.textContent = "Video Preview";
-      dom.btnGenProxy.disabled = false;
-    }
-  }
-}
-
-function showError(msg) {
-  var banner = qs("#error-banner");
-  var msgEl = qs("#error-message");
-  if (banner) banner.style.display = "block";
-  if (msgEl) msgEl.textContent = msg;
-}
-
-function hideError() {
-  var banner = qs("#error-banner");
-  if (banner) banner.style.display = "none";
-}
-
-async function pollProxyStatus(mediaId) {
-  var maxPolls = 300;
-  var polls = 0;
-
-  while (polls < maxPolls) {
-    await sleep(2000);
-    polls++;
-
-    try {
-      var resp = await fetch("api/proxy/" + mediaId + "/status");
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      var status = await resp.json();
-
-      if (status.error) throw new Error(status.error);
-
-      if (status.done) {
-        if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
-        if (dom.progressFill) dom.progressFill.style.width = "100%";
-        if (dom.progressText) dom.progressText.textContent = "Done!";
-        onProxyReady(mediaId);
-        return;
-      }
-      // Update progress with ETA
-      var pct = Math.round(status.progress * 100);
-      var text = "Generating preview... " + pct + "%";
-      if (status.eta_seconds != null && status.eta_seconds > 0) {
-        var mins = Math.floor(status.eta_seconds / 60);
-        var secs = status.eta_seconds % 60;
-        text += " (ETA " + mins + "m " + secs + "s)";
-      }
-      if (dom.progressFill) dom.progressFill.style.width = pct + "%";
-      if (dom.progressText) dom.progressText.textContent = text;
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  throw new Error("Proxy generation timed out");
-}
-
-async function regenerateProxy() {
-  if (!dom) return;
-  if (!state.currentItem) return;
-
-  var startMin = parseInt(dom.proxyRegenStart ? dom.proxyRegenStart.value : 0) || 0;
-  state.proxyStartSec = startMin * 60;
-
-  var mediaId = state.currentItem.media_id || state.currentItem.id;
-  if (!mediaId) return;
-
-  // Hide current proxy video, show progress
-  if (dom.proxySection) dom.proxySection.style.display = "none";
-  if (dom.framePreview) dom.framePreview.style.display = "none";
-  hideError();
-  if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
-  if (dom.progressFill) dom.progressFill.style.width = "0%";
-  if (dom.progressText) dom.progressText.textContent = "Regenerating preview from " + fmtTime(state.proxyStartSec) + "...";
-
-  try {
-    var url = "api/proxy/" + mediaId + "?start_min=" + startMin + "&force=true";
-    var startResp = await fetch(url, { method: "POST" });
-    if (!startResp.ok) {
-      var errData = await startResp.json().catch(function() { return {}; });
-      throw new Error(errData.detail || "HTTP " + startResp.status);
-    }
-    var startData = await startResp.json();
-    if (startData.warning && dom.progressText) {
-      dom.progressText.textContent = startData.warning + " " + dom.progressText.textContent;
-    }
-    await pollProxyStatus(mediaId);
-  } catch (err) {
-    if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
-    if (dom.framePreview) dom.framePreview.style.display = "block";
-    showError(err.message);
-  }
-}
-
-function onProxyReady(mediaId) {
-  state.proxyReady = true;
-
-  var item = state.currentItem;
-  var durationS = item.duration / 1000;
-  state.proxyDuration = durationS;
-
-  // Show proxy range info
-  var proxyEndSec = Math.min(durationS, state.proxyStartSec + 600);
-  state.proxyEndSec = proxyEndSec;
-  if (dom.proxyInfoText) {
-    dom.proxyInfoText.textContent = "Preview: " + fmtTime(state.proxyStartSec) + " \u2013 " + fmtTime(proxyEndSec) + " of " + fmtTime(durationS);
-  }
-  // Set regenerate input to next reasonable offset (current end, rounded to minutes)
-  if (dom.proxyRegenStart) {
-    dom.proxyRegenStart.value = Math.floor(proxyEndSec / 60);
-  }
-
-  if (dom.proxyVideo) dom.proxyVideo.src = "api/proxy/" + mediaId + "/stream";
-
-  if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
-  if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
-
-  var defaultEnd = Math.min(state.proxyStartSec + 30, Math.floor(durationS));
-  if (dom.rangeStart) dom.rangeStart.value = Math.floor(state.proxyStartSec);
-  if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(defaultEnd);
-
-  if (window._jumpOffset != null) {
-    var offset = window._jumpOffset;
-    var start = Math.max(0, offset - 5);
-    var end = Math.min(durationS, offset + 25);
-    if (dom.rangeStart) dom.rangeStart.value = Math.floor(start);
-    if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(end);
-    window._jumpOffset = null;
-    window._jumpDuration = null;
-  }
-
-  updateTimeDisplay();
-  if (dom.framePreview) dom.framePreview.style.display = "none";
-  if (dom.proxySection) dom.proxySection.style.display = "block";
-  if (dom.btnDownload) dom.btnDownload.disabled = false;
-
-  // Seek video to start position (queues until metadata loaded)
-  var startVal = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  if (dom.proxyVideo) dom.proxyVideo.currentTime = Math.max(0, startVal - state.proxyStartSec);
-
-  if (dom.proxySection) dom.proxySection.scrollIntoView({ behavior: "smooth" });
 }
 
 // ── Scrubber Controls ──────────────────────────────────────────────────
@@ -885,9 +662,6 @@ function init() {
 
   // Detail back button
   if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
-
-  // Generate proxy
-  if (dom.btnGenProxy) dom.btnGenProxy.addEventListener("click", generateProxy);
 
   // Range sliders: input = live display update, change = seek-on-release
   if (dom.rangeStart) {
