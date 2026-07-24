@@ -127,6 +127,7 @@ async def get_metadata(media_id: int) -> dict:
 
     item = {
         "title": mc.get("title", "Unknown"),
+        "media_id": int(mc.get("ratingKey", 0)),
         "duration": mc.get("duration", 0),       # ms
         "file_path": _translate_path(mc),
         "thumb": mc.get("thumb"),
