@@ -517,10 +517,22 @@ function onProxyReady(mediaId) {
   if (dom.proxySection) dom.proxySection.style.display = "block";
   if (dom.btnDownload) dom.btnDownload.disabled = false;
 
+  // Seek video to start position (queues until metadata loaded)
+  var startVal = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  seekVideo(startVal);
+
   if (dom.proxySection) dom.proxySection.scrollIntoView({ behavior: "smooth" });
 }
 
 // ── Scrubber Controls ──────────────────────────────────────────────────
+
+function seekVideo(absoluteSec) {
+  // Convert absolute movie time to proxy-relative video time
+  var relSec = absoluteSec - state.proxyStartSec;
+  if (dom.proxyVideo) {
+    dom.proxyVideo.currentTime = Math.max(0, relSec);
+  }
+}
 
 function updateTimeDisplay() {
   var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
@@ -530,25 +542,42 @@ function updateTimeDisplay() {
   if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(end);
   if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.proxyDuration);
 
+  // Enforce start < end
   if (end <= start && dom.rangeEnd) {
     dom.rangeEnd.value = start + 1;
     if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 1);
     end = start + 1;
   }
 
+  // Enforce max 140s clip
   if (end - start > 140 && dom.rangeEnd) {
     dom.rangeEnd.value = start + 140;
     if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 140);
   }
 
+  // Clamp end to duration
   if (dom.rangeEnd && parseInt(dom.rangeEnd.value) > state.proxyDuration) {
     dom.rangeEnd.value = Math.floor(state.proxyDuration);
     if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(Math.floor(state.proxyDuration));
   }
+
+  // Clamp start to duration
+  if (dom.rangeStart && parseInt(dom.rangeStart.value) > state.proxyDuration) {
+    dom.rangeStart.value = Math.floor(state.proxyDuration);
+    if (dom.timeStart) dom.timeStart.textContent = fmtTime(Math.floor(state.proxyDuration));
+  }
 }
 
-function onRangeChange() {
+// Live display update during drag (no seek)
+function onRangeInput() {
   updateTimeDisplay();
+}
+
+// Seek on release
+function onStartReleased() {
+  updateTimeDisplay();
+  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  seekVideo(start);
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
@@ -560,14 +589,16 @@ function handlePreset(action, value) {
     var newStart = Math.max(0, start + value);
     if (dom.rangeStart) dom.rangeStart.value = newStart;
     var currentEnd = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || (start + 30);
-    var duration = currentEnd - start;
-    if (dom.rangeEnd) dom.rangeEnd.value = Math.min(state.proxyDuration, newStart + Math.max(1, duration));
+    var dur = currentEnd - start;
+    if (dom.rangeEnd) dom.rangeEnd.value = Math.min(state.proxyDuration, newStart + Math.max(1, dur));
+    updateTimeDisplay();
+    seekVideo(newStart);
   } else if (action === "set-duration") {
     var newEnd = Math.min(state.proxyDuration, start + value);
     if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(newEnd);
+    updateTimeDisplay();
+    seekVideo(start);
   }
-
-  updateTimeDisplay();
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────
@@ -714,9 +745,14 @@ function init() {
   // Generate proxy
   if (dom.btnGenProxy) dom.btnGenProxy.addEventListener("click", generateProxy);
 
-  // Range sliders
-  if (dom.rangeStart) dom.rangeStart.addEventListener("input", onRangeChange);
-  if (dom.rangeEnd) dom.rangeEnd.addEventListener("input", onRangeChange);
+  // Range sliders: input = live display update, change = seek-on-release
+  if (dom.rangeStart) {
+    dom.rangeStart.addEventListener("input", onRangeInput);
+    dom.rangeStart.addEventListener("change", onStartReleased);
+  }
+  if (dom.rangeEnd) {
+    dom.rangeEnd.addEventListener("input", onRangeInput);
+  }
 
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
