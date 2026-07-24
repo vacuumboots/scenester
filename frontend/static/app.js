@@ -568,9 +568,11 @@ function updateTimeDisplay() {
   }
 }
 
-// Live display update during drag (no seek)
+// Seek during drag — real-time visual feedback
 function onRangeInput() {
   updateTimeDisplay();
+  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  seekVideo(start);
 }
 
 // Seek on release
