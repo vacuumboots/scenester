@@ -362,10 +362,16 @@ async function pollProxyStatus(mediaId) {
         onProxyReady(mediaId);
         return;
       }
-
+      // Update progress with ETA
       var pct = Math.round(status.progress * 100);
+      var text = "Generating preview... " + pct + "%";
+      if (status.eta_seconds != null && status.eta_seconds > 0) {
+        var mins = Math.floor(status.eta_seconds / 60);
+        var secs = status.eta_seconds % 60;
+        text += " (ETA " + mins + "m " + secs + "s)";
+      }
       if (dom.progressFill) dom.progressFill.style.width = pct + "%";
-      if (dom.progressText) dom.progressText.textContent = "Generating preview... " + pct + "%";
+      if (dom.progressText) dom.progressText.textContent = text;
     } catch (err) {
       throw err;
     }

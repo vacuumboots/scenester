@@ -38,7 +38,7 @@ async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: flo
         proxy_jobs[media_id] = {"progress": 1.0, "done": True, "error": None}
         return
 
-    proxy_jobs[media_id] = {"progress": 0.0, "done": False, "error": None}
+    proxy_jobs[media_id] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
 
     cmd = [
         "ffmpeg", "-y",
@@ -46,9 +46,9 @@ async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: flo
         "-ss", "0",
         "-i", file_path,
         "-t", str(total_duration_s),
-        "-vf", "scale=640:-1",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-c:a", "aac", "-b:a", "64k",
+        "-vf", "scale=640:-1,fps=12",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+        "-an",
         str(proxy_path),
     ]
 
@@ -203,11 +203,19 @@ async def proxy_status(media_id: int):
     """Poll proxy generation progress."""
     job = proxy_jobs.get(media_id)
     if job is None:
-        return {"progress": 0, "done": False, "error": None}
+        return {"progress": 0, "done": False, "error": None, "eta_seconds": None}
+
+    eta = None
+    progress = job["progress"]
+    if progress > 0.01 and not job.get("done"):
+        elapsed = time.time() - job.get("started_at", time.time())
+        eta = int(elapsed / progress - elapsed)
+
     return {
-        "progress": job["progress"],
+        "progress": progress,
         "done": job["done"],
         "error": job.get("error"),
+        "eta_seconds": eta,
     }
 
 
@@ -225,6 +233,9 @@ async def proxy_stream(media_id: int):
 
 
 # ── API: Clip generation ─────────────────────────────────────────────────
+
+clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
+
 
 @app.post("/api/clip")
 async def create_clip(req: ClipRequest):
@@ -249,29 +260,71 @@ async def create_clip(req: ClipRequest):
     filename = f"clip_{req.media_id}_{int(req.start_sec)}-{int(req.end_sec)}.mp4"
     output_path = CLIPS_DIR / filename
 
-    # Output seeking for frame accuracy:
-    # -ss before -i for fast seek, then -ss 0 after -i to start at exact frame
+    # Single -ss before -i for speed (keyframe accuracy is fine for clips)
     cmd = [
         "ffmpeg", "-y",
+        "-progress", "pipe:2",
         "-ss", str(req.start_sec),
         "-i", file_path,
-        "-ss", "0",
         "-t", str(duration),
+        "-vf", "scale=1920:-2:force_original_aspect_ratio=decrease",
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
         "-c:a", "aac", "-b:a", "128k",
         str(output_path),
     ]
 
-    proc = await asyncio.create_subprocess_exec(*cmd)
+    clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None}
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
+    )
+
+    time_pattern = re.compile(r"out_time_us=(\d+)")
+    out_time_ms_pattern = re.compile(r"out_time_ms=(\d+)")
+    last_progress = 0.0
+
+    async for line in proc.stderr:
+        decoded = line.decode("utf-8", errors="ignore")
+        match = time_pattern.search(decoded)
+        if match:
+            current = int(match.group(1)) / 1_000_000
+        else:
+            match = out_time_ms_pattern.search(decoded)
+            if match:
+                current = int(match.group(1)) / 1_000_000
+        if match:
+            pct = min(current / duration, 0.99)
+            if pct > last_progress:
+                last_progress = pct
+                clip_jobs[filename]["progress"] = pct
+
     await proc.wait()
 
     if proc.returncode != 0 or not output_path.exists():
+        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {proc.returncode}"}
         raise HTTPException(status_code=500, detail="Clip generation failed")
+
+    clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
 
     return {
         "url": f"/api/download/{filename}",
         "duration": duration,
         "filename": filename,
+    }
+
+
+@app.get("/api/clip/status/{filename}")
+async def clip_status(filename: str):
+    """Poll clip generation progress."""
+    job = clip_jobs.get(filename)
+    if job is None:
+        return {"progress": 0, "done": False, "error": None}
+    return {
+        "progress": job["progress"],
+        "done": job["done"],
+        "error": job.get("error"),
     }
 
 
