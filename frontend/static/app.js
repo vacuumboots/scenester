@@ -17,7 +17,8 @@ const state = {
   items: [],            // all library items
   currentItem: null,    // selected item metadata
   proxyReady: false,
-  proxyDuration: 0,     // seconds
+  proxyDuration: 0,     // seconds (full movie)
+  proxyStartSec: 0,     // seconds into movie where proxy starts
 };
 
 // ── Safe DOM access ────────────────────────────────────────────────────
@@ -51,6 +52,10 @@ function getDom() {
     proxyError:    qs("#proxy-error"),
     proxySection:  qs("#proxy-section"),
     proxyVideo:   qs("#proxy-video"),
+    proxyInfo:        qs("#proxy-info"),
+    proxyInfoText:    qs("#proxy-info-text"),
+    proxyRegenStart:  qs("#proxy-regen-start"),
+    btnRegenProxy:    qs("#btn-regenerate-proxy"),
     rangeStart:   qs("#range-start"),
     rangeEnd:     qs("#range-end"),
     timeStart:    qs("#time-start"),
@@ -262,6 +267,7 @@ function showDetailView() {
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   state.proxyReady = false;
   state.proxyDuration = 0;
+  state.proxyStartSec = 0;
 }
 
 function goBack() {
@@ -348,6 +354,7 @@ async function generateProxy() {
 
   // Read start offset in minutes
   var startMin = parseInt(qs("#proxy-start") ? qs("#proxy-start").value : 0) || 0;
+  state.proxyStartSec = startMin * 60;
 
   hideError();
   if (dom.proxySection) dom.proxySection.style.display = "none";
@@ -435,6 +442,41 @@ async function pollProxyStatus(mediaId) {
   throw new Error("Proxy generation timed out");
 }
 
+async function regenerateProxy() {
+  if (!dom) return;
+  if (!state.currentItem) return;
+
+  var startMin = parseInt(dom.proxyRegenStart ? dom.proxyRegenStart.value : 0) || 0;
+  state.proxyStartSec = startMin * 60;
+
+  var mediaId = state.currentItem.media_id || state.currentItem.id;
+  if (!mediaId) return;
+
+  // Hide current proxy video, show progress
+  if (dom.proxySection) dom.proxySection.style.display = "none";
+  hideError();
+  if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
+  if (dom.progressFill) dom.progressFill.style.width = "0%";
+  if (dom.progressText) dom.progressText.textContent = "Regenerating preview from " + fmtTime(state.proxyStartSec) + "...";
+
+  try {
+    var url = "api/proxy/" + mediaId + "?start_min=" + startMin + "&force=true";
+    var startResp = await fetch(url, { method: "POST" });
+    if (!startResp.ok) {
+      var errData = await startResp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "HTTP " + startResp.status);
+    }
+    var startData = await startResp.json();
+    if (startData.warning && dom.progressText) {
+      dom.progressText.textContent = startData.warning + " " + dom.progressText.textContent;
+    }
+    await pollProxyStatus(mediaId);
+  } catch (err) {
+    if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
+    showError(err.message);
+  }
+}
+
 function onProxyReady(mediaId) {
   state.proxyReady = true;
 
@@ -442,14 +484,24 @@ function onProxyReady(mediaId) {
   var durationS = item.duration / 1000;
   state.proxyDuration = durationS;
 
+  // Show proxy range info
+  var proxyEndSec = Math.min(durationS, state.proxyStartSec + 600);
+  if (dom.proxyInfoText) {
+    dom.proxyInfoText.textContent = "Preview: " + fmtTime(state.proxyStartSec) + " \u2013 " + fmtTime(proxyEndSec) + " of " + fmtTime(durationS);
+  }
+  // Set regenerate input to next reasonable offset (current end, rounded to minutes)
+  if (dom.proxyRegenStart) {
+    dom.proxyRegenStart.value = Math.floor(proxyEndSec / 60);
+  }
+
   if (dom.proxyVideo) dom.proxyVideo.src = "api/proxy/" + mediaId + "/stream";
 
   if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
   if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
 
-  var defaultEnd = Math.min(30, Math.floor(durationS));
-  if (dom.rangeStart) dom.rangeStart.value = 0;
-  if (dom.rangeEnd) dom.rangeEnd.value = defaultEnd;
+  var defaultEnd = Math.min(state.proxyStartSec + 30, Math.floor(durationS));
+  if (dom.rangeStart) dom.rangeStart.value = Math.floor(state.proxyStartSec);
+  if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(defaultEnd);
 
   if (window._jumpOffset != null) {
     var offset = window._jumpOffset;

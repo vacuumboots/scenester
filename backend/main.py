@@ -168,12 +168,13 @@ async def thumb(media_id: int):
 # ── API: Proxy generation ────────────────────────────────────────────────
 
 @app.post("/api/proxy/{media_id}")
-async def start_proxy(media_id: int, start_min: int = 0):
+async def start_proxy(media_id: int, start_min: int = 0, force: bool = False):
     """Start generating a low-res proxy video.
 
     Args:
         media_id: Plex media ID
         start_min: Minutes into the movie to start the proxy (default 0)
+        force: If true, regenerate even if proxy already exists
     """
     try:
         meta = await plex.get_metadata(media_id)
@@ -198,9 +199,9 @@ async def start_proxy(media_id: int, start_min: int = 0):
         remaining = (duration_s - start_sec) / 60
         warning = f"Preview limited to 10 minutes (of {remaining:.0f}min remaining). Use start offset to preview other sections."
 
-    # Check if already exists
+    # Check if already exists (skip cache check when force=True)
     proxy_path = PROXY_DIR / f"{media_id}.mp4"
-    if proxy_path.exists():
+    if proxy_path.exists() and not force:
         proxy_jobs[media_id] = {"progress": 1.0, "done": True, "error": None}
         return {"status": "ready", "media_id": media_id}
 

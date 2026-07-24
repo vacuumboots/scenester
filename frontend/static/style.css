@@ -376,6 +376,46 @@ main {
   border-color: var(--gold-dim);
 }
 
+/* ── Proxy info bar (shows after generation) ─────────────────────── */
+
+.proxy-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.proxy-info-text {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.proxy-info-sep {
+  color: var(--border);
+}
+
+.proxy-info input[type="number"] {
+  width: 70px;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.proxy-info input[type="number"]:focus {
+  border-color: var(--gold-dim);
+}
+
 /* ── Player ────────────────────────────────────────────────────────── */
 
 .player-container {

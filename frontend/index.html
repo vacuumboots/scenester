@@ -86,6 +86,13 @@
         <video id="proxy-video" controls preload="auto"></video>
       </div>
 
+      <div class="proxy-info" id="proxy-info">
+        <span class="proxy-info-text" id="proxy-info-text"></span>
+        <span class="proxy-info-sep">·</span>
+        <input id="proxy-regen-start" type="number" value="0" min="0" step="1" placeholder="Start at min" title="Minutes into the movie to start preview">
+        <button class="btn btn-small" id="btn-regenerate-proxy" onclick="regenerateProxy()">Regenerate</button>
+      </div>
+
       <div class="scrubber-section">
         <div class="scrubber-header">Select Clip Range</div>
 
