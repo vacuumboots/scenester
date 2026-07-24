@@ -317,12 +317,27 @@ function startSessionPolling() {
 // ── Proxy Generation ───────────────────────────────────────────────────
 
 async function generateProxy() {
+  // Safety: if dom isn't initialized at all, show alert
+  if (!dom) { alert("DOM not initialized — page may not have loaded fully. Please refresh."); return; }
+
+  // Immediate visual feedback — changes button text instantly
+  if (dom.btnGenProxy) {
+    dom.btnGenProxy.textContent = "Working...";
+    dom.btnGenProxy.disabled = true;
+  }
+
   console.log("generateProxy called, currentItem:", state.currentItem);
-  if (!state.currentItem) return;
+  if (!state.currentItem) {
+    if (dom.btnGenProxy) { dom.btnGenProxy.textContent = "Error: no item"; dom.btnGenProxy.disabled = false; }
+    return;
+  }
 
   var mediaId = state.currentItem.media_id || state.currentItem.id;
   console.log("mediaId:", mediaId);
-  if (!mediaId) return;
+  if (!mediaId) {
+    if (dom.btnGenProxy) { dom.btnGenProxy.textContent = "Error: no media ID"; dom.btnGenProxy.disabled = false; }
+    return;
+  }
 
   console.log("Hiding button, showing progress...");
   if (dom.btnGenProxy) dom.btnGenProxy.style.display = "none";
@@ -354,9 +369,13 @@ async function generateProxy() {
 
     await pollProxyStatus(mediaId);
   } catch (err) {
-    dom.proxyProgress.style.display = "none";
+    if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
     showError(err.message);
-    dom.btnGenProxy.style.display = "inline-flex";
+    if (dom.btnGenProxy) {
+      dom.btnGenProxy.style.display = "inline-flex";
+      dom.btnGenProxy.textContent = "Generate Preview";
+      dom.btnGenProxy.disabled = false;
+    }
   }
 }
 
