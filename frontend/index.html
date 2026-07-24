@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cliparr — Plex Clip Maker</title>
+  <base href="/">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1>Cliparr <span>plex clip maker</span></h1>
+    <div class="search-row">
+      <input id="search" type="text" placeholder="Search library..." autocomplete="off">
+    </div>
+  </div>
+  <div class="now-playing-banner" id="now-playing" style="display:none">
+    <div class="np-content">
+      <span class="np-label">Now Playing</span>
+      <span class="np-title" id="np-title"></span>
+      <span class="np-time" id="np-time"></span>
+      <button class="btn btn-small" id="btn-jump-clip">Jump to clip</button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- Library grid (default view) -->
+  <div id="library-view">
+    <div class="results-header">
+      Library
+      <span class="result-count" id="result-count"></span>
+    </div>
+    <div class="grid" id="library-grid"></div>
+    <div class="empty-state" id="empty-state" style="display:none">
+      <div class="empty-icon">&#127916;</div>
+      <div class="empty-text">Nothing here yet</div>
+      <div class="empty-sub">Add media to your Plex library and it will show up here.</div>
+    </div>
+  </div>
+
+  <!-- Detail view (hidden until item selected) -->
+  <div id="detail-view" style="display:none">
+    <button class="btn btn-back" id="btn-back">&larr; Back to Library</button>
+
+    <div class="target-card">
+      <div class="target-name" id="detail-title"></div>
+      <div class="target-meta" id="detail-meta"></div>
+      <button class="btn btn-primary" id="btn-generate-proxy">Generate Preview</button>
+    </div>
+
+    <!-- Proxy progress (shown during generation) -->
+    <div id="proxy-progress" style="display:none">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text" id="progress-text">Generating preview...</div>
+    </div>
+
+    <!-- Proxy error -->
+    <div id="proxy-error" style="display:none" class="error-banner"></div>
+
+    <!-- Proxy player section (hidden until proxy ready) -->
+    <div id="proxy-section" style="display:none">
+      <div class="player-container">
+        <video id="proxy-video" controls preload="auto"></video>
+      </div>
+
+      <div class="scrubber-section">
+        <div class="scrubber-header">Select Clip Range</div>
+
+        <div class="time-display">
+          <span class="time-box" id="time-start">00:00</span>
+          <span class="time-sep">&rarr;</span>
+          <span class="time-box" id="time-end">00:30</span>
+          <span class="time-dur" id="time-duration">/ 0:00</span>
+        </div>
+
+        <div class="range-sliders">
+          <label class="range-label">
+            Start
+            <input type="range" id="range-start" min="0" max="100" value="0">
+          </label>
+          <label class="range-label">
+            End
+            <input type="range" id="range-end" min="0" max="100" value="30">
+          </label>
+        </div>
+
+        <div class="preset-buttons">
+          <button class="btn btn-small" data-action="shift-start" data-offset="-10">-10s</button>
+          <button class="btn btn-small" data-action="shift-start" data-offset="10">+10s</button>
+          <span class="preset-sep"></span>
+          <button class="btn btn-small" data-action="set-duration" data-duration="30">30s clip</button>
+          <button class="btn btn-small" data-action="set-duration" data-duration="60">1 min clip</button>
+          <button class="btn btn-small" data-action="set-duration" data-duration="120">2 min clip</button>
+        </div>
+
+        <button class="btn btn-primary btn-download" id="btn-download-clip" disabled>
+          &#11015; Download Clip
+        </button>
+        <div class="clip-status" id="clip-status"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

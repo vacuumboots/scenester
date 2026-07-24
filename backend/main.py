@@ -1,0 +1,288 @@
+"""
+Cliparr — FastAPI backend.
+
+Serves the frontend SPA and provides API routes for browsing Plex,
+generating low-res proxy previews, and creating frame-accurate ffmpeg clips.
+"""
+
+import asyncio
+import os
+import re
+import time
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+import plex
+
+app = FastAPI(title="Cliparr")
+
+# ── Paths ────────────────────────────────────────────────────────────────
+STATIC_DIR = Path(__file__).parent / "static"
+PROXY_DIR = Path("/tmp/proxy")
+CLIPS_DIR = Path("/tmp/clips")
+PROXY_DIR.mkdir(parents=True, exist_ok=True)
+CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Proxy job tracking ───────────────────────────────────────────────────
+# proxy_jobs[media_id] = {"progress": 0.5, "done": False, "error": None}
+proxy_jobs: dict[int, dict] = {}
+
+
+def _parse_ffmpeg_time(time_str: str) -> float:
+    """Parse ffmpeg 'HH:MM:SS.ms' to seconds."""
+    parts = time_str.split(":")
+    h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+    return h * 3600 + m * 60 + s
+
+
+async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: float):
+    """Run ffmpeg to generate a low-res proxy, updating progress in proxy_jobs."""
+    proxy_path = PROXY_DIR / f"{media_id}.mp4"
+    if proxy_path.exists():
+        proxy_jobs[media_id] = {"progress": 1.0, "done": True, "error": None}
+        return
+
+    proxy_jobs[media_id] = {"progress": 0.0, "done": False, "error": None}
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", "0",
+        "-i", file_path,
+        "-t", str(total_duration_s),
+        "-vf", "scale=640:-1",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        "-c:a", "aac", "-b:a", "64k",
+        str(proxy_path),
+    ]
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
+    )
+
+    time_pattern = re.compile(r"time=(\d+:\d+:\d+\.\d+)")
+
+    async for line in proc.stderr:
+        decoded = line.decode("utf-8", errors="ignore")
+        match = time_pattern.search(decoded)
+        if match:
+            current = _parse_ffmpeg_time(match.group(1))
+            if total_duration_s > 0:
+                proxy_jobs[media_id]["progress"] = min(current / total_duration_s, 0.99)
+
+    await proc.wait()
+
+    if proc.returncode == 0 and proxy_path.exists():
+        proxy_jobs[media_id] = {"progress": 1.0, "done": True, "error": None}
+    else:
+        proxy_jobs[media_id] = {
+            "progress": 0.0,
+            "done": True,
+            "error": f"ffmpeg exited with code {proc.returncode}",
+        }
+
+
+# ── Request models ───────────────────────────────────────────────────────
+
+class ClipRequest(BaseModel):
+    media_id: int
+    start_sec: float
+    end_sec: float
+
+
+# ── Static frontend ──────────────────────────────────────────────────────
+
+@app.get("/")
+async def index():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+# Serve /static/... from frontend/static/
+static_path = STATIC_DIR / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+
+
+# ── API: Sessions ────────────────────────────────────────────────────────
+
+@app.get("/api/sessions")
+async def sessions():
+    """Return currently active Plex sessions."""
+    try:
+        return {"sessions": await plex.get_sessions()}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+
+# ── API: Library ─────────────────────────────────────────────────────────
+
+@app.get("/api/library")
+async def library():
+    """Browse full library (movies + TV episodes)."""
+    try:
+        items = await plex.get_library_sections()
+        return {"items": items}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+
+@app.get("/api/library/{media_id}")
+async def library_item(media_id: int):
+    """Get single item detail."""
+    try:
+        return await plex.get_metadata(media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+
+# ── API: Thumbnails ──────────────────────────────────────────────────────
+
+@app.get("/api/thumb/{media_id}")
+async def thumb(media_id: int):
+    """Proxy Plex thumbnail through the backend."""
+    try:
+        image_bytes, content_type = await plex.get_thumb_url(media_id)
+        return StreamingResponse(
+            iter([image_bytes]),
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+
+# ── API: Proxy generation ────────────────────────────────────────────────
+
+@app.post("/api/proxy/{media_id}")
+async def start_proxy(media_id: int):
+    """Start generating a low-res proxy video."""
+    try:
+        meta = await plex.get_metadata(media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    file_path = meta.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    duration_s = meta["duration"] / 1000
+
+    # Check if already exists
+    proxy_path = PROXY_DIR / f"{media_id}.mp4"
+    if proxy_path.exists():
+        proxy_jobs[media_id] = {"progress": 1.0, "done": True, "error": None}
+        return {"status": "ready", "media_id": media_id}
+
+    # Check if already running
+    if media_id in proxy_jobs and not proxy_jobs[media_id].get("done"):
+        return {"status": "generating", "media_id": media_id}
+
+    # Start generation in background
+    asyncio.create_task(_run_ffmpeg_proxy(media_id, file_path, duration_s))
+    return {"status": "started", "media_id": media_id}
+
+
+@app.get("/api/proxy/{media_id}/status")
+async def proxy_status(media_id: int):
+    """Poll proxy generation progress."""
+    job = proxy_jobs.get(media_id)
+    if job is None:
+        return {"progress": 0, "done": False, "error": None}
+    return {
+        "progress": job["progress"],
+        "done": job["done"],
+        "error": job.get("error"),
+    }
+
+
+@app.get("/api/proxy/{media_id}/stream")
+async def proxy_stream(media_id: int):
+    """Serve the generated proxy MP4."""
+    proxy_path = PROXY_DIR / f"{media_id}.mp4"
+    if not proxy_path.exists():
+        raise HTTPException(status_code=404, detail="Proxy not yet generated")
+    return FileResponse(
+        proxy_path,
+        media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes"},
+    )
+
+
+# ── API: Clip generation ─────────────────────────────────────────────────
+
+@app.post("/api/clip")
+async def create_clip(req: ClipRequest):
+    """Generate a frame-accurate clip via ffmpeg re-encode."""
+    duration = req.end_sec - req.start_sec
+    if duration <= 0:
+        raise HTTPException(status_code=400, detail="End must be after start")
+    if duration > 140:
+        raise HTTPException(status_code=400, detail="Max clip length is 140 seconds")
+
+    try:
+        meta = await plex.get_metadata(req.media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    file_path = meta.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    filename = f"clip_{req.media_id}_{int(req.start_sec)}-{int(req.end_sec)}.mp4"
+    output_path = CLIPS_DIR / filename
+
+    # Output seeking for frame accuracy:
+    # -ss before -i for fast seek, then -ss 0 after -i to start at exact frame
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(req.start_sec),
+        "-i", file_path,
+        "-ss", "0",
+        "-t", str(duration),
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-c:a", "aac", "-b:a", "128k",
+        str(output_path),
+    ]
+
+    proc = await asyncio.create_subprocess_exec(*cmd)
+    await proc.wait()
+
+    if proc.returncode != 0 or not output_path.exists():
+        raise HTTPException(status_code=500, detail="Clip generation failed")
+
+    return {
+        "url": f"/api/download/{filename}",
+        "duration": duration,
+        "filename": filename,
+    }
+
+
+# ── API: Download ────────────────────────────────────────────────────────
+
+@app.get("/api/download/{filename}")
+async def download(filename: str):
+    """Serve a generated clip for download."""
+    # Sanitize: only allow filenames matching our pattern
+    if not filename.startswith("clip_") or not filename.endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    file_path = CLIPS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Clip not found")
+    return FileResponse(
+        file_path,
+        media_type="video/mp4",
+        filename=filename,
+    )
