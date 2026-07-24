@@ -11,6 +11,7 @@ import re
 import time
 from pathlib import Path
 
+import ffmpeg
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,20 +41,23 @@ async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: flo
 
     proxy_jobs[media_id] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-progress", "pipe:2",
-        "-ss", str(start_sec),
-        "-i", file_path,
-        "-t", str(total_duration_s),
-        "-vf", "scale=640:-1,fps=12",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
-        "-an",
-        str(proxy_path),
-    ]
+    stream = (
+        ffmpeg
+        .input(file_path, ss=start_sec, t=total_duration_s)
+        .output(
+            str(proxy_path),
+            vf="scale=640:-1,fps=12",
+            vcodec="libx264",
+            preset="ultrafast",
+            crf=30,
+            an=None,
+        )
+        .global_args("-progress", "pipe:2")
+        .compile()
+    )
 
     proc = await asyncio.create_subprocess_exec(
-        *cmd,
+        *stream,
         stderr=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.DEVNULL,
     )
@@ -259,23 +263,26 @@ clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, duration: float):
     """Run ffmpeg to generate a clip, updating progress in clip_jobs."""
     output_path = CLIPS_DIR / filename
-
-    cmd = [
-        "ffmpeg", "-y",
-        "-progress", "pipe:2",
-        "-ss", str(start_sec),
-        "-i", file_path,
-        "-t", str(duration),
-        "-vf", "scale=1920:-2:force_original_aspect_ratio=decrease",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-        "-c:a", "aac", "-b:a", "128k",
-        str(output_path),
-    ]
-
     clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
 
+    stream = (
+        ffmpeg
+        .input(file_path, ss=start_sec, t=duration)
+        .output(
+            str(output_path),
+            vf="scale=1920:-2:force_original_aspect_ratio=decrease",
+            vcodec="libx264",
+            preset="fast",
+            crf=20,
+            acodec="aac",
+            **{"b:a": "128k"},
+        )
+        .global_args("-progress", "pipe:2")
+        .compile()
+    )
+
     proc = await asyncio.create_subprocess_exec(
-        *cmd,
+        *stream,
         stderr=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.DEVNULL,
     )
