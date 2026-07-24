@@ -58,6 +58,9 @@ function getDom() {
     timeDuration: qs("#time-duration"),
     btnDownload:  qs("#btn-download-clip"),
     clipStatus:   qs("#clip-status"),
+    clipProgress:      qs("#clip-progress"),
+    clipProgressFill:  qs("#clip-progress-fill"),
+    clipProgressText:  qs("#clip-progress-text"),
   };
 }
 
@@ -256,6 +259,7 @@ function showDetailView() {
   if (dom.btnGenProxy) dom.btnGenProxy.style.display = "inline-flex";
   if (dom.btnDownload) dom.btnDownload.disabled = true;
   if (dom.clipStatus) dom.clipStatus.textContent = "";
+  if (dom.clipProgress) dom.clipProgress.style.display = "none";
   state.proxyReady = false;
   state.proxyDuration = 0;
 }
@@ -516,6 +520,8 @@ function handlePreset(action, value) {
 
 // ── Clip Download ──────────────────────────────────────────────────────
 
+var _clipPollTimer = null;
+
 async function downloadClip() {
   if (!state.currentItem) return;
 
@@ -528,43 +534,96 @@ async function downloadClip() {
     return;
   }
 
-  if (dom.btnDownload) dom.btnDownload.disabled = true;
-  if (dom.btnDownload) dom.btnDownload.textContent = "Clipping...";
-  if (dom.clipStatus) dom.clipStatus.textContent = "Encoding clip (may take 10-30 seconds)...";
+  // Hide old status, show progress bar
+  if (dom.clipStatus) dom.clipStatus.textContent = "";
+  if (dom.clipProgress) dom.clipProgress.style.display = "block";
+  if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
+  if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip...";
+  if (dom.btnDownload) { dom.btnDownload.disabled = true; dom.btnDownload.textContent = "Clipping..."; }
+
+  var filename = null;
 
   try {
-    var resp = await fetch("api/clip", {
+    // 1) Start clip generation (returns immediately)
+    var startResp = await fetch("api/clip", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        media_id: mediaId,
-        start_sec: startSec,
-        end_sec: endSec,
-      }),
+      body: JSON.stringify({ media_id: mediaId, start_sec: startSec, end_sec: endSec }),
     });
 
-    if (!resp.ok) {
-      var errData = await resp.json().catch(function() { return {}; });
-      throw new Error(errData.detail || "HTTP " + resp.status);
+    if (!startResp.ok) {
+      var errData = await startResp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "HTTP " + startResp.status);
     }
 
-    var data = await resp.json();
+    var startData = await startResp.json();
+    filename = startData.filename;
 
-    // Trigger browser download (strip leading / to keep paths relative)
-    var a = document.createElement("a");
-    a.href = data.url.replace(/^\//, "");
-    a.download = data.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // 2) Poll until done
+    var result = await pollClipStatus(filename);
 
-    if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + data.filename + " (" + Math.round(data.duration) + "s)";
+    // 3) Download
+    if (result.done && !result.error) {
+      var a = document.createElement("a");
+      a.href = "api/download/" + filename;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + filename + " (" + Math.round(result.duration || (endSec - startSec)) + "s)";
+    } else {
+      throw new Error(result.error || "Unknown error");
+    }
   } catch (err) {
     if (dom.clipStatus) dom.clipStatus.textContent = "Error: " + err.message;
   } finally {
-    if (dom.btnDownload) dom.btnDownload.disabled = false;
-    if (dom.btnDownload) dom.btnDownload.textContent = "\u{1F4E5} Download Clip";
+    if (dom.clipProgress) dom.clipProgress.style.display = "none";
+    if (dom.btnDownload) { dom.btnDownload.disabled = false; dom.btnDownload.textContent = "\u{1F4E5} Download Clip"; }
   }
+}
+
+function pollClipStatus(filename) {
+  return new Promise(function(resolve, reject) {
+    var maxPolls = 300;
+    var polls = 0;
+
+    function poll() {
+      polls++;
+      if (polls > maxPolls) { reject(new Error("Clip generation timed out")); return; }
+
+      fetch("api/clip/status/" + filename)
+        .then(function(resp) { return resp.json(); })
+        .then(function(status) {
+          if (status.error) { reject(new Error(status.error)); return; }
+
+          if (status.done) {
+            // Done — resolve with the result
+            if (dom.clipProgressFill) dom.clipProgressFill.style.width = "100%";
+            if (dom.clipProgressText) dom.clipProgressText.textContent = "Done!";
+            resolve({ done: true, error: null, duration: null, filename: filename });
+            return;
+          }
+
+          // Update progress
+          var pct = Math.round(status.progress * 100);
+          var text = "Encoding clip... " + pct + "%";
+          if (status.eta_seconds != null && status.eta_seconds > 0) {
+            var mins = Math.floor(status.eta_seconds / 60);
+            var secs = status.eta_seconds % 60;
+            text += " (ETA " + mins + "m " + secs + "s)";
+          }
+          if (dom.clipProgressFill) dom.clipProgressFill.style.width = pct + "%";
+          if (dom.clipProgressText) dom.clipProgressText.textContent = text;
+
+          // Poll again
+          setTimeout(poll, 2000);
+        })
+        .catch(function(err) { reject(err); });
+    }
+
+    poll();
+  });
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────

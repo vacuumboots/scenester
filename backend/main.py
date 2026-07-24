@@ -255,34 +255,14 @@ async def proxy_stream(media_id: int):
 clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 
 
-@app.post("/api/clip")
-async def create_clip(req: ClipRequest):
-    """Generate a frame-accurate clip via ffmpeg re-encode."""
-    duration = req.end_sec - req.start_sec
-    if duration <= 0:
-        raise HTTPException(status_code=400, detail="End must be after start")
-    if duration > 140:
-        raise HTTPException(status_code=400, detail="Max clip length is 140 seconds")
-
-    try:
-        meta = await plex.get_metadata(req.media_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
-
-    file_path = meta.get("file_path", "")
-    if not file_path or not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Media file not found on disk")
-
-    filename = f"clip_{req.media_id}_{int(req.start_sec)}-{int(req.end_sec)}.mp4"
+async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, duration: float):
+    """Run ffmpeg to generate a clip, updating progress in clip_jobs."""
     output_path = CLIPS_DIR / filename
 
-    # Single -ss before -i for speed (keyframe accuracy is fine for clips)
     cmd = [
         "ffmpeg", "-y",
         "-progress", "pipe:2",
-        "-ss", str(req.start_sec),
+        "-ss", str(start_sec),
         "-i", file_path,
         "-t", str(duration),
         "-vf", "scale=1920:-2:force_original_aspect_ratio=decrease",
@@ -291,7 +271,7 @@ async def create_clip(req: ClipRequest):
         str(output_path),
     ]
 
-    clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None}
+    clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -312,7 +292,7 @@ async def create_clip(req: ClipRequest):
             match = out_time_ms_pattern.search(decoded)
             if match:
                 current = int(match.group(1)) / 1_000_000
-        if match:
+        if match and duration > 0:
             pct = min(current / duration, 0.99)
             if pct > last_progress:
                 last_progress = pct
@@ -320,17 +300,47 @@ async def create_clip(req: ClipRequest):
 
     await proc.wait()
 
-    if proc.returncode != 0 or not output_path.exists():
+    if proc.returncode == 0 and output_path.exists():
+        clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
+    else:
         clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {proc.returncode}"}
-        raise HTTPException(status_code=500, detail="Clip generation failed")
 
-    clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
 
-    return {
-        "url": f"/api/download/{filename}",
-        "duration": duration,
-        "filename": filename,
-    }
+@app.post("/api/clip")
+async def create_clip(req: ClipRequest):
+    """Start generating a frame-accurate clip via ffmpeg re-encode (async, poll status)."""
+    duration = req.end_sec - req.start_sec
+    if duration <= 0:
+        raise HTTPException(status_code=400, detail="End must be after start")
+    if duration > 140:
+        raise HTTPException(status_code=400, detail="Max clip length is 140 seconds")
+
+    try:
+        meta = await plex.get_metadata(req.media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    file_path = meta.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    filename = f"clip_{req.media_id}_{int(req.start_sec)}-{int(req.end_sec)}.mp4"
+
+    # Check if already running
+    if filename in clip_jobs and not clip_jobs[filename].get("done"):
+        return {"status": "generating", "filename": filename}
+
+    # Check if already complete
+    output_path = CLIPS_DIR / filename
+    if output_path.exists():
+        clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
+        return {"status": "ready", "filename": filename}
+
+    # Start generation in background
+    asyncio.create_task(_run_ffmpeg_clip(filename, file_path, req.start_sec, duration))
+    return {"status": "started", "filename": filename, "duration": duration}
 
 
 @app.get("/api/clip/status/{filename}")
@@ -338,11 +348,19 @@ async def clip_status(filename: str):
     """Poll clip generation progress."""
     job = clip_jobs.get(filename)
     if job is None:
-        return {"progress": 0, "done": False, "error": None}
+        return {"progress": 0, "done": False, "error": None, "eta_seconds": None}
+
+    eta = None
+    progress = job["progress"]
+    if progress > 0.01 and not job.get("done"):
+        elapsed = time.time() - job.get("started_at", time.time())
+        eta = int(elapsed / progress - elapsed)
+
     return {
         "progress": job["progress"],
         "done": job["done"],
         "error": job.get("error"),
+        "eta_seconds": eta,
     }
 
 

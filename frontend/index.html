@@ -119,6 +119,12 @@
         <button class="btn btn-primary btn-download" id="btn-download-clip" disabled onclick="downloadClip()">
           &#11015; Download Clip
         </button>
+        <div class="clip-progress" id="clip-progress" style="display:none">
+          <div class="progress-bar">
+            <div class="progress-fill" id="clip-progress-fill"></div>
+          </div>
+          <div class="progress-text" id="clip-progress-text">Encoding clip...</div>
+        </div>
         <div class="clip-status" id="clip-status"></div>
       </div>
     </div>
