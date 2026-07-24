@@ -5,6 +5,12 @@
  * proxy generation UX, scrubber controls, and clip downloads.
  */
 
+// Quick load test — if you don't see 'JS ✓' in the header, JS didn't load
+(function() {
+  var el = document.querySelector("header h1 span");
+  if (el) el.textContent = el.textContent + " · JS ✓";
+})();
+
 // ── State ──────────────────────────────────────────────────────────────
 
 const state = {
