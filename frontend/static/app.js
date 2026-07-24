@@ -77,6 +77,50 @@ function fmtDuration(ms) {
 
 // ── Library ────────────────────────────────────────────────────────────
 
+var currentSort = "title";
+
+function sortItems(items, sortKey) {
+  var sorted = items.slice();
+  switch (sortKey) {
+    case "title":
+      sorted.sort(function(a, b) {
+        var ta = (a.show_title || a.title || "").toLowerCase();
+        var tb = (b.show_title || b.title || "").toLowerCase();
+        return ta.localeCompare(tb);
+      });
+      break;
+    case "year-desc":
+      sorted.sort(function(a, b) {
+        return (b.year || 0) - (a.year || 0);
+      });
+      break;
+    case "year-asc":
+      sorted.sort(function(a, b) {
+        return (a.year || 0) - (b.year || 0);
+      });
+      break;
+    case "duration-desc":
+      sorted.sort(function(a, b) {
+        return (b.duration || 0) - (a.duration || 0);
+      });
+      break;
+    case "duration-asc":
+      sorted.sort(function(a, b) {
+        return (a.duration || 0) - (b.duration || 0);
+      });
+      break;
+    case "added-desc":
+      // Higher media_id generally = newer, fallback for no addedAt field
+      sorted.sort(function(a, b) {
+        return (b.media_id || 0) - (a.media_id || 0);
+      });
+      break;
+    default:
+      break;
+  }
+  return sorted;
+}
+
 async function loadLibrary() {
   try {
     const resp = await fetch("api/library");
@@ -96,14 +140,15 @@ async function loadLibrary() {
 
 function renderLibrary(filterText) {
   filterText = filterText || "";
-  const query = filterText.toLowerCase().trim();
-  const filtered = query
-    ? state.items.filter(function(item) {
+  var query = filterText.toLowerCase().trim();
+  var sorted = sortItems(state.items, currentSort);
+  var filtered = query
+    ? sorted.filter(function(item) {
         var title = (item.title || "").toLowerCase();
         var show = (item.show_title || "").toLowerCase();
         return title.indexOf(query) !== -1 || show.indexOf(query) !== -1;
       })
-    : state.items;
+    : sorted;
 
   if (dom.resultCount) dom.resultCount.textContent = "(" + filtered.length + ")";
 
@@ -485,6 +530,15 @@ function init() {
 
   // Search
   if (dom.search) dom.search.addEventListener("input", function() { renderLibrary(dom.search.value); });
+
+  // Sort
+  var sortSelect = qs("#sort-by");
+  if (sortSelect) {
+    sortSelect.addEventListener("change", function() {
+      currentSort = sortSelect.value;
+      renderLibrary(dom.search ? dom.search.value : "");
+    });
+  }
 
   // Detail back button
   if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
