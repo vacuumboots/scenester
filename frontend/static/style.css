@@ -433,6 +433,58 @@ main {
 
 /* ── Player ────────────────────────────────────────────────────────── */
 
+/* Frame preview (instant, no proxy) */
+.frame-container {
+  position: relative;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.frame-container img {
+  width: 100%;
+  display: block;
+  max-height: 480px;
+  object-fit: contain;
+}
+
+.frame-overlay {
+  display: none;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  align-items: center;
+  justify-content: center;
+}
+
+.frame-loading {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.frame-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.frame-time-value {
+  font-family: var(--font-mono);
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.frame-time-hint {
+  font-style: italic;
+  opacity: 0.6;
+}
+
 .player-container {
   background: #000;
   border: 1px solid var(--border);

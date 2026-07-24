@@ -61,6 +61,11 @@ function getDom() {
     proxyInfoText:    qs("#proxy-info-text"),
     proxyRegenStart:  qs("#proxy-regen-start"),
     btnRegenProxy:    qs("#btn-regenerate-proxy"),
+    // Frame preview
+    framePreview:    qs("#frame-preview"),
+    frameImg:        qs("#frame-img"),
+    frameTimeValue:  qs("#frame-time-value"),
+    frameOverlay:    qs("#frame-overlay"),
     rangeStart:   qs("#range-start"),
     rangeEnd:     qs("#range-end"),
     timeStart:    qs("#time-start"),
@@ -225,6 +230,7 @@ function escAttr(str) {
 function goHome() {
   if (dom.detailView) dom.detailView.style.display = "none";
   if (dom.libraryView) dom.libraryView.style.display = "block";
+  if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
   if (dom.search) dom.search.value = "";
   renderLibrary();
@@ -274,11 +280,29 @@ function showDetailView() {
   state.proxyDuration = 0;
   state.proxyStartSec = 0;
   state.proxyEndSec = 0;
+
+  // Show frame preview immediately — no proxy needed
+  var mediaId = item.media_id || item.id;
+  var durationS = (item.duration || 0) / 1000;
+  state.proxyDuration = durationS;
+  state.proxyStartSec = 0;
+  state.proxyEndSec = durationS;  // frames work everywhere
+
+  if (dom.framePreview) dom.framePreview.style.display = "block";
+  if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
+  if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
+  if (dom.rangeStart) dom.rangeStart.value = 0;
+  if (dom.rangeEnd) dom.rangeEnd.value = Math.min(30, Math.floor(durationS));
+  updateTimeDisplay();
+
+  // Load first frame
+  showFrame(0);
 }
 
 function goBack() {
   if (dom.detailView) dom.detailView.style.display = "none";
   if (dom.libraryView) dom.libraryView.style.display = "block";
+  if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
   renderLibrary(dom.search ? dom.search.value : "");
 }
@@ -460,6 +484,7 @@ async function generateProxy() {
 
   hideError();
   if (dom.proxySection) dom.proxySection.style.display = "none";
+  if (dom.framePreview) dom.framePreview.style.display = "none";
   if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
   if (dom.progressFill) dom.progressFill.style.width = "0%";
   if (dom.progressText) dom.progressText.textContent = "Starting proxy generation...";
@@ -483,10 +508,11 @@ async function generateProxy() {
     await pollProxyStatus(mediaId);
   } catch (err) {
     if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
+    if (dom.framePreview) dom.framePreview.style.display = "block";
     showError(err.message);
     if (dom.btnGenProxy) {
       dom.btnGenProxy.style.display = "inline-flex";
-      dom.btnGenProxy.textContent = "Generate Preview";
+      dom.btnGenProxy.textContent = "Video Preview";
       dom.btnGenProxy.disabled = false;
     }
   }
@@ -556,6 +582,7 @@ async function regenerateProxy() {
 
   // Hide current proxy video, show progress
   if (dom.proxySection) dom.proxySection.style.display = "none";
+  if (dom.framePreview) dom.framePreview.style.display = "none";
   hideError();
   if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
   if (dom.progressFill) dom.progressFill.style.width = "0%";
@@ -575,6 +602,7 @@ async function regenerateProxy() {
     await pollProxyStatus(mediaId);
   } catch (err) {
     if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
+    if (dom.framePreview) dom.framePreview.style.display = "block";
     showError(err.message);
   }
 }
@@ -617,28 +645,57 @@ function onProxyReady(mediaId) {
   }
 
   updateTimeDisplay();
+  if (dom.framePreview) dom.framePreview.style.display = "none";
   if (dom.proxySection) dom.proxySection.style.display = "block";
   if (dom.btnDownload) dom.btnDownload.disabled = false;
 
   // Seek video to start position (queues until metadata loaded)
   var startVal = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  seekVideo(startVal);
+  if (dom.proxyVideo) dom.proxyVideo.currentTime = Math.max(0, startVal - state.proxyStartSec);
 
   if (dom.proxySection) dom.proxySection.scrollIntoView({ behavior: "smooth" });
 }
 
 // ── Scrubber Controls ──────────────────────────────────────────────────
 
-function seekVideo(absoluteSec) {
-  // Convert absolute movie time to proxy-relative video time.
-  // Returns true if within proxy range, false if outside.
-  var relSec = absoluteSec - state.proxyStartSec;
-  var proxyLen = state.proxyEndSec - state.proxyStartSec;
-  var inRange = relSec >= 0 && relSec <= proxyLen;
-  if (dom.proxyVideo) {
-    dom.proxyVideo.currentTime = Math.max(0, Math.min(relSec, proxyLen));
-  }
-  return inRange;
+var _frameTimer = null;
+
+function showFrame(absoluteSec) {
+  // Update the frame preview image to show the frame at this timestamp
+  if (!state.currentItem) return;
+  var mediaId = state.currentItem.media_id || state.currentItem.id;
+  if (!mediaId) return;
+
+  if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(absoluteSec));
+
+  // Show loading overlay
+  if (dom.frameOverlay) dom.frameOverlay.style.display = "flex";
+
+  var img = new Image();
+  img.onload = function() {
+    if (dom.frameImg) dom.frameImg.src = img.src;
+    if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
+  };
+  img.onerror = function() {
+    if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
+  };
+  img.src = "api/frame/" + mediaId + "?t=" + absoluteSec;
+}
+
+// Debounced frame fetch during drag
+function onRangeInput() {
+  updateTimeDisplay();
+  if (_frameTimer) clearTimeout(_frameTimer);
+  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  _frameTimer = setTimeout(function() { showFrame(start); }, 150);
+}
+
+// On release: fetch frame immediately
+function onStartReleased() {
+  updateTimeDisplay();
+  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  if (_frameTimer) clearTimeout(_frameTimer);
+  showFrame(start);
 }
 
 function updateTimeDisplay() {
@@ -649,48 +706,21 @@ function updateTimeDisplay() {
   if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(end);
   if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.proxyDuration);
 
-  // Enforce start < end
   if (end <= start && dom.rangeEnd) {
     dom.rangeEnd.value = start + 1;
     if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 1);
-    end = start + 1;
   }
-
-  // Enforce max 140s clip
   if (end - start > 140 && dom.rangeEnd) {
     dom.rangeEnd.value = start + 140;
     if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 140);
   }
-
-  // Clamp end to duration
   if (dom.rangeEnd && parseInt(dom.rangeEnd.value) > state.proxyDuration) {
     dom.rangeEnd.value = Math.floor(state.proxyDuration);
     if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(Math.floor(state.proxyDuration));
   }
-
-  // Clamp start to duration
   if (dom.rangeStart && parseInt(dom.rangeStart.value) > state.proxyDuration) {
     dom.rangeStart.value = Math.floor(state.proxyDuration);
     if (dom.timeStart) dom.timeStart.textContent = fmtTime(Math.floor(state.proxyDuration));
-  }
-}
-
-// During drag: seek but cap silently if outside proxy range
-function onRangeInput() {
-  updateTimeDisplay();
-  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  seekVideo(start);
-}
-
-// On release: if outside proxy range, auto-regenerate from new position
-function onStartReleased() {
-  updateTimeDisplay();
-  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  var inRange = seekVideo(start);
-  if (!inRange) {
-    // Outside proxy range — auto-regenerate
-    if (dom.proxyRegenStart) dom.proxyRegenStart.value = Math.floor(start / 60);
-    regenerateProxy();
   }
 }
 
@@ -706,12 +736,12 @@ function handlePreset(action, value) {
     var dur = currentEnd - start;
     if (dom.rangeEnd) dom.rangeEnd.value = Math.min(state.proxyDuration, newStart + Math.max(1, dur));
     updateTimeDisplay();
-    seekVideo(newStart);
+    showFrame(newStart);
   } else if (action === "set-duration") {
     var newEnd = Math.min(state.proxyDuration, start + value);
     if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(newEnd);
     updateTimeDisplay();
-    seekVideo(start);
+    showFrame(start);
   }
 }
 

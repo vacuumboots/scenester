@@ -169,6 +169,54 @@ async def thumb(media_id: int):
         raise HTTPException(status_code=502, detail=f"Plex error: {e}")
 
 
+# ── API: Frame extraction ────────────────────────────────────────────────
+
+@app.get("/api/frame/{media_id}")
+async def get_frame(media_id: int, t: float = 0):
+    """Extract a single JPEG frame at timestamp t (seconds) from the original media file.
+
+    Uses fast seeking (-ss before -i) for sub-second response on local files.
+    """
+    try:
+        meta = await plex.get_metadata(media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    file_path = meta.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    # Fast-seek to timestamp, extract one frame as JPEG (scaled for preview)
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(t),
+        "-i", file_path,
+        "-vframes", "1",
+        "-vf", "scale=1280:-1",
+        "-q:v", "4",
+        "-f", "image2pipe",
+        "-",
+    ]
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+
+    if proc.returncode != 0 or not stdout:
+        raise HTTPException(status_code=500, detail="Frame extraction failed")
+
+    return StreamingResponse(
+        iter([stdout]),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 # ── API: Proxy generation ────────────────────────────────────────────────
 
 @app.post("/api/proxy/{media_id}")
