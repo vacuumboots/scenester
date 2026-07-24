@@ -14,44 +14,48 @@ const state = {
   proxyDuration: 0,     // seconds
 };
 
-// ── DOM refs ───────────────────────────────────────────────────────────
+// ── Safe DOM access ────────────────────────────────────────────────────
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
+function qs(sel, parent) {
+  return (parent || document).querySelector(sel);
+}
+function qsa(sel, parent) {
+  return (parent || document).querySelectorAll(sel);
+}
 
-const dom = {
-  search:       $("#search"),
-  libraryGrid:  $("#library-grid"),
-  resultCount:  $("#result-count"),
-  emptyState:   $("#empty-state"),
-  libraryView:  $("#library-view"),
-  detailView:   $("#detail-view"),
+function getDom() {
+  return {
+    search:       qs("#search"),
+    libraryGrid:  qs("#library-grid"),
+    resultCount:  qs("#result-count"),
+    emptyState:   qs("#empty-state"),
+    libraryView:  qs("#library-view"),
+    detailView:   qs("#detail-view"),
+    detailTitle:  qs("#detail-title"),
+    detailMeta:   qs("#detail-meta"),
+    btnGenProxy:  qs("#btn-generate-proxy"),
+    btnBack:      qs("#btn-back"),
+    nowPlaying:   qs("#now-playing"),
+    npTitle:      qs("#np-title"),
+    npTime:       qs("#np-time"),
+    btnJumpClip:  qs("#btn-jump-clip"),
+    proxyProgress: qs("#proxy-progress"),
+    progressFill:  qs("#progress-fill"),
+    progressText:  qs("#progress-text"),
+    proxyError:    qs("#proxy-error"),
+    proxySection:  qs("#proxy-section"),
+    proxyVideo:   qs("#proxy-video"),
+    rangeStart:   qs("#range-start"),
+    rangeEnd:     qs("#range-end"),
+    timeStart:    qs("#time-start"),
+    timeEnd:      qs("#time-end"),
+    timeDuration: qs("#time-duration"),
+    btnDownload:  qs("#btn-download-clip"),
+    clipStatus:   qs("#clip-status"),
+  };
+}
 
-  detailTitle:  $("#detail-title"),
-  detailMeta:   $("#detail-meta"),
-  btnGenProxy:  $("#btn-generate-proxy"),
-  btnBack:      $("#btn-back"),
-
-  nowPlaying:   $("#now-playing"),
-  npTitle:      $("#np-title"),
-  npTime:       $("#np-time"),
-  btnJumpClip:  $("#btn-jump-clip"),
-
-  proxyProgress: $("#proxy-progress"),
-  progressFill:  $("#progress-fill"),
-  progressText:  $("#progress-text"),
-  proxyError:    $("#proxy-error"),
-  proxySection:  $("#proxy-section"),
-
-  proxyVideo:   $("#proxy-video"),
-  rangeStart:   $("#range-start"),
-  rangeEnd:     $("#range-end"),
-  timeStart:    $("#time-start"),
-  timeEnd:      $("#time-end"),
-  timeDuration: $("#time-duration"),
-  btnDownload:  $("#btn-download-clip"),
-  clipStatus:   $("#clip-status"),
-};
+let dom;
 
 // ── Formatting ─────────────────────────────────────────────────────────
 
@@ -82,75 +86,92 @@ async function loadLibrary() {
     renderLibrary();
   } catch (err) {
     console.error("Failed to load library:", err);
-    dom.libraryGrid.innerHTML =
-      '<div class="empty-state"><div class="empty-text">Failed to load library</div>' +
-      '<div class="empty-sub">Is Plex reachable?</div></div>';
+    if (dom.libraryGrid) {
+      dom.libraryGrid.innerHTML =
+        '<div class="empty-state"><div class="empty-text">Failed to load library</div>' +
+        '<div class="empty-sub">Is Plex reachable?</div></div>';
+    }
   }
 }
 
-function renderLibrary(filterText = "") {
+function renderLibrary(filterText) {
+  filterText = filterText || "";
   const query = filterText.toLowerCase().trim();
   const filtered = query
-    ? state.items.filter((item) => {
-        const title = (item.title || "").toLowerCase();
-        const show = (item.show_title || "").toLowerCase();
-        return title.includes(query) || show.includes(query);
+    ? state.items.filter(function(item) {
+        var title = (item.title || "").toLowerCase();
+        var show = (item.show_title || "").toLowerCase();
+        return title.indexOf(query) !== -1 || show.indexOf(query) !== -1;
       })
     : state.items;
 
-  dom.resultCount.textContent = `(${filtered.length})`;
+  if (dom.resultCount) dom.resultCount.textContent = "(" + filtered.length + ")";
 
   if (filtered.length === 0) {
-    dom.libraryGrid.innerHTML = "";
-    dom.emptyState.style.display = "block";
+    if (dom.libraryGrid) dom.libraryGrid.innerHTML = "";
+    if (dom.emptyState) dom.emptyState.style.display = "block";
     return;
   }
 
-  dom.emptyState.style.display = "none";
-  dom.libraryGrid.innerHTML = filtered.map(renderCard).join("");
+  if (dom.emptyState) dom.emptyState.style.display = "none";
+  if (dom.libraryGrid) dom.libraryGrid.innerHTML = filtered.map(renderCard).join("");
 }
 
 function renderCard(item) {
-  const title = item.title || "Unknown";
-  const year = item.year ? ` · ${item.year}` : "";
-  const dur = item.duration ? ` · ${fmtDuration(item.duration)}` : "";
+  var title = item.title || "Unknown";
+  var year = item.year ? " \u00b7 " + item.year : "";
+  var dur = item.duration ? " \u00b7 " + fmtDuration(item.duration) : "";
 
-  let subtitle = item.type === "episode"
-    ? `${item.show_title || ""} — S${String(item.season).padStart(2,"0")}E${String(item.episode).padStart(2,"0")}`
-    : `${item.type || "movie"}${year}${dur}`;
+  var subtitle = item.type === "episode"
+    ? (item.show_title || "") + " \u2014 S" + String(item.season).padStart(2,"0") + "E" + String(item.episode).padStart(2,"0")
+    : (item.type || "movie") + year + dur;
 
-  const thumbSrc = item.thumb
-    ? `api/thumb/${item.media_id}`
-    : "";
+  var mid = item.media_id;
+  var thumbSrc = item.thumb ? "api/thumb/" + mid : "";
 
-  const thumbHtml = thumbSrc
-    ? `<img class="card-thumb" src="${thumbSrc}" alt="${title}" loading="lazy">`
-    : `<div class="card-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:32px;">&#127916;</div>`;
+  var thumbHtml = thumbSrc
+    ? '<img class="card-thumb" src="' + thumbSrc + '" alt="' + escAttr(title) + '" loading="lazy" onerror="this.style.display=\'none\'">'
+    : '<div class="card-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:32px;">&#127916;</div>';
 
-  return `
-    <div class="card" onclick="selectItem(${item.media_id})" data-id="${item.media_id}">
-      <div class="card-content">
-        ${thumbHtml}
-        <div class="card-info">
-          <div class="card-name">${escHtml(title)}</div>
-          <div class="card-meta">${escHtml(subtitle)}</div>
-        </div>
-      </div>
-    </div>`;
+  return (
+    '<div class="card" onclick="selectItem(' + mid + ')" data-id="' + mid + '">' +
+      '<div class="card-content">' +
+        thumbHtml +
+        '<div class="card-info">' +
+          '<div class="card-name">' + escHtml(title) + '</div>' +
+          '<div class="card-meta">' + escHtml(subtitle) + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>'
+  );
 }
 
 function escHtml(str) {
-  const div = document.createElement("div");
+  var div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+function escAttr(str) {
+  return String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────
+
+function goHome() {
+  if (dom.detailView) dom.detailView.style.display = "none";
+  if (dom.libraryView) dom.libraryView.style.display = "block";
+  state.currentItem = null;
+  if (dom.search) dom.search.value = "";
+  renderLibrary();
 }
 
 // ── Detail View ────────────────────────────────────────────────────────
 
 async function selectItem(mediaId) {
   try {
-    const resp = await fetch(`api/library/${mediaId}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    var resp = await fetch("api/library/" + mediaId);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
     state.currentItem = await resp.json();
     state.proxyReady = false;
     showDetailView();
@@ -160,61 +181,66 @@ async function selectItem(mediaId) {
 }
 
 function showDetailView() {
-  const item = state.currentItem;
+  var item = state.currentItem;
   if (!item) return;
 
-  dom.libraryView.style.display = "none";
-  dom.detailView.style.display = "block";
+  if (dom.libraryView) dom.libraryView.style.display = "none";
+  if (dom.detailView) dom.detailView.style.display = "block";
 
-  dom.detailTitle.textContent = item.title || "Unknown";
+  if (dom.detailTitle) dom.detailTitle.textContent = item.title || "Unknown";
 
-  const parts = [];
+  var parts = [];
   if (item.type === "episode") {
-    parts.push(`${item.show_title || ""} — S${String(item.season).padStart(2,"0")}E${String(item.episode).padStart(2,"0")}`);
+    parts.push((item.show_title || "") + " \u2014 S" + String(item.season).padStart(2,"0") + "E" + String(item.episode).padStart(2,"0"));
   }
   if (item.year) parts.push(String(item.year));
   parts.push(item.type || "movie");
   if (item.duration) parts.push(fmtDuration(item.duration));
-  dom.detailMeta.textContent = parts.join(" · ");
+  if (dom.detailMeta) dom.detailMeta.textContent = parts.join(" \u00b7 ");
 
   // Reset proxy state
-  dom.proxySection.style.display = "none";
-  dom.proxyProgress.style.display = "none";
-  dom.proxyError.style.display = "none";
-  dom.btnGenProxy.style.display = "inline-flex";
-  dom.btnDownload.disabled = true;
-  dom.clipStatus.textContent = "";
+  if (dom.proxySection) dom.proxySection.style.display = "none";
+  if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
+  if (dom.proxyError) dom.proxyError.style.display = "none";
+  if (dom.btnGenProxy) dom.btnGenProxy.style.display = "inline-flex";
+  if (dom.btnDownload) dom.btnDownload.disabled = true;
+  if (dom.clipStatus) dom.clipStatus.textContent = "";
   state.proxyReady = false;
   state.proxyDuration = 0;
 }
 
 function goBack() {
-  dom.detailView.style.display = "none";
-  dom.libraryView.style.display = "block";
+  if (dom.detailView) dom.detailView.style.display = "none";
+  if (dom.libraryView) dom.libraryView.style.display = "block";
   state.currentItem = null;
-  renderLibrary(dom.search.value);
+  renderLibrary(dom.search ? dom.search.value : "");
 }
 
 // ── Now Playing Banner ─────────────────────────────────────────────────
 
-let sessionPollTimer = null;
+var sessionPollTimer = null;
 
 async function pollSessions() {
   try {
-    const resp = await fetch("api/sessions");
+    var resp = await fetch("api/sessions");
     if (!resp.ok) return;
-    const data = await resp.json();
-    const sessions = data.sessions || [];
+    var data = await resp.json();
+    var sessions = data.sessions || [];
 
-    // Find first paused session
-    const paused = sessions.find((s) => s.state === "paused");
+    var paused = null;
+    for (var i = 0; i < sessions.length; i++) {
+      if (sessions[i].state === "paused") {
+        paused = sessions[i];
+        break;
+      }
+    }
 
-    if (paused) {
+    if (paused && dom.nowPlaying) {
       dom.nowPlaying.style.display = "block";
-      dom.npTitle.textContent = paused.title;
-      dom.npTime.textContent = `at ${fmtTime(paused.viewOffset)}`;
-      dom.btnJumpClip.onclick = () => jumpToClip(paused);
-    } else {
+      if (dom.npTitle) dom.npTitle.textContent = paused.title;
+      if (dom.npTime) dom.npTime.textContent = "at " + fmtTime(paused.viewOffset);
+      if (dom.btnJumpClip) dom.btnJumpClip.onclick = function() { jumpToClip(paused); };
+    } else if (dom.nowPlaying) {
       dom.nowPlaying.style.display = "none";
     }
   } catch (err) {
@@ -223,13 +249,10 @@ async function pollSessions() {
 }
 
 function jumpToClip(session) {
-  // Pre-select the item and set range around the pause point
-  const durationS = session.duration / 1000;
-  const viewOffset = session.viewOffset;
+  var durationS = session.duration / 1000;
+  var viewOffset = session.viewOffset;
 
-  selectItem(session.media_id).then(() => {
-    // After detail view loads, pre-set ranges (if proxy ready, otherwise
-    // the user still needs to generate the proxy first)
+  selectItem(session.media_id).then(function() {
     window._jumpOffset = viewOffset;
     window._jumpDuration = durationS;
   });
@@ -245,65 +268,59 @@ function startSessionPolling() {
 async function generateProxy() {
   if (!state.currentItem) return;
 
-  const mediaId = state.currentItem.media_id || state.currentItem.id;
+  var mediaId = state.currentItem.media_id || state.currentItem.id;
   if (!mediaId) return;
 
-  dom.btnGenProxy.style.display = "none";
-  dom.proxyError.style.display = "none";
-  dom.proxySection.style.display = "none";
-  dom.proxyProgress.style.display = "block";
-  dom.progressFill.style.width = "0%";
-  dom.progressText.textContent = "Starting proxy generation...";
+  if (dom.btnGenProxy) dom.btnGenProxy.style.display = "none";
+  if (dom.proxyError) dom.proxyError.style.display = "none";
+  if (dom.proxySection) dom.proxySection.style.display = "none";
+  if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
+  if (dom.progressFill) dom.progressFill.style.width = "0%";
+  if (dom.progressText) dom.progressText.textContent = "Starting proxy generation...";
 
   try {
-    // Trigger generation
-    const startResp = await fetch(`api/proxy/${mediaId}`, { method: "POST" });
+    var startResp = await fetch("api/proxy/" + mediaId, { method: "POST" });
     if (!startResp.ok) {
-      const err = await startResp.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${startResp.status}`);
+      var errData = await startResp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "HTTP " + startResp.status);
     }
-
-    // Poll for progress
     await pollProxyStatus(mediaId);
   } catch (err) {
-    dom.proxyProgress.style.display = "none";
-    dom.proxyError.style.display = "block";
-    dom.proxyError.textContent = `Error: ${err.message}`;
-    dom.btnGenProxy.style.display = "inline-flex";
+    if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
+    if (dom.proxyError) {
+      dom.proxyError.style.display = "block";
+      dom.proxyError.textContent = "Error: " + err.message;
+    }
+    if (dom.btnGenProxy) dom.btnGenProxy.style.display = "inline-flex";
   }
 }
 
 async function pollProxyStatus(mediaId) {
-  const maxPolls = 300; // 10 minutes at 2s intervals
-  let polls = 0;
+  var maxPolls = 300;
+  var polls = 0;
 
   while (polls < maxPolls) {
     await sleep(2000);
     polls++;
 
     try {
-      const resp = await fetch(`api/proxy/${mediaId}/status`);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const status = await resp.json();
+      var resp = await fetch("api/proxy/" + mediaId + "/status");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var status = await resp.json();
 
-      if (status.error) {
-        throw new Error(status.error);
-      }
+      if (status.error) throw new Error(status.error);
 
       if (status.done) {
-        // Proxy ready!
-        dom.proxyProgress.style.display = "none";
-        dom.progressFill.style.width = "100%";
-        dom.progressText.textContent = "Done!";
-
+        if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
+        if (dom.progressFill) dom.progressFill.style.width = "100%";
+        if (dom.progressText) dom.progressText.textContent = "Done!";
         onProxyReady(mediaId);
         return;
       }
 
-      // Update progress
-      const pct = Math.round(status.progress * 100);
-      dom.progressFill.style.width = `${pct}%`;
-      dom.progressText.textContent = `Generating preview... ${pct}%`;
+      var pct = Math.round(status.progress * 100);
+      if (dom.progressFill) dom.progressFill.style.width = pct + "%";
+      if (dom.progressText) dom.progressText.textContent = "Generating preview... " + pct + "%";
     } catch (err) {
       throw err;
     }
@@ -315,68 +332,60 @@ async function pollProxyStatus(mediaId) {
 function onProxyReady(mediaId) {
   state.proxyReady = true;
 
-  // Get duration from current item
-  const item = state.currentItem;
-  const durationS = item.duration / 1000;
+  var item = state.currentItem;
+  var durationS = item.duration / 1000;
   state.proxyDuration = durationS;
 
-  // Set up video player
-  dom.proxyVideo.src = `api/proxy/${mediaId}/stream`;
+  if (dom.proxyVideo) dom.proxyVideo.src = "api/proxy/" + mediaId + "/stream";
 
-  // Set range inputs
-  dom.rangeStart.max = Math.floor(durationS);
-  dom.rangeEnd.max = Math.floor(durationS);
+  if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
+  if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
 
-  // Default: first 30 seconds (or full duration if shorter)
-  const defaultEnd = Math.min(30, Math.floor(durationS));
-  dom.rangeStart.value = 0;
-  dom.rangeEnd.value = defaultEnd;
+  var defaultEnd = Math.min(30, Math.floor(durationS));
+  if (dom.rangeStart) dom.rangeStart.value = 0;
+  if (dom.rangeEnd) dom.rangeEnd.value = defaultEnd;
 
-  // If we jumped from a now-playing session, pre-set the range
   if (window._jumpOffset != null) {
-    const offset = window._jumpOffset;
-    const start = Math.max(0, offset - 5);
-    const end = Math.min(durationS, offset + 25);
-    dom.rangeStart.value = Math.floor(start);
-    dom.rangeEnd.value = Math.floor(end);
+    var offset = window._jumpOffset;
+    var start = Math.max(0, offset - 5);
+    var end = Math.min(durationS, offset + 25);
+    if (dom.rangeStart) dom.rangeStart.value = Math.floor(start);
+    if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(end);
     window._jumpOffset = null;
     window._jumpDuration = null;
   }
 
   updateTimeDisplay();
-  dom.proxySection.style.display = "block";
-  dom.btnDownload.disabled = false;
+  if (dom.proxySection) dom.proxySection.style.display = "block";
+  if (dom.btnDownload) dom.btnDownload.disabled = false;
 
-  // Scroll to player
-  dom.proxySection.scrollIntoView({ behavior: "smooth" });
+  if (dom.proxySection) dom.proxySection.scrollIntoView({ behavior: "smooth" });
 }
 
 // ── Scrubber Controls ──────────────────────────────────────────────────
 
 function updateTimeDisplay() {
-  const start = parseInt(dom.rangeStart.value) || 0;
-  const end = parseInt(dom.rangeEnd.value) || 0;
+  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  var end = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || 0;
 
-  dom.timeStart.textContent = fmtTime(start);
-  dom.timeEnd.textContent = fmtTime(end);
-  dom.timeDuration.textContent = `/ ${fmtTime(state.proxyDuration)}`;
+  if (dom.timeStart) dom.timeStart.textContent = fmtTime(start);
+  if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(end);
+  if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.proxyDuration);
 
-  // Constrain: end must be > start
-  if (end <= start) {
+  if (end <= start && dom.rangeEnd) {
     dom.rangeEnd.value = start + 1;
-    dom.timeEnd.textContent = fmtTime(start + 1);
+    if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 1);
+    end = start + 1;
   }
 
-  // Cap end at start + 140
-  if (end - start > 140) {
+  if (end - start > 140 && dom.rangeEnd) {
     dom.rangeEnd.value = start + 140;
-    dom.timeEnd.textContent = fmtTime(start + 140);
+    if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 140);
   }
 
-  // Ensure end doesn't exceed duration
-  if (parseInt(dom.rangeEnd.value) > state.proxyDuration) {
+  if (dom.rangeEnd && parseInt(dom.rangeEnd.value) > state.proxyDuration) {
     dom.rangeEnd.value = Math.floor(state.proxyDuration);
-    dom.timeEnd.textContent = fmtTime(Math.floor(state.proxyDuration));
+    if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(Math.floor(state.proxyDuration));
   }
 }
 
@@ -387,18 +396,17 @@ function onRangeChange() {
 // ── Preset Buttons ─────────────────────────────────────────────────────
 
 function handlePreset(action, value) {
-  const start = parseInt(dom.rangeStart.value) || 0;
+  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
 
   if (action === "shift-start") {
-    const newStart = Math.max(0, start + value);
-    dom.rangeStart.value = newStart;
-    // Keep duration same, adjust end
-    const currentEnd = parseInt(dom.rangeEnd.value) || (start + 30);
-    const duration = currentEnd - start;
-    dom.rangeEnd.value = Math.min(state.proxyDuration, newStart + Math.max(1, duration));
+    var newStart = Math.max(0, start + value);
+    if (dom.rangeStart) dom.rangeStart.value = newStart;
+    var currentEnd = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || (start + 30);
+    var duration = currentEnd - start;
+    if (dom.rangeEnd) dom.rangeEnd.value = Math.min(state.proxyDuration, newStart + Math.max(1, duration));
   } else if (action === "set-duration") {
-    const newEnd = Math.min(state.proxyDuration, start + value);
-    dom.rangeEnd.value = Math.floor(newEnd);
+    var newEnd = Math.min(state.proxyDuration, start + value);
+    if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(newEnd);
   }
 
   updateTimeDisplay();
@@ -409,21 +417,21 @@ function handlePreset(action, value) {
 async function downloadClip() {
   if (!state.currentItem) return;
 
-  const mediaId = state.currentItem.media_id || state.currentItem.id;
-  const startSec = parseInt(dom.rangeStart.value) || 0;
-  const endSec = parseInt(dom.rangeEnd.value) || 0;
+  var mediaId = state.currentItem.media_id || state.currentItem.id;
+  var startSec = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+  var endSec = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || 0;
 
   if (endSec <= startSec) {
-    dom.clipStatus.textContent = "Invalid range — end must be after start";
+    if (dom.clipStatus) dom.clipStatus.textContent = "Invalid range — end must be after start";
     return;
   }
 
-  dom.btnDownload.disabled = true;
-  dom.btnDownload.textContent = "Clipping...";
-  dom.clipStatus.textContent = "Encoding clip (may take 10-30 seconds)...";
+  if (dom.btnDownload) dom.btnDownload.disabled = true;
+  if (dom.btnDownload) dom.btnDownload.textContent = "Clipping...";
+  if (dom.clipStatus) dom.clipStatus.textContent = "Encoding clip (may take 10-30 seconds)...";
 
   try {
-    const resp = await fetch("api/clip", {
+    var resp = await fetch("api/clip", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -434,67 +442,79 @@ async function downloadClip() {
     });
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${resp.status}`);
+      var errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "HTTP " + resp.status);
     }
 
-    const data = await resp.json();
+    var data = await resp.json();
 
     // Trigger browser download (strip leading / to keep paths relative)
-    const a = document.createElement("a");
+    var a = document.createElement("a");
     a.href = data.url.replace(/^\//, "");
     a.download = data.filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 
-    dom.clipStatus.textContent = `Downloaded ${data.filename} (${Math.round(data.duration)}s)`;
+    if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + data.filename + " (" + Math.round(data.duration) + "s)";
   } catch (err) {
-    dom.clipStatus.textContent = `Error: ${err.message}`;
+    if (dom.clipStatus) dom.clipStatus.textContent = "Error: " + err.message;
   } finally {
-    dom.btnDownload.disabled = false;
-    dom.btnDownload.textContent = "\u{1F4E5} Download Clip";
+    if (dom.btnDownload) dom.btnDownload.disabled = false;
+    if (dom.btnDownload) dom.btnDownload.textContent = "\u{1F4E5} Download Clip";
   }
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────
 
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
 // ── Event Wiring ───────────────────────────────────────────────────────
 
 function init() {
+  dom = getDom();
+
+  // Home link on title
+  var titleEl = qs("header h1");
+  if (titleEl) {
+    titleEl.style.cursor = "pointer";
+    titleEl.addEventListener("click", goHome);
+  }
+
   // Search
-  dom.search.addEventListener("input", () => renderLibrary(dom.search.value));
+  if (dom.search) dom.search.addEventListener("input", function() { renderLibrary(dom.search.value); });
 
   // Detail back button
-  dom.btnBack.addEventListener("click", goBack);
+  if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
 
   // Generate proxy
-  dom.btnGenProxy.addEventListener("click", generateProxy);
+  if (dom.btnGenProxy) dom.btnGenProxy.addEventListener("click", generateProxy);
 
   // Range sliders
-  dom.rangeStart.addEventListener("input", onRangeChange);
-  dom.rangeEnd.addEventListener("input", onRangeChange);
+  if (dom.rangeStart) dom.rangeStart.addEventListener("input", onRangeChange);
+  if (dom.rangeEnd) dom.rangeEnd.addEventListener("input", onRangeChange);
 
   // Preset buttons
-  $$(".preset-buttons .btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const action = btn.dataset.action;
-      const offset = parseInt(btn.dataset.offset);
-      const duration = parseInt(btn.dataset.duration);
-      handlePreset(action, offset || duration);
-    });
-  });
+  var presetBtns = qsa(".preset-buttons .btn");
+  for (var i = 0; i < presetBtns.length; i++) {
+    (function(btn) {
+      btn.addEventListener("click", function() {
+        var action = btn.dataset.action;
+        var offset = parseInt(btn.dataset.offset);
+        var duration = parseInt(btn.dataset.duration);
+        handlePreset(action, offset || duration);
+      });
+    })(presetBtns[i]);
+  }
 
   // Download clip
-  dom.btnDownload.addEventListener("click", downloadClip);
+  if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
 
   // Keyboard: Escape to go back
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && dom.detailView.style.display !== "none") {
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && dom.detailView && dom.detailView.style.display !== "none") {
       goBack();
     }
   });
@@ -506,4 +526,8 @@ function init() {
 
 // ── Boot ───────────────────────────────────────────────────────────────
 
-document.addEventListener("DOMContentLoaded", init);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
