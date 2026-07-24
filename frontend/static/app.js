@@ -47,6 +47,10 @@ function getDom() {
     npTitle:      qs("#np-title"),
     npTime:       qs("#np-time"),
     btnJumpClip:  qs("#btn-jump-clip"),
+    btnQuickClip:     qs("#btn-quick-clip"),
+    npProgress:       qs("#np-progress"),
+    npProgressFill:   qs("#np-progress-fill"),
+    npProgressText:   qs("#np-progress-text"),
     proxyProgress: qs("#proxy-progress"),
     progressFill:  qs("#progress-fill"),
     progressText:  qs("#progress-text"),
@@ -282,6 +286,7 @@ function goBack() {
 // ── Now Playing Banner ─────────────────────────────────────────────────
 
 var sessionPollTimer = null;
+var _currentSession = null;  // stored for Quick Clip
 
 async function pollSessions() {
   try {
@@ -299,11 +304,14 @@ async function pollSessions() {
     }
 
     if (paused && dom.nowPlaying) {
+      _currentSession = paused;
       dom.nowPlaying.style.display = "block";
       if (dom.npTitle) dom.npTitle.textContent = paused.title;
       if (dom.npTime) dom.npTime.textContent = "at " + fmtTime(paused.viewOffset);
       if (dom.btnJumpClip) dom.btnJumpClip.onclick = function() { jumpToClip(paused); };
+      if (dom.btnQuickClip) dom.btnQuickClip.onclick = function() { quickClip(); };
     } else if (dom.nowPlaying) {
+      _currentSession = null;
       dom.nowPlaying.style.display = "none";
     }
   } catch (err) {
@@ -318,6 +326,98 @@ function jumpToClip(session) {
   selectItem(session.media_id).then(function() {
     window._jumpOffset = viewOffset;
     window._jumpDuration = durationS;
+  });
+}
+
+async function quickClip() {
+  // Clip 30s directly from the current session — no proxy needed
+  if (!_currentSession) return;
+
+  var mediaId = _currentSession.media_id;
+  var durationS = _currentSession.duration / 1000;
+  var offset = _currentSession.viewOffset;
+
+  // 30s clip: 5s before pause, 25s after
+  var startSec = Math.max(0, offset - 5);
+  var endSec = Math.min(durationS, offset + 25);
+
+  // Show progress in banner
+  if (dom.npProgress) dom.npProgress.style.display = "block";
+  if (dom.npProgressFill) dom.npProgressFill.style.width = "0%";
+  if (dom.npProgressText) dom.npProgressText.textContent = "Starting quick clip...";
+  if (dom.btnQuickClip) dom.btnQuickClip.disabled = true;
+
+  try {
+    // 1) Start clip
+    var startResp = await fetch("api/clip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ media_id: mediaId, start_sec: startSec, end_sec: endSec }),
+    });
+    if (!startResp.ok) {
+      var errData = await startResp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "HTTP " + startResp.status);
+    }
+    var startData = await startResp.json();
+    var filename = startData.filename;
+
+    // 2) Poll with progress in the banner
+    await pollQuickClipStatus(filename);
+
+    // 3) Download
+    var a = document.createElement("a");
+    a.href = "api/download/" + filename;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    if (dom.npProgressText) dom.npProgressText.textContent = "Downloaded " + filename;
+    setTimeout(function() {
+      if (dom.npProgress) dom.npProgress.style.display = "none";
+    }, 3000);
+  } catch (err) {
+    if (dom.npProgressText) dom.npProgressText.textContent = "Error: " + err.message;
+    setTimeout(function() {
+      if (dom.npProgress) dom.npProgress.style.display = "none";
+    }, 4000);
+  } finally {
+    if (dom.btnQuickClip) dom.btnQuickClip.disabled = false;
+  }
+}
+
+function pollQuickClipStatus(filename) {
+  return new Promise(function(resolve, reject) {
+    var maxPolls = 300;
+    var polls = 0;
+
+    function poll() {
+      polls++;
+      if (polls > maxPolls) { reject(new Error("Quick clip timed out")); return; }
+
+      fetch("api/clip/status/" + filename)
+        .then(function(resp) { return resp.json(); })
+        .then(function(status) {
+          if (status.error) { reject(new Error(status.error)); return; }
+          if (status.done) {
+            if (dom.npProgressFill) dom.npProgressFill.style.width = "100%";
+            resolve();
+            return;
+          }
+          var pct = Math.round(status.progress * 100);
+          var text = "Clipping... " + pct + "%";
+          if (status.eta_seconds != null && status.eta_seconds > 0) {
+            var mins = Math.floor(status.eta_seconds / 60);
+            var secs = status.eta_seconds % 60;
+            text += " (ETA " + mins + "m " + secs + "s)";
+          }
+          if (dom.npProgressFill) dom.npProgressFill.style.width = pct + "%";
+          if (dom.npProgressText) dom.npProgressText.textContent = text;
+          setTimeout(poll, 2000);
+        })
+        .catch(function(err) { reject(err); });
+    }
+    poll();
   });
 }
 

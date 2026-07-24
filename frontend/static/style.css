@@ -164,6 +164,21 @@ header h1 span {
   color: var(--text-dim);
 }
 
+.btn-quick-clip {
+  background: var(--gold);
+  color: #0d0d0d;
+  border: none;
+  font-weight: 600;
+}
+
+.btn-quick-clip:hover {
+  background: #d4a64b;
+}
+
+.np-progress {
+  margin-top: 8px;
+}
+
 /* ── Main ──────────────────────────────────────────────────────────── */
 
 main {
