@@ -31,7 +31,7 @@ CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 proxy_jobs: dict[int, dict] = {}
 
 
-async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: float):
+async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: float, start_sec: float = 0):
     """Run ffmpeg to generate a low-res proxy, updating progress in proxy_jobs."""
     proxy_path = PROXY_DIR / f"{media_id}.mp4"
     if proxy_path.exists():
@@ -43,7 +43,7 @@ async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: flo
     cmd = [
         "ffmpeg", "-y",
         "-progress", "pipe:2",
-        "-ss", "0",
+        "-ss", str(start_sec),
         "-i", file_path,
         "-t", str(total_duration_s),
         "-vf", "scale=640:-1,fps=12",
@@ -168,8 +168,13 @@ async def thumb(media_id: int):
 # ── API: Proxy generation ────────────────────────────────────────────────
 
 @app.post("/api/proxy/{media_id}")
-async def start_proxy(media_id: int):
-    """Start generating a low-res proxy video."""
+async def start_proxy(media_id: int, start_min: int = 0):
+    """Start generating a low-res proxy video.
+
+    Args:
+        media_id: Plex media ID
+        start_min: Minutes into the movie to start the proxy (default 0)
+    """
     try:
         meta = await plex.get_metadata(media_id)
     except ValueError as e:
@@ -184,10 +189,14 @@ async def start_proxy(media_id: int):
     duration_s = meta["duration"] / 1000
 
     # Cap proxy at 10 minutes — longer than that is impractical
-    proxy_duration_s = min(duration_s, 600)
+    start_sec = start_min * 60
+    proxy_duration_s = min(duration_s - start_sec, 600)
+    if proxy_duration_s <= 0:
+        raise HTTPException(status_code=400, detail="Start time exceeds movie duration")
     warning = None
-    if duration_s > 600:
-        warning = f"Movie is {duration_s/60:.0f}min. Preview limited to first 10 minutes."
+    if duration_s > (start_sec + 600):
+        remaining = (duration_s - start_sec) / 60
+        warning = f"Preview limited to 10 minutes (of {remaining:.0f}min remaining). Use start offset to preview other sections."
 
     # Check if already exists
     proxy_path = PROXY_DIR / f"{media_id}.mp4"
@@ -200,7 +209,7 @@ async def start_proxy(media_id: int):
         return {"status": "generating", "media_id": media_id}
 
     # Start generation in background
-    asyncio.create_task(_run_ffmpeg_proxy(media_id, file_path, proxy_duration_s))
+    asyncio.create_task(_run_ffmpeg_proxy(media_id, file_path, proxy_duration_s, start_sec))
     result = {"status": "started", "media_id": media_id}
     if warning:
         result["warning"] = warning

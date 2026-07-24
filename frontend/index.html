@@ -57,7 +57,10 @@
       <div class="target-name" id="detail-title"></div>
       <div class="target-meta" id="detail-meta"></div>
       <div class="target-warning" id="detail-warning" style="display:none"></div>
-      <button class="btn btn-primary" id="btn-generate-proxy" onclick="generateProxy()">Generate Preview</button>
+      <div class="proxy-controls">
+        <input id="proxy-start" type="number" value="0" min="0" step="1" placeholder="Start at (min)" title="Minutes into the movie to start proxy">
+        <button class="btn btn-primary" id="btn-generate-proxy" onclick="generateProxy()">Generate Preview</button>
+      </div>
     </div>
 
     <!-- Error banner (hidden until error occurs) -->

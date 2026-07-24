@@ -317,20 +317,29 @@ function startSessionPolling() {
 // ── Proxy Generation ───────────────────────────────────────────────────
 
 async function generateProxy() {
+  console.log("generateProxy called, currentItem:", state.currentItem);
   if (!state.currentItem) return;
 
   var mediaId = state.currentItem.media_id || state.currentItem.id;
+  console.log("mediaId:", mediaId);
   if (!mediaId) return;
 
-  dom.btnGenProxy.style.display = "none";
+  console.log("Hiding button, showing progress...");
+  if (dom.btnGenProxy) dom.btnGenProxy.style.display = "none";
+
+  // Read start offset in minutes
+  var startMin = parseInt(qs("#proxy-start") ? qs("#proxy-start").value : 0) || 0;
+
   hideError();
-  dom.proxySection.style.display = "none";
-  dom.proxyProgress.style.display = "block";
+  if (dom.proxySection) dom.proxySection.style.display = "none";
+  if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
   if (dom.progressFill) dom.progressFill.style.width = "0%";
   if (dom.progressText) dom.progressText.textContent = "Starting proxy generation...";
 
   try {
-    var startResp = await fetch("api/proxy/" + mediaId, { method: "POST" });
+    var url = "api/proxy/" + mediaId;
+    if (startMin > 0) url += "?start_min=" + startMin;
+    var startResp = await fetch(url, { method: "POST" });
     if (!startResp.ok) {
       var errData = await startResp.json().catch(function() { return {}; });
       throw new Error(errData.detail || "HTTP " + startResp.status);

@@ -352,6 +352,30 @@ main {
   flex-wrap: wrap;
 }
 
+/* ── Proxy controls ─────────────────────────────────────────────────── */
+
+.proxy-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.proxy-controls input[type="number"] {
+  width: 80px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.proxy-controls input[type="number"]:focus {
+  border-color: var(--gold-dim);
+}
+
 /* ── Player ────────────────────────────────────────────────────────── */
 
 .player-container {
