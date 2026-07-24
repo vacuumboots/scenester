@@ -322,10 +322,10 @@ async function generateProxy() {
   var mediaId = state.currentItem.media_id || state.currentItem.id;
   if (!mediaId) return;
 
-  if (dom.btnGenProxy) dom.btnGenProxy.style.display = "none";
-  if (dom.proxyError) dom.proxyError.style.display = "none";
-  if (dom.proxySection) dom.proxySection.style.display = "none";
-  if (dom.proxyProgress) dom.proxyProgress.style.display = "block";
+  dom.btnGenProxy.style.display = "none";
+  hideError();
+  dom.proxySection.style.display = "none";
+  dom.proxyProgress.style.display = "block";
   if (dom.progressFill) dom.progressFill.style.width = "0%";
   if (dom.progressText) dom.progressText.textContent = "Starting proxy generation...";
 
@@ -335,15 +335,32 @@ async function generateProxy() {
       var errData = await startResp.json().catch(function() { return {}; });
       throw new Error(errData.detail || "HTTP " + startResp.status);
     }
+
+    var startData = await startResp.json();
+
+    // Show warning if movie was too long
+    if (startData.warning) {
+      dom.progressText.textContent = startData.warning + " " + dom.progressText.textContent;
+    }
+
     await pollProxyStatus(mediaId);
   } catch (err) {
-    if (dom.proxyProgress) dom.proxyProgress.style.display = "none";
-    if (dom.proxyError) {
-      dom.proxyError.style.display = "block";
-      dom.proxyError.textContent = "Error: " + err.message;
-    }
-    if (dom.btnGenProxy) dom.btnGenProxy.style.display = "inline-flex";
+    dom.proxyProgress.style.display = "none";
+    showError(err.message);
+    dom.btnGenProxy.style.display = "inline-flex";
   }
+}
+
+function showError(msg) {
+  var banner = qs("#error-banner");
+  var msgEl = qs("#error-message");
+  if (banner) banner.style.display = "block";
+  if (msgEl) msgEl.textContent = msg;
+}
+
+function hideError() {
+  var banner = qs("#error-banner");
+  if (banner) banner.style.display = "none";
 }
 
 async function pollProxyStatus(mediaId) {

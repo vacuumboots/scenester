@@ -56,7 +56,14 @@
     <div class="target-card">
       <div class="target-name" id="detail-title"></div>
       <div class="target-meta" id="detail-meta"></div>
+      <div class="target-warning" id="detail-warning" style="display:none"></div>
       <button class="btn btn-primary" id="btn-generate-proxy" onclick="generateProxy()">Generate Preview</button>
+    </div>
+
+    <!-- Error banner (hidden until error occurs) -->
+    <div class="error-banner" id="error-banner" style="display:none">
+      <span id="error-message"></span>
+      <button class="btn" id="btn-retry" onclick="generateProxy()">Retry</button>
     </div>
 
     <!-- Proxy progress (shown during generation) -->

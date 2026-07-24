@@ -183,6 +183,12 @@ async def start_proxy(media_id: int):
 
     duration_s = meta["duration"] / 1000
 
+    # Cap proxy at 10 minutes — longer than that is impractical
+    proxy_duration_s = min(duration_s, 600)
+    warning = None
+    if duration_s > 600:
+        warning = f"Movie is {duration_s/60:.0f}min. Preview limited to first 10 minutes."
+
     # Check if already exists
     proxy_path = PROXY_DIR / f"{media_id}.mp4"
     if proxy_path.exists():
@@ -194,8 +200,11 @@ async def start_proxy(media_id: int):
         return {"status": "generating", "media_id": media_id}
 
     # Start generation in background
-    asyncio.create_task(_run_ffmpeg_proxy(media_id, file_path, duration_s))
-    return {"status": "started", "media_id": media_id}
+    asyncio.create_task(_run_ffmpeg_proxy(media_id, file_path, proxy_duration_s))
+    result = {"status": "started", "media_id": media_id}
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 @app.get("/api/proxy/{media_id}/status")
