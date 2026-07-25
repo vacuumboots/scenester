@@ -64,6 +64,10 @@ function getDom() {
     clipProgress:      qs("#clip-progress"),
     clipProgressFill:  qs("#clip-progress-fill"),
     clipProgressText:  qs("#clip-progress-text"),
+    // Clip gallery
+    clipGallery:     qs("#clip-gallery"),
+    clipGalleryGrid: qs("#clip-gallery-grid"),
+    clipCount:       qs("#clip-count"),
   };
 }
 
@@ -140,6 +144,7 @@ async function loadLibrary() {
     const data = await resp.json();
     state.items = data.items || [];
     renderLibrary();
+    loadClipGallery();
   } catch (err) {
     console.error("Failed to load library:", err);
     if (dom.libraryGrid) {
@@ -386,6 +391,7 @@ async function quickClip() {
     document.body.removeChild(a);
 
     if (dom.npProgressText) dom.npProgressText.textContent = "Downloaded " + filename;
+    loadClipGallery();
     setTimeout(function() {
       if (dom.npProgress) dom.npProgress.style.display = "none";
     }, 3000);
@@ -628,6 +634,7 @@ async function downloadClip() {
       document.body.removeChild(a);
 
       if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + filename + " (" + Math.round(result.duration || (endSec - startSec)) + "s)";
+      loadClipGallery();
     } else {
       throw new Error(result.error || "Unknown error");
     }
@@ -680,6 +687,50 @@ function pollClipStatus(filename) {
 
     poll();
   });
+}
+
+// ── Clip Gallery ─────────────────────────────────────────────────────
+
+async function loadClipGallery() {
+  try {
+    var resp = await fetch("api/clips");
+    if (!resp.ok) return;
+    var data = await resp.json();
+    var clips = data.clips || [];
+
+    if (clips.length === 0) {
+      if (dom.clipGallery) dom.clipGallery.style.display = "none";
+      return;
+    }
+
+    if (dom.clipGallery) dom.clipGallery.style.display = "block";
+    if (dom.clipCount) dom.clipCount.textContent = "(" + clips.length + ")";
+
+    var html = "";
+    for (var i = 0; i < clips.length; i++) {
+      var c = clips[i];
+      var sizeMB = (c.size / 1048576).toFixed(1);
+      html += '<div class="clip-card">' +
+        '<video src="api/download/' + c.filename + '" controls preload="metadata"></video>' +
+        '<div class="clip-card-info">' +
+          '<span class="clip-card-name" title="' + c.filename + '">' + c.filename + ' (' + sizeMB + 'MB)</span>' +
+          '<div class="clip-card-actions">' +
+            '<a class="btn btn-small" href="api/download/' + c.filename + '" download>DL</a>' +
+            '<button class="btn btn-small" onclick="deleteClip(\'' + c.filename + '\')" style="color:var(--red)">✕</button>' +
+          '</div>' +
+        '</div></div>';
+    }
+    if (dom.clipGalleryGrid) dom.clipGalleryGrid.innerHTML = html;
+  } catch (err) {
+    // Silently fail — gallery is optional
+  }
+}
+
+async function deleteClip(filename) {
+  try {
+    await fetch("api/clips/" + filename, { method: "DELETE" });
+  } catch (e) {}
+  loadClipGallery();
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────

@@ -436,3 +436,32 @@ async def download(filename: str):
         media_type="video/mp4",
         filename=filename,
     )
+
+
+# ── API: Clip listing ────────────────────────────────────────────────────
+
+@app.get("/api/clips")
+async def list_clips():
+    """List all generated clips, newest first."""
+    clips = []
+    for f in sorted(CLIPS_DIR.glob("clip_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+        clips.append({
+            "filename": f.name,
+            "size": f.stat().st_size,
+            "created": f.stat().st_mtime,
+        })
+    return {"clips": clips}
+
+
+# ── API: Delete clip ────────────────────────────────────────────────────
+
+@app.delete("/api/clips/{filename}")
+async def delete_clip(filename: str):
+    """Delete a generated clip."""
+    if not filename.startswith("clip_") or not filename.endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    file_path = CLIPS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Clip not found")
+    file_path.unlink()
+    return {"deleted": filename}

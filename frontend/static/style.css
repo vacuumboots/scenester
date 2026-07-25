@@ -715,6 +715,64 @@ main {
   margin: 0 auto;
 }
 
+/* ── Clip Gallery ─────────────────────────────────────────────────── */
+
+.clip-gallery {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.clip-gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.clip-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: 300px;
+  flex-shrink: 0;
+}
+
+.clip-card video {
+  width: 100%;
+  display: block;
+  max-height: 180px;
+  background: #000;
+}
+
+.clip-card-info {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.clip-card-name {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.clip-card-actions .btn {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
 /* ── Error Banner ──────────────────────────────────────────────────── */
 
 .error-banner {
