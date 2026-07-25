@@ -304,6 +304,9 @@ function showDetailView() {
   updateSliderUI();
   if (dom.btnDownload) dom.btnDownload.disabled = false;
 
+  // Defer second UI update so browser has computed layout
+  requestAnimationFrame(function() { updateSliderUI(); });
+
   // Load first frame
   showFrame(_sliderStart);
 }
