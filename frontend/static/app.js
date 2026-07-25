@@ -282,6 +282,12 @@ function showDetailView() {
   var mediaId = item.media_id || item.id;
   buildFrameStrip(mediaId, durationS);
 
+  // Initialize slider (call here instead of init() so elements have dimensions)
+  if (!window._sliderInited) {
+    initDualSlider();
+    window._sliderInited = true;
+  }
+
   // Handle jump-to-clip offset from session banner
   if (window._jumpOffset != null) {
     var offset = window._jumpOffset;
@@ -673,22 +679,19 @@ async function downloadClip() {
   if (!state.currentItem) return;
 
   var mediaId = state.currentItem.media_id || state.currentItem.id;
-  var startSec = _sliderStart;
-  var endSec = _sliderEnd;
+  var startSec = _sliderStart || 0;
+  var endSec = _sliderEnd || 0;
 
   if (endSec <= startSec) {
     if (dom.clipStatus) dom.clipStatus.textContent = "Invalid range — end must be after start";
     return;
   }
 
-  // Hide old status, show progress bar
+  if (dom.btnDownload) { dom.btnDownload.disabled = true; dom.btnDownload.textContent = "Clipping..."; }
   if (dom.clipStatus) dom.clipStatus.textContent = "";
   if (dom.clipProgress) dom.clipProgress.style.display = "block";
   if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
   if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip...";
-  if (dom.btnDownload) { dom.btnDownload.disabled = true; dom.btnDownload.textContent = "Clipping..."; }
-
-  var filename = null;
 
   try {
     // 1) Start clip generation (returns immediately)
@@ -863,9 +866,6 @@ function init() {
 
   // Detail back button
   if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
-
-  // Initialize dual-handle slider
-  initDualSlider();
 
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
