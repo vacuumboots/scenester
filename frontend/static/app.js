@@ -54,6 +54,10 @@ function getDom() {
     frameOverlay:    qs("#frame-overlay"),
     frameStrip:      qs("#frame-strip"),
     frameStripInner: qs("#frame-strip-inner"),
+    // Video preview
+    btnPlayPreview:  qs("#btn-play-preview"),
+    videoPreview:    qs("#video-preview"),
+    previewVideo:    qs("#preview-video"),
     // Dual slider
     sliderTrack:       qs("#slider-track"),
     sliderRange:       qs("#slider-range"),
@@ -275,6 +279,8 @@ function showDetailView() {
 
   // Show frame preview + scrubber immediately
   if (dom.framePreview) dom.framePreview.style.display = "block";
+  if (dom.btnPlayPreview) dom.btnPlayPreview.style.display = "inline-flex";
+  if (dom.videoPreview) dom.videoPreview.style.display = "none";
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   if (dom.clipStatus) dom.clipStatus.textContent = "";
 
@@ -735,6 +741,43 @@ function handlePreset(action, value) {
   } else if (action === "set-duration") {
     setSliderEnd(Math.min(state.proxyDuration, _sliderStart + value));
     showFrame(_sliderStart);
+  }
+}
+
+// ── Video Preview ────────────────────────────────────────────────────
+
+async function playPreview() {
+  if (!state.currentItem) return;
+  var mediaId = state.currentItem.media_id || state.currentItem.id;
+  var startMin = Math.floor(_sliderStart / 60);
+
+  if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "Loading...";
+
+  try {
+    var resp = await fetch("api/proxy/" + mediaId + "?start_min=" + startMin + "&force=true", { method: "POST" });
+    if (!resp.ok) throw new Error("Failed to start preview");
+
+    // Wait briefly for proxy to start generating, then show video
+    await sleep(500);
+
+    if (dom.videoPreview) dom.videoPreview.style.display = "block";
+    if (dom.previewVideo) {
+      dom.previewVideo.src = "api/proxy/" + mediaId + "/stream#" + Date.now();
+      dom.previewVideo.currentTime = _sliderStart - (startMin * 60);
+      dom.previewVideo.play().catch(function() {});
+    }
+  } catch (e) {
+    console.error("Play preview failed:", e);
+  } finally {
+    if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "▶ Play 10s";
+  }
+}
+
+function closeVideoPreview() {
+  if (dom.videoPreview) dom.videoPreview.style.display = "none";
+  if (dom.previewVideo) {
+    dom.previewVideo.pause();
+    dom.previewVideo.src = "";
   }
 }
 

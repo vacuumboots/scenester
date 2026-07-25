@@ -570,6 +570,46 @@ main {
   margin-bottom: 20px;
 }
 
+/* Video preview overlay */
+.video-preview {
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.video-preview video {
+  width: 100%;
+  max-height: 400px;
+  background: #000;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.video-preview-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.video-preview-close:hover {
+  background: rgba(196,59,59,0.8);
+}
+
+#btn-play-preview {
+  color: var(--gold);
+  border-color: var(--gold-dim);
+}
+
 .player-container video {
   width: 100%;
   display: block;
