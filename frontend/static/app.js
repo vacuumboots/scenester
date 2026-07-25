@@ -676,14 +676,24 @@ function handlePreset(action, value) {
 var _clipPollTimer = null;
 
 async function downloadClip() {
-  if (!state.currentItem) return;
+  if (!dom || !dom.btnDownload) return;
+
+  if (!state.currentItem) {
+    if (dom.clipStatus) dom.clipStatus.textContent = "No item selected";
+    return;
+  }
 
   var mediaId = state.currentItem.media_id || state.currentItem.id;
+  if (!mediaId) {
+    if (dom.clipStatus) dom.clipStatus.textContent = "No media ID";
+    return;
+  }
+
   var startSec = _sliderStart || 0;
   var endSec = _sliderEnd || 0;
 
   if (endSec <= startSec) {
-    if (dom.clipStatus) dom.clipStatus.textContent = "Invalid range — end must be after start";
+    if (dom.clipStatus) dom.clipStatus.textContent = "Invalid range: " + fmtTime(startSec) + " - " + fmtTime(endSec);
     return;
   }
 
@@ -691,7 +701,7 @@ async function downloadClip() {
   if (dom.clipStatus) dom.clipStatus.textContent = "";
   if (dom.clipProgress) dom.clipProgress.style.display = "block";
   if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
-  if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip...";
+  if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip " + fmtTime(startSec) + "-" + fmtTime(endSec) + "...";
 
   try {
     // 1) Start clip generation (returns immediately)
