@@ -442,12 +442,15 @@ async def download(filename: str):
 
 @app.get("/api/clips")
 async def list_clips():
-    """List all generated clips, newest first."""
+    """List all generated clips, newest first (skip zero-byte files from failed encodes)."""
     clips = []
     for f in sorted(CLIPS_DIR.glob("clip_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+        size = f.stat().st_size
+        if size == 0:
+            continue
         clips.append({
             "filename": f.name,
-            "size": f.stat().st_size,
+            "size": size,
             "created": f.stat().st_mtime,
         })
     return {"clips": clips}

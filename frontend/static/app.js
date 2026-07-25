@@ -454,7 +454,7 @@ function buildFrameStrip(mediaId, durationS) {
   if (!dom.frameStrip || !dom.frameStripInner) return;
   _stripThumbs = [];
 
-  var count = 12;
+  var count = durationS < 600 ? 8 : durationS < 3600 ? 12 : 16;
   var html = "";
   for (var i = 0; i < count; i++) {
     var t = Math.floor((durationS / (count - 1)) * i);
@@ -762,6 +762,19 @@ function sleep(ms) {
   return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
+function parseTimeInput(val) {
+  // Parse "1:23", "1:23:45", "90", "90s"
+  val = val.replace(/s$/i, "");
+  var parts = val.split(":");
+  if (parts.length === 3) {
+    return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+  } else if (parts.length === 2) {
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  } else {
+    return parseInt(parts[0]) || null;
+  }
+}
+
 // ── Event Wiring ───────────────────────────────────────────────────────
 
 function init() {
@@ -837,6 +850,23 @@ function init() {
   // Load library
   loadLibrary();
   startSessionPolling();
+
+  // Time jump input
+  var jumpInput = qs("#jump-time");
+  if (jumpInput) {
+    jumpInput.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        var val = jumpInput.value.trim();
+        if (!val) return;
+        var secs = parseTimeInput(val);
+        if (secs !== null && secs >= 0 && secs <= state.proxyDuration) {
+          jumpToFrame(secs);
+          jumpInput.value = "";
+        }
+      }
+    });
+  }
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────

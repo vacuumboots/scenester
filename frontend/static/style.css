@@ -486,6 +486,27 @@ main {
   opacity: 0.6;
 }
 
+#jump-time {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  width: 90px;
+  outline: none;
+}
+
+#jump-time:focus {
+  border-color: var(--gold-dim);
+}
+
+#jump-time::placeholder {
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+
 /* Frame strip — thumbnail row across the movie */
 .frame-strip {
   margin-bottom: 16px;
