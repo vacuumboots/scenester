@@ -303,6 +303,7 @@ function showDetailView() {
   updateTimeDisplay();
   updateSliderUI();
   if (dom.btnDownload) dom.btnDownload.disabled = false;
+  updateStripRange();
 
   // Defer second UI update so browser has computed layout
   requestAnimationFrame(function() { updateSliderUI(); });
@@ -473,7 +474,7 @@ function buildFrameStrip(mediaId, durationS) {
   for (var i = 0; i < count; i++) {
     var t = Math.floor((durationS / (count - 1)) * i);
     html += '<div class="frame-thumb" data-time="' + t + '" ' +
-            'onclick="jumpToFrame(' + t + ')" ' +
+            'onclick="stripClick(' + t + ', event)" ' +
             'onmouseenter="previewFrame(' + t + ')" ' +
             'onmouseleave="restorePreviewFrame()">' +
             '<img src="api/frame/' + mediaId + '?t=' + t + '" loading="lazy" />' +
@@ -510,6 +511,37 @@ function jumpToFrame(t) {
   setSliderStart(t);
   showFrame(t);
   highlightFrameStrip(t);
+  updateStripRange();
+}
+
+// Click on frame strip: normal = set start, shift+click = set end (range)
+function stripClick(t, e) {
+  _previewRestoreSrc = null;
+  if (e && e.shiftKey) {
+    // Shift+click: set end, keep start
+    setSliderEnd(t);
+    showFrame(_sliderStart);
+  } else {
+    // Normal click: set start, keep duration if reasonable
+    var dur = _sliderEnd - _sliderStart;
+    setSliderStart(t);
+    if (dur > 0 && dur <= 140) {
+      setSliderEnd(Math.min(state.proxyDuration, t + dur));
+    }
+  }
+  updateStripRange();
+}
+
+// Highlight thumbnails in selected range
+function updateStripRange() {
+  for (var i = 0; i < _stripThumbs.length; i++) {
+    var t = _stripThumbs[i];
+    if (t.time >= _sliderStart && t.time <= _sliderEnd) {
+      t.el.classList.add("in-range");
+    } else {
+      t.el.classList.remove("in-range");
+    }
+  }
 }
 
 function highlightFrameStrip(currentT) {
@@ -587,12 +619,14 @@ function setSliderStart(t) {
   _sliderStart = Math.max(0, Math.min(state.proxyDuration, Math.floor(t)));
   updateTimeDisplay();
   updateSliderUI();
+  updateStripRange();
 }
 
 function setSliderEnd(t) {
   _sliderEnd = Math.max(1, Math.min(state.proxyDuration, Math.floor(t)));
   updateTimeDisplay();
   updateSliderUI();
+  updateStripRange();
 }
 
 function sliderValueFromEvent(e) {
@@ -643,19 +677,49 @@ function initDualSlider() {
   dom.handleEnd.addEventListener("mousedown", function(e) { onDragStart("end", e); });
   dom.handleEnd.addEventListener("touchstart", function(e) { onDragStart("end", e); }, {passive: false});
 
-  // Click on track: move nearest handle
+  // Track: click to snap nearest handle, drag to select range
   dom.sliderTrack.addEventListener("mousedown", function(e) {
-    if (e.target === dom.handleStart || e.target === dom.handleEnd) return;
     if (e.target.closest && e.target.closest(".slider-handle")) return;
-    var t = sliderValueFromEvent(e);
-    var distStart = Math.abs(t - _sliderStart);
-    var distEnd = Math.abs(t - _sliderEnd);
-    if (distStart <= distEnd) {
-      setSliderStart(t);
-    } else {
-      setSliderEnd(t);
+    e.preventDefault();
+    var startT = sliderValueFromEvent(e);
+    var wasDrag = false;
+
+    function onTrackMove(ev) {
+      wasDrag = true;
+      ev.preventDefault();
+      var t = sliderValueFromEvent(ev);
+      if (t > startT) {
+        setSliderStart(startT);
+        setSliderEnd(t);
+      } else {
+        setSliderStart(t);
+        setSliderEnd(startT);
+      }
+      updateStripRange();
+      if (_frameTimer) clearTimeout(_frameTimer);
+      _frameTimer = setTimeout(function() { showFrame(_sliderStart); }, 120);
     }
-    showFrame(_sliderStart);
+
+    function onTrackUp() {
+      document.removeEventListener("mousemove", onTrackMove);
+      document.removeEventListener("mouseup", onTrackUp);
+      if (!wasDrag) {
+        // Click (no drag): snap nearest handle
+        var distStart = Math.abs(startT - _sliderStart);
+        var distEnd = Math.abs(startT - _sliderEnd);
+        if (distStart <= distEnd) {
+          setSliderStart(startT);
+        } else {
+          setSliderEnd(startT);
+        }
+        updateStripRange();
+      }
+      if (_frameTimer) clearTimeout(_frameTimer);
+      showFrame(_sliderStart);
+    }
+
+    document.addEventListener("mousemove", onTrackMove);
+    document.addEventListener("mouseup", onTrackUp);
   });
 }
 
