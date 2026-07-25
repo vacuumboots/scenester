@@ -325,7 +325,7 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
             acodec="aac",
             **{"b:a": "128k"},
         )
-        .global_args("-progress", "pipe:2")
+        .global_args("-progress", "pipe:2", "-map", "0:v:0", "-map", "0:a:0")
         .compile()
     )
 

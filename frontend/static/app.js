@@ -52,6 +52,8 @@ function getDom() {
     frameImg:        qs("#frame-img"),
     frameTimeValue:  qs("#frame-time-value"),
     frameOverlay:    qs("#frame-overlay"),
+    frameStrip:      qs("#frame-strip"),
+    frameStripInner: qs("#frame-strip-inner"),
     rangeStart:   qs("#range-start"),
     rangeEnd:     qs("#range-end"),
     timeStart:    qs("#time-start"),
@@ -261,6 +263,10 @@ function showDetailView() {
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   if (dom.clipStatus) dom.clipStatus.textContent = "";
 
+  // Build frame strip
+  var mediaId = item.media_id || item.id;
+  buildFrameStrip(mediaId, durationS);
+
   if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
   if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
 
@@ -436,6 +442,51 @@ function startSessionPolling() {
 // ── Scrubber Controls ──────────────────────────────────────────────────
 
 var _frameTimer = null;
+var _stripThumbs = [];  // [{time, el}]
+
+function buildFrameStrip(mediaId, durationS) {
+  if (!dom.frameStrip || !dom.frameStripInner) return;
+  _stripThumbs = [];
+
+  var count = 12;
+  var html = "";
+  for (var i = 0; i < count; i++) {
+    var t = Math.floor((durationS / (count - 1)) * i);
+    html += '<div class="frame-thumb" data-time="' + t + '" onclick="jumpToFrame(' + t + ')">' +
+            '<img src="api/frame/' + mediaId + '?t=' + t + '" loading="lazy" />' +
+            '<span class="frame-thumb-time">' + fmtTime(t) + '</span></div>';
+  }
+  dom.frameStripInner.innerHTML = html;
+  dom.frameStrip.style.display = "block";
+
+  // Cache elements
+  var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
+  for (var j = 0; j < thumbs.length; j++) {
+    var t = parseInt(thumbs[j].getAttribute("data-time"));
+    _stripThumbs.push({time: t, el: thumbs[j]});
+  }
+}
+
+function jumpToFrame(t) {
+  if (dom.rangeStart) dom.rangeStart.value = t;
+  updateTimeDisplay();
+  showFrame(t);
+  highlightFrameStrip(t);
+}
+
+function highlightFrameStrip(currentT) {
+  for (var i = 0; i < _stripThumbs.length; i++) {
+    var t = _stripThumbs[i];
+    var dist = Math.abs(t.time - currentT);
+    if (dist < 3 || (i > 0 && currentT > _stripThumbs[i-1].time && currentT <= t.time)) {
+      t.el.classList.add("active");
+      // Scroll into view
+      t.el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    } else {
+      t.el.classList.remove("active");
+    }
+  }
+}
 
 function showFrame(absoluteSec) {
   // Update the frame preview image to show the frame at this timestamp
@@ -452,6 +503,7 @@ function showFrame(absoluteSec) {
   img.onload = function() {
     if (dom.frameImg) dom.frameImg.src = img.src;
     if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
+    highlightFrameStrip(absoluteSec);
   };
   img.onerror = function() {
     if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
@@ -675,10 +727,36 @@ function init() {
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
 
-  // Keyboard: Escape to go back
+  // Keyboard shortcuts
   document.addEventListener("keydown", function(e) {
+    // Escape to go back
     if (e.key === "Escape" && dom.detailView && dom.detailView.style.display !== "none") {
       goBack();
+      return;
+    }
+    // Only in detail view
+    if (!dom.detailView || dom.detailView.style.display === "none") return;
+    // Don't capture when typing in inputs
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+    var step = e.shiftKey ? 10 : 1;
+
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      var ns = Math.max(0, start - step);
+      if (dom.rangeStart) dom.rangeStart.value = ns;
+      updateTimeDisplay();
+      showFrame(ns);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      var ns = Math.min(state.proxyDuration, start + step);
+      if (dom.rangeStart) dom.rangeStart.value = ns;
+      updateTimeDisplay();
+      showFrame(ns);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      downloadClip();
     }
   });
 
