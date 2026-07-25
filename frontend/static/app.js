@@ -750,21 +750,33 @@ async function playPreview() {
   if (!state.currentItem) return;
   var mediaId = state.currentItem.media_id || state.currentItem.id;
   var startMin = Math.floor(_sliderStart / 60);
+  var seekSec = _sliderStart - (startMin * 60);
 
-  if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "Loading...";
+  if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "Generating...";
 
   try {
+    // Start proxy generation
     var resp = await fetch("api/proxy/" + mediaId + "?start_min=" + startMin + "&force=true", { method: "POST" });
     if (!resp.ok) throw new Error("Failed to start preview");
 
-    // Wait briefly for proxy to start generating, then show video
-    await sleep(500);
+    // Poll until proxy is ready
+    for (var i = 0; i < 60; i++) {
+      await sleep(1000);
+      var sresp = await fetch("api/proxy/" + mediaId + "/status");
+      var st = await sresp.json();
+      if (st.done) break;
+      if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "Generating... " + Math.round(st.progress * 100) + "%";
+    }
 
     if (dom.videoPreview) dom.videoPreview.style.display = "block";
     if (dom.previewVideo) {
       dom.previewVideo.src = "api/proxy/" + mediaId + "/stream#" + Date.now();
-      dom.previewVideo.currentTime = _sliderStart - (startMin * 60);
-      dom.previewVideo.play().catch(function() {});
+      // Seek after metadata loads
+      dom.previewVideo.addEventListener("loadedmetadata", function seek() {
+        dom.previewVideo.currentTime = seekSec;
+        dom.previewVideo.play().catch(function() {});
+        dom.previewVideo.removeEventListener("loadedmetadata", seek);
+      });
     }
   } catch (e) {
     console.error("Play preview failed:", e);
