@@ -608,6 +608,21 @@ main {
   text-align: center;
 }
 
+.time-input {
+  outline: none;
+  cursor: text;
+}
+
+.time-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 6px rgba(196,150,59,0.3);
+}
+
+.time-input::selection {
+  background: var(--gold);
+  color: var(--bg);
+}
+
 .time-sep {
   color: var(--text-dim);
   font-size: 18px;

@@ -61,8 +61,8 @@ function getDom() {
     handleEnd:         qs("#slider-handle-end"),
     handleTimeStart:   qs("#handle-time-start"),
     handleTimeEnd:     qs("#handle-time-end"),
-    timeStart:    qs("#time-start"),
-    timeEnd:      qs("#time-end"),
+    timeStartInput: qs("#time-start-input"),
+    timeEndInput:   qs("#time-end-input"),
     timeDuration: qs("#time-duration"),
     btnDownload:  qs("#btn-download-clip"),
     clipStatus:   qs("#clip-status"),
@@ -571,8 +571,8 @@ function updateSliderUI() {
 }
 
 function updateTimeDisplay() {
-  if (dom.timeStart) dom.timeStart.textContent = fmtTime(_sliderStart);
-  if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(_sliderEnd);
+  if (dom.timeStartInput) dom.timeStartInput.value = fmtTime(_sliderStart);
+  if (dom.timeEndInput) dom.timeEndInput.value = fmtTime(_sliderEnd);
   if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.proxyDuration);
 
   // Enforce constraints
@@ -934,6 +934,31 @@ function init() {
       }
     });
   }
+
+  // Editable time inputs: Enter or blur applies the value
+  function wireTimeInput(inputEl, isStart) {
+    if (!inputEl) return;
+    function apply() {
+      var secs = parseTimeInput(inputEl.value.trim());
+      if (secs !== null && secs >= 0 && secs <= state.proxyDuration) {
+        if (isStart) {
+          setSliderStart(secs);
+          showFrame(_sliderStart);
+        } else {
+          setSliderEnd(secs);
+        }
+      } else {
+        // Reset to current value on invalid input
+        updateTimeDisplay();
+      }
+    }
+    inputEl.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") { e.preventDefault(); apply(); inputEl.blur(); }
+    });
+    inputEl.addEventListener("blur", apply);
+  }
+  wireTimeInput(dom.timeStartInput, true);
+  wireTimeInput(dom.timeEndInput, false);
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────
