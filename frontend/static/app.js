@@ -47,27 +47,26 @@ function getDom() {
     npProgress:       qs("#np-progress"),
     npProgressFill:   qs("#np-progress-fill"),
     npProgressText:   qs("#np-progress-text"),
-    // Frame preview
+    // Video preview
     framePreview:    qs("#frame-preview"),
-    frameImg:        qs("#frame-img"),
+    previewVideo:    qs("#preview-video"),
+    previewError:    qs("#preview-error"),
+    previewLoading:  qs("#preview-loading"),
     frameTimeValue:  qs("#frame-time-value"),
-    frameOverlay:    qs("#frame-overlay"),
+    btnPlayPreview:  qs("#btn-play-preview"),
+    btnMuteToggle:  qs("#btn-mute-toggle"),
     frameStrip:      qs("#frame-strip"),
     frameStripInner: qs("#frame-strip-inner"),
-    // Video preview
-    btnPlayPreview:  qs("#btn-play-preview"),
-    videoPreview:    qs("#video-preview"),
-    previewVideo:    qs("#preview-video"),
-    // Dual slider
-    sliderTrack:       qs("#slider-track"),
-    sliderRange:       qs("#slider-range"),
-    handleStart:       qs("#slider-handle-start"),
-    handleEnd:         qs("#slider-handle-end"),
-    handleTimeStart:   qs("#handle-time-start"),
-    handleTimeEnd:     qs("#handle-time-end"),
+    // Range bar (visual only, no interaction)
+    rangeBar:          qs("#range-bar"),
+    rangeBarFill:      qs("#range-bar-fill"),
+    rangeBarMarkerStart: qs("#range-bar-marker-start"),
+    rangeBarMarkerEnd:   qs("#range-bar-marker-end"),
+    rangeBarPlayhead:   qs("#range-bar-playhead"),
     timeStartInput: qs("#time-start-input"),
     timeEndInput:   qs("#time-end-input"),
     timeDuration: qs("#time-duration"),
+    clipDuration:  qs("#clip-duration"),
     btnDownload:  qs("#btn-download-clip"),
     clipStatus:   qs("#clip-status"),
     clipProgress:      qs("#clip-progress"),
@@ -82,10 +81,9 @@ function getDom() {
 
 let dom;
 
-// Dual slider state
+// Clip range state
 var _sliderStart = 0;
 var _sliderEnd = 30;
-var _sliderDragging = null;  // "start" | "end" | null
 
 // ── Formatting ─────────────────────────────────────────────────────────
 
@@ -240,6 +238,16 @@ function goHome() {
   if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
   if (dom.search) dom.search.value = "";
+  // Clean up video preview
+  if (dom.previewVideo) {
+    dom.previewVideo.pause();
+    dom.previewVideo.src = "";
+  }
+  _videoReady = false;
+  _videoFailed = false;
+  if (dom.previewError) dom.previewError.style.display = "none";
+  if (dom.previewLoading) dom.previewLoading.style.display = "none";
+  if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
   renderLibrary();
 }
 
@@ -277,22 +285,19 @@ function showDetailView() {
   var durationS = (item.duration || 0) / 1000;
   state.proxyDuration = durationS;
 
-  // Show frame preview + scrubber immediately
+  // Show frame preview area
   if (dom.framePreview) dom.framePreview.style.display = "block";
   if (dom.btnPlayPreview) dom.btnPlayPreview.style.display = "inline-flex";
-  if (dom.videoPreview) dom.videoPreview.style.display = "none";
+  if (dom.btnMuteToggle) dom.btnMuteToggle.style.display = "inline-flex";
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   if (dom.clipStatus) dom.clipStatus.textContent = "";
 
-  // Build frame strip
+  // Load video preview from original media file
   var mediaId = item.media_id || item.id;
-  buildFrameStrip(mediaId, durationS);
+  loadVideoPreview(mediaId);
 
-  // Initialize slider (call here instead of init() so elements have dimensions)
-  if (!window._sliderInited) {
-    initDualSlider();
-    window._sliderInited = true;
-  }
+  // Build frame strip
+  buildFrameStrip(mediaId, durationS);
 
   // Handle jump-to-clip offset from session banner
   if (window._jumpOffset != null) {
@@ -307,15 +312,15 @@ function showDetailView() {
   }
 
   updateTimeDisplay();
-  updateSliderUI();
+  updateRangeBar();
   if (dom.btnDownload) dom.btnDownload.disabled = false;
   updateStripRange();
 
-  // Defer second UI update so browser has computed layout
-  requestAnimationFrame(function() { updateSliderUI(); });
+  // Seek video to start position once ready
+  seekVideoTo(_sliderStart);
+  if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
 
-  // Load first frame
-  showFrame(_sliderStart);
+  if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(durationS);
 }
 
 function goBack() {
@@ -323,6 +328,16 @@ function goBack() {
   if (dom.libraryView) dom.libraryView.style.display = "block";
   if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
+  // Clean up video preview
+  if (dom.previewVideo) {
+    dom.previewVideo.pause();
+    dom.previewVideo.src = "";
+  }
+  _videoReady = false;
+  _videoFailed = false;
+  if (dom.previewError) dom.previewError.style.display = "none";
+  if (dom.previewLoading) dom.previewLoading.style.display = "none";
+  if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
   renderLibrary(dom.search ? dom.search.value : "");
 }
 
@@ -466,9 +481,110 @@ function startSessionPolling() {
   sessionPollTimer = setInterval(pollSessions, 5000);
 }
 
-// ── Scrubber Controls ──────────────────────────────────────────────────
+// ── Video Preview (direct seeking in original file) ──────────────────
 
-var _frameTimer = null;
+var _videoReady = false;
+var _videoFailed = false;
+
+function loadVideoPreview(mediaId) {
+  _videoReady = false;
+  _videoFailed = false;
+
+  if (!dom.previewVideo) return;
+  var vid = dom.previewVideo;
+
+  if (dom.previewError) dom.previewError.style.display = "none";
+  if (dom.previewLoading) dom.previewLoading.style.display = "block";
+
+  vid.onloadedmetadata = function() {
+    _videoReady = true;
+    if (dom.previewLoading) dom.previewLoading.style.display = "none";
+    vid.currentTime = _sliderStart;
+  };
+
+  vid.onerror = function() {
+    _videoFailed = true;
+    if (dom.previewLoading) dom.previewLoading.style.display = "none";
+    if (dom.previewError) dom.previewError.style.display = "block";
+    var err = vid.error;
+    var codes = {1:"MEDIA_ERR_ABORTED",2:"MEDIA_ERR_NETWORK",3:"MEDIA_ERR_DECODE",4:"MEDIA_ERR_SRC_NOT_SUPPORTED"};
+    if (dom.clipStatus) dom.clipStatus.textContent = "Video error: " + (codes[err ? err.code : 0] || "unknown");
+  };
+
+  vid.ontimeupdate = function() {
+    var ct = vid.currentTime;
+    if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
+    if (dom.rangeBarPlayhead) {
+      dom.rangeBarPlayhead.style.display = "block";
+      dom.rangeBarPlayhead.style.left = sliderGetPct(ct) + "%";
+    }
+  };
+
+  vid.src = "api/media/" + mediaId + "/stream";
+}
+
+function onPreviewError() {
+  _videoFailed = true;
+  _videoReady = false;
+  if (dom.previewLoading) dom.previewLoading.style.display = "none";
+  if (dom.previewError) dom.previewError.style.display = "block";
+}
+
+function seekVideoTo(t) {
+  if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(t));
+  if (dom.previewVideo && dom.previewVideo.readyState >= 2) {
+    dom.previewVideo.currentTime = t;
+  }
+}
+
+function playFromHere() {
+  if (!dom.previewVideo) return;
+
+  var vid = dom.previewVideo;
+
+  // If video isn't loaded yet or failed, show what's happening
+  if (vid.readyState < 2) {
+    if (dom.clipStatus) dom.clipStatus.textContent = "Video still loading...";
+    return;
+  }
+
+  if (vid.paused) {
+    vid.currentTime = _sliderStart;
+    var promise = vid.play();
+    if (promise) {
+      promise.catch(function(err) {
+        if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
+      });
+    }
+  } else {
+    vid.pause();
+  }
+}
+
+// Update play button text based on video state
+function updatePlayButton() {
+  if (!dom.btnPlayPreview || !dom.previewVideo) return;
+  dom.btnPlayPreview.textContent = dom.previewVideo.paused ? '▶ Play from here' : '⏸ Pause';
+}
+
+// Wire play/pause state tracking
+function initPlayStateTracking() {
+  if (!dom.previewVideo) return;
+  dom.previewVideo.addEventListener('play', updatePlayButton);
+  dom.previewVideo.addEventListener('pause', updatePlayButton);
+  dom.previewVideo.addEventListener('ended', updatePlayButton);
+}
+
+function toggleMute() {
+  if (!dom.previewVideo) return;
+  dom.previewVideo.muted = !dom.previewVideo.muted;
+  if (dom.btnMuteToggle) {
+    dom.btnMuteToggle.textContent = dom.previewVideo.muted ? '🔇' : '🔊';
+  }
+}
+
+// ── Scrubber Controls (frame strip) ───────────────────────────────────
+
 var _stripThumbs = [];  // [{time, el}]
 
 function buildFrameStrip(mediaId, durationS) {
@@ -481,8 +597,8 @@ function buildFrameStrip(mediaId, durationS) {
     var t = Math.floor((durationS / (count - 1)) * i);
     html += '<div class="frame-thumb" data-time="' + t + '" ' +
             'onclick="stripClick(' + t + ', event)" ' +
-            'onmouseenter="previewFrame(' + t + ')" ' +
-            'onmouseleave="restorePreviewFrame()">' +
+            'onmouseenter="seekVideoTo(' + t + ')" ' +
+            'onmouseleave="seekVideoTo(_sliderStart)">' +
             '<img src="api/frame/' + mediaId + '?t=' + t + '" loading="lazy" />' +
             '<span class="frame-thumb-time">' + fmtTime(t) + '</span></div>';
   }
@@ -496,39 +612,19 @@ function buildFrameStrip(mediaId, durationS) {
   }
 }
 
-var _previewRestoreSrc = null;
+// Click on frame strip: normal = set start, shift+click = set end
+// Drag across frames to select a range
+var _stripDragStart = null;
+var _stripDragActive = false;
+var _stripStartBeforeDrag = 0;
 
-function previewFrame(t) {
-  if (!_previewRestoreSrc && dom.frameImg) {
-    _previewRestoreSrc = dom.frameImg.src;
-  }
-  showFrame(t);
-}
-
-function restorePreviewFrame() {
-  if (_previewRestoreSrc && dom.frameImg) {
-    dom.frameImg.src = _previewRestoreSrc;
-    _previewRestoreSrc = null;
-  }
-}
-
-function jumpToFrame(t) {
-  _previewRestoreSrc = null;
-  setSliderStart(t);
-  showFrame(t);
-  highlightFrameStrip(t);
-  updateStripRange();
-}
-
-// Click on frame strip: normal = set start, shift+click = set end (range)
 function stripClick(t, e) {
-  _previewRestoreSrc = null;
+  // Skip if we're in the middle of a drag (mousedown/move/up handles that)
+  if (_stripDragActive) return;
   if (e && e.shiftKey) {
-    // Shift+click: set end, keep start
     setSliderEnd(t);
-    showFrame(_sliderStart);
+    seekVideoTo(_sliderStart);
   } else {
-    // Normal click: set start, keep duration if reasonable
     var dur = _sliderEnd - _sliderStart;
     setSliderStart(t);
     if (dur > 0 && dur <= 140) {
@@ -536,6 +632,50 @@ function stripClick(t, e) {
     }
   }
   updateStripRange();
+}
+
+// Drag across frame thumbnails to select a clip range
+function initStripDrag() {
+  if (!dom.frameStripInner) return;
+
+  dom.frameStripInner.addEventListener("mousedown", function(e) {
+    var thumb = e.target.closest && e.target.closest(".frame-thumb");
+    if (!thumb) return;
+    e.preventDefault();
+    _stripDragActive = false;
+    _stripDragStart = parseInt(thumb.getAttribute("data-time"));
+    _stripStartBeforeDrag = _sliderStart;
+
+    function onMove(ev) {
+      var tEl = ev.target.closest && ev.target.closest(".frame-thumb");
+      if (!tEl) return;
+      var t = parseInt(tEl.getAttribute("data-time"));
+      _stripDragActive = true;
+      if (t >= _stripDragStart) {
+        setSliderStart(_stripDragStart);
+        setSliderEnd(t);
+      } else {
+        setSliderStart(t);
+        setSliderEnd(_stripDragStart);
+      }
+      seekVideoTo(_sliderStart);
+      updateStripRange();
+      if (dom.clipStatus) dom.clipStatus.textContent = "Drag: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd);
+    }
+
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (_stripDragActive) {
+        seekVideoTo(_sliderStart);
+        if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.proxyDuration);
+      }
+      _stripDragActive = false;
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
 }
 
 // Highlight thumbnails in selected range
@@ -563,55 +703,37 @@ function highlightFrameStrip(currentT) {
   }
 }
 
-function showFrame(absoluteSec) {
-  if (!state.currentItem) return;
-  var mediaId = state.currentItem.media_id || state.currentItem.id;
-  if (!mediaId) return;
-
-  if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(absoluteSec));
-  if (dom.frameOverlay) dom.frameOverlay.style.display = "flex";
-  if (dom.frameImg) dom.frameImg.style.opacity = "0.5";
-
-  var img = new Image();
-  img.onload = function() {
-    if (dom.frameImg) {
-      dom.frameImg.src = img.src;
-      dom.frameImg.style.opacity = "1";
-    }
-    if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
-    highlightFrameStrip(absoluteSec);
-  };
-  img.onerror = function() {
-    if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
-  };
-  img.src = "api/frame/" + mediaId + "?t=" + absoluteSec;
+function jumpToFrame(t) {
+  setSliderStart(t);
+  seekVideoTo(t);
+  highlightFrameStrip(t);
+  updateStripRange();
 }
 
-// ── Dual-handle slider ──────────────────────────────────────────────
+// ── Range bar (visual timeline showing selected clip region) ──────────
 
 function sliderGetPct(t) {
   return Math.max(0, Math.min(100, (t / state.proxyDuration) * 100));
 }
 
-function updateSliderUI() {
-  if (!dom.sliderTrack) return;
+function updateRangeBar() {
+  if (!dom.rangeBar) return;
   var pctStart = sliderGetPct(_sliderStart);
   var pctEnd = sliderGetPct(_sliderEnd);
 
-  if (dom.sliderRange) {
-    dom.sliderRange.style.left = pctStart + "%";
-    dom.sliderRange.style.width = (pctEnd - pctStart) + "%";
+  if (dom.rangeBarFill) {
+    dom.rangeBarFill.style.left = pctStart + "%";
+    dom.rangeBarFill.style.width = (pctEnd - pctStart) + "%";
   }
-  if (dom.handleStart) dom.handleStart.style.left = pctStart + "%";
-  if (dom.handleEnd) dom.handleEnd.style.left = pctEnd + "%";
-  if (dom.handleTimeStart) dom.handleTimeStart.textContent = fmtTime(_sliderStart);
-  if (dom.handleTimeEnd) dom.handleTimeEnd.textContent = fmtTime(_sliderEnd);
+  if (dom.rangeBarMarkerStart) dom.rangeBarMarkerStart.style.left = pctStart + "%";
+  if (dom.rangeBarMarkerEnd) dom.rangeBarMarkerEnd.style.left = pctEnd + "%";
 }
 
 function updateTimeDisplay() {
   if (dom.timeStartInput) dom.timeStartInput.value = fmtTime(_sliderStart);
   if (dom.timeEndInput) dom.timeEndInput.value = fmtTime(_sliderEnd);
   if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.proxyDuration);
+  if (dom.clipDuration) dom.clipDuration.textContent = (_sliderEnd - _sliderStart) + "s";
 
   // Enforce constraints
   if (_sliderEnd <= _sliderStart) _sliderEnd = _sliderStart + 1;
@@ -624,109 +746,16 @@ function updateTimeDisplay() {
 function setSliderStart(t) {
   _sliderStart = Math.max(0, Math.min(state.proxyDuration, Math.floor(t)));
   updateTimeDisplay();
-  updateSliderUI();
+  updateRangeBar();
   updateStripRange();
 }
 
 function setSliderEnd(t) {
   _sliderEnd = Math.max(1, Math.min(state.proxyDuration, Math.floor(t)));
+  if (_sliderEnd <= _sliderStart) _sliderStart = Math.max(0, _sliderEnd - 1);
   updateTimeDisplay();
-  updateSliderUI();
+  updateRangeBar();
   updateStripRange();
-}
-
-function sliderValueFromEvent(e) {
-  if (!dom.sliderTrack) return 0;
-  var rect = dom.sliderTrack.getBoundingClientRect();
-  var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  var pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  return Math.floor(pct * state.proxyDuration);
-}
-
-function initDualSlider() {
-  if (!dom.handleStart || !dom.handleEnd || !dom.sliderTrack) return;
-
-  function onDragStart(which, e) {
-    e.preventDefault();
-    _sliderDragging = which;
-    document.addEventListener("mousemove", onDragMove);
-    document.addEventListener("mouseup", onDragEnd);
-    document.addEventListener("touchmove", onDragMove, {passive: false});
-    document.addEventListener("touchend", onDragEnd);
-  }
-
-  function onDragMove(e) {
-    if (!_sliderDragging) return;
-    e.preventDefault();
-    var t = sliderValueFromEvent(e);
-    if (_sliderDragging === "start") {
-      setSliderStart(t);
-      if (_frameTimer) clearTimeout(_frameTimer);
-      _frameTimer = setTimeout(function() { showFrame(_sliderStart); }, 120);
-    } else {
-      setSliderEnd(t);
-    }
-  }
-
-  function onDragEnd() {
-    _sliderDragging = null;
-    document.removeEventListener("mousemove", onDragMove);
-    document.removeEventListener("mouseup", onDragEnd);
-    document.removeEventListener("touchmove", onDragMove);
-    document.removeEventListener("touchend", onDragEnd);
-    if (_frameTimer) clearTimeout(_frameTimer);
-    showFrame(_sliderStart);
-  }
-
-  dom.handleStart.addEventListener("mousedown", function(e) { onDragStart("start", e); });
-  dom.handleStart.addEventListener("touchstart", function(e) { onDragStart("start", e); }, {passive: false});
-  dom.handleEnd.addEventListener("mousedown", function(e) { onDragStart("end", e); });
-  dom.handleEnd.addEventListener("touchstart", function(e) { onDragStart("end", e); }, {passive: false});
-
-  // Track: click to snap nearest handle, drag to select range
-  dom.sliderTrack.addEventListener("mousedown", function(e) {
-    if (e.target.closest && e.target.closest(".slider-handle")) return;
-    e.preventDefault();
-    var startT = sliderValueFromEvent(e);
-    var wasDrag = false;
-
-    function onTrackMove(ev) {
-      wasDrag = true;
-      ev.preventDefault();
-      var t = sliderValueFromEvent(ev);
-      if (t > startT) {
-        setSliderStart(startT);
-        setSliderEnd(t);
-      } else {
-        setSliderStart(t);
-        setSliderEnd(startT);
-      }
-      updateStripRange();
-      if (_frameTimer) clearTimeout(_frameTimer);
-      _frameTimer = setTimeout(function() { showFrame(_sliderStart); }, 120);
-    }
-
-    function onTrackUp() {
-      document.removeEventListener("mousemove", onTrackMove);
-      document.removeEventListener("mouseup", onTrackUp);
-      if (!wasDrag) {
-        // Click (no drag): snap nearest handle
-        var distStart = Math.abs(startT - _sliderStart);
-        var distEnd = Math.abs(startT - _sliderEnd);
-        if (distStart <= distEnd) {
-          setSliderStart(startT);
-        } else {
-          setSliderEnd(startT);
-        }
-        updateStripRange();
-      }
-      if (_frameTimer) clearTimeout(_frameTimer);
-      showFrame(_sliderStart);
-    }
-
-    document.addEventListener("mousemove", onTrackMove);
-    document.addEventListener("mouseup", onTrackUp);
-  });
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
@@ -737,59 +766,10 @@ function handlePreset(action, value) {
     var dur = _sliderEnd - _sliderStart;
     setSliderStart(ns);
     setSliderEnd(Math.min(state.proxyDuration, ns + Math.max(1, dur)));
-    showFrame(_sliderStart);
+    seekVideoTo(_sliderStart);
   } else if (action === "set-duration") {
     setSliderEnd(Math.min(state.proxyDuration, _sliderStart + value));
-    showFrame(_sliderStart);
-  }
-}
-
-// ── Video Preview ────────────────────────────────────────────────────
-
-async function playPreview() {
-  if (!state.currentItem) return;
-  var mediaId = state.currentItem.media_id || state.currentItem.id;
-  var startMin = Math.floor(_sliderStart / 60);
-  var seekSec = _sliderStart - (startMin * 60);
-
-  if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "Generating...";
-
-  try {
-    // Start proxy generation
-    var resp = await fetch("api/proxy/" + mediaId + "?start_min=" + startMin + "&force=true", { method: "POST" });
-    if (!resp.ok) throw new Error("Failed to start preview");
-
-    // Poll until proxy is ready
-    for (var i = 0; i < 60; i++) {
-      await sleep(1000);
-      var sresp = await fetch("api/proxy/" + mediaId + "/status");
-      var st = await sresp.json();
-      if (st.done) break;
-      if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "Generating... " + Math.round(st.progress * 100) + "%";
-    }
-
-    if (dom.videoPreview) dom.videoPreview.style.display = "block";
-    if (dom.previewVideo) {
-      dom.previewVideo.src = "api/proxy/" + mediaId + "/stream#" + Date.now();
-      // Seek after metadata loads
-      dom.previewVideo.addEventListener("loadedmetadata", function seek() {
-        dom.previewVideo.currentTime = seekSec;
-        dom.previewVideo.play().catch(function() {});
-        dom.previewVideo.removeEventListener("loadedmetadata", seek);
-      });
-    }
-  } catch (e) {
-    console.error("Play preview failed:", e);
-  } finally {
-    if (dom.btnPlayPreview) dom.btnPlayPreview.textContent = "▶ Play 10s";
-  }
-}
-
-function closeVideoPreview() {
-  if (dom.videoPreview) dom.videoPreview.style.display = "none";
-  if (dom.previewVideo) {
-    dom.previewVideo.pause();
-    dom.previewVideo.src = "";
+    seekVideoTo(_sliderStart);
   }
 }
 
@@ -1002,6 +982,18 @@ function init() {
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
 
+  // Play/pause button
+  if (dom.btnPlayPreview) dom.btnPlayPreview.addEventListener("click", playFromHere);
+
+  // Mute toggle
+  if (dom.btnMuteToggle) dom.btnMuteToggle.addEventListener("click", toggleMute);
+
+  // Frame strip drag-to-select
+  initStripDrag();
+
+  // Play/pause button state tracking
+  initPlayStateTracking();
+
   // Keyboard shortcuts
   document.addEventListener("keydown", function(e) {
     // Escape to go back
@@ -1021,12 +1013,12 @@ function init() {
       e.preventDefault();
       var ns = Math.max(0, start - step);
       setSliderStart(ns);
-      showFrame(_sliderStart);
+      seekVideoTo(_sliderStart);
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       var ns = Math.min(state.proxyDuration, start + step);
       setSliderStart(ns);
-      showFrame(_sliderStart);
+      seekVideoTo(_sliderStart);
     } else if (e.key === "Enter") {
       e.preventDefault();
       downloadClip();
@@ -1062,7 +1054,7 @@ function init() {
       if (secs !== null && secs >= 0 && secs <= state.proxyDuration) {
         if (isStart) {
           setSliderStart(secs);
-          showFrame(_sliderStart);
+          seekVideoTo(_sliderStart);
         } else {
           setSliderEnd(secs);
         }

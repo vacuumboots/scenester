@@ -64,7 +64,7 @@
 
   <!-- Detail view (hidden until item selected) -->
   <div id="detail-view" style="display:none">
-    <button class="btn btn-back" id="btn-back" onclick="goBack()">&larr; Back to Library</button>
+    <button class="btn btn-back" id="btn-back">&larr; Back to Library</button>
 
     <div class="target-card">
       <div class="target-name" id="detail-title"></div>
@@ -76,58 +76,53 @@
       <span id="error-message"></span>
     </div>
 
-    <!-- Frame preview — instant, works anywhere in the movie -->
+    <!-- Preview -->
     <div id="frame-preview" style="display:none">
-      <div class="frame-container">
-        <img id="frame-img" src="" alt="Frame preview" />
-        <div class="frame-overlay" id="frame-overlay">
-          <div class="frame-loading">Loading frame...</div>
-        </div>
+      <video id="preview-video" preload="metadata" playsinline controls
+             style="width:100%; max-height:480px; background:#000; border-radius:10px;"></video>
+      <div id="preview-error" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
+        <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
+        <div>Video preview not available for this format.</div>
+        <div style="font-size:13px; margin-top:8px;">Use the frame strip below to navigate.</div>
+      </div>
+      <div id="preview-loading" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
+        Loading preview...
       </div>
       <div class="frame-time">
         <span class="frame-time-label">Frame at</span>
         <span class="frame-time-value" id="frame-time-value">0:00</span>
         <span class="frame-time-sep">·</span>
-        <button class="btn btn-small" id="btn-play-preview" onclick="playPreview()" style="display:none">▶ Play 10s</button>
-        <span class="frame-time-sep">·</span>
-        <span class="frame-time-hint">drag slider to scrub</span>
+        <button class="btn btn-small" id="btn-play-preview">▶ Play from here</button>
+        <button class="btn btn-small" id="btn-mute-toggle" title="Toggle audio">🔊</button>
         <span class="frame-time-sep">·</span>
         <input id="jump-time" type="text" placeholder="jump to..." size="8" title="Type time like 1:23 or 90s and press Enter">
       </div>
-      <!-- Video player (appears after Play) -->
-      <div class="video-preview" id="video-preview" style="display:none">
-        <video id="preview-video" controls autoplay loop muted></video>
-        <div class="video-preview-close" onclick="closeVideoPreview()">✕</div>
-      </div>
     </div>
 
-    <!-- Frame strip — thumbnails across the movie -->
+    <!-- Frame strip — the primary scrubber. Click=set start, Shift+click=set end, drag=select range -->
     <div class="frame-strip" id="frame-strip" style="display:none">
+      <div class="strip-hint">Click to set start · Shift+click to set end · Drag to select range</div>
       <div class="frame-strip-inner" id="frame-strip-inner"></div>
     </div>
 
-    <!-- Scrubber + Download (visible immediately) -->
+    <!-- Range bar — shows selected clip range on a timeline -->
     <div class="scrubber-section">
-      <div class="scrubber-header">Select Clip Range</div>
+      <div class="scrubber-header">Clip Range</div>
 
       <div class="time-display">
         <input class="time-box time-input" id="time-start-input" value="00:00" size="7" title="Start time (click to edit)">
         <span class="time-sep">&rarr;</span>
         <input class="time-box time-input" id="time-end-input" value="00:30" size="7" title="End time (click to edit)">
         <span class="time-dur" id="time-duration">/ 0:00</span>
+        <span class="clip-duration" id="clip-duration">30s</span>
       </div>
 
-      <!-- Dual-handle range slider -->
-      <div class="dual-slider" id="dual-slider">
-        <div class="slider-track" id="slider-track">
-          <div class="slider-range" id="slider-range"></div>
-          <div class="slider-handle slider-handle-start" id="slider-handle-start">
-            <span class="handle-time" id="handle-time-start">0:00</span>
-          </div>
-          <div class="slider-handle slider-handle-end" id="slider-handle-end">
-            <span class="handle-time" id="handle-time-end">0:30</span>
-          </div>
-        </div>
+      <!-- Visual range bar (read-only, shows selected region) -->
+      <div class="range-bar" id="range-bar">
+        <div class="range-bar-fill" id="range-bar-fill"></div>
+        <div class="range-bar-marker range-bar-marker-start" id="range-bar-marker-start"></div>
+        <div class="range-bar-marker range-bar-marker-end" id="range-bar-marker-end"></div>
+        <div class="range-bar-playhead" id="range-bar-playhead"></div>
       </div>
 
       <div class="preset-buttons">
@@ -139,7 +134,7 @@
         <button class="btn btn-small" onclick="handlePreset('set-duration',120)">2 min clip</button>
       </div>
 
-      <button class="btn btn-primary btn-download" id="btn-download-clip" disabled onclick="downloadClip()">
+      <button class="btn btn-primary btn-download" id="btn-download-clip" disabled>
         &#11015; Download Clip
       </button>
       <div class="clip-progress" id="clip-progress" style="display:none">

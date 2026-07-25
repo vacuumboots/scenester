@@ -6,13 +6,14 @@ generating low-res proxy previews, and creating frame-accurate ffmpeg clips.
 """
 
 import asyncio
+import mimetypes
 import os
 import re
 import time
 from pathlib import Path
 
 import ffmpeg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -35,9 +36,9 @@ proxy_jobs: dict[int, dict] = {}
 async def _run_ffmpeg_proxy(media_id: int, file_path: str, total_duration_s: float, start_sec: float = 0):
     """Run ffmpeg to generate a low-res proxy, updating progress in proxy_jobs."""
     proxy_path = PROXY_DIR / f"{media_id}.mp4"
-    if proxy_path.exists():
-        proxy_jobs[media_id] = {"progress": 1.0, "done": True, "error": None}
-        return
+    # Remove stale 0-byte files from failed previous attempts
+    if proxy_path.exists() and proxy_path.stat().st_size == 0:
+        proxy_path.unlink()
 
     proxy_jobs[media_id] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
 
@@ -217,6 +218,43 @@ async def get_frame(media_id: int, t: float = 0):
     )
 
 
+# ── API: Media streaming ──────────────────────────────────────────────────
+
+
+@app.get("/api/media/{media_id}/stream")
+async def stream_media(media_id: int):
+    """Serve the original media file with range request support for
+    HTML5 video seeking.
+
+    The browser's native <video> element handles seeking via HTTP Range
+    requests — no ffmpeg proxy generation needed for preview.
+    """
+    try:
+        meta = await plex.get_metadata(media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    file_path = meta.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    # Determine MIME type from extension
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        mime_type = "video/mp4"
+
+    return FileResponse(
+        file_path,
+        media_type=mime_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
 # ── API: Proxy generation ────────────────────────────────────────────────
 
 @app.post("/api/proxy/{media_id}")
@@ -318,7 +356,7 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
         .input(file_path, ss=start_sec, t=duration)
         .output(
             str(output_path),
-            vf="scale=1920:-2:force_original_aspect_ratio=decrease",
+            vf="scale=1920:-2",
             vcodec="libx264",
             preset="fast",
             crf=20,
@@ -356,7 +394,7 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
 
     await proc.wait()
 
-    if proc.returncode == 0 and output_path.exists():
+    if proc.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
         clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
     else:
         clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {proc.returncode}"}

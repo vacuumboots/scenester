@@ -509,41 +509,54 @@ main {
 
 /* Frame strip — thumbnail row across the movie */
 .frame-strip {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
 }
 
 .frame-strip-inner {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .frame-thumb {
   flex-shrink: 0;
-  width: 100px;
-  height: 60px;
-  border-radius: 4px;
+  width: 120px;
+  height: 72px;
+  border-radius: 6px;
   overflow: hidden;
-  border: 2px solid var(--border);
+  border: 2px solid transparent;
   cursor: pointer;
   position: relative;
-  background: #000;
-  transition: border-color 0.15s;
+  background: #111;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  user-select: none;
 }
 
 .frame-thumb:hover {
   border-color: var(--gold-dim);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
 
 .frame-thumb.active {
   border-color: var(--gold);
-  box-shadow: 0 0 8px rgba(196,150,59,0.3);
+  box-shadow: 0 0 10px rgba(196,150,59,0.4);
 }
 
 .frame-thumb.in-range {
-  border-color: rgba(196,150,59,0.4);
-  background: rgba(196,150,59,0.08);
+  border-color: var(--gold);
+  box-shadow: 0 0 6px rgba(196,150,59,0.25);
+}
+
+/* Gold tint overlay on in-range frames */
+.frame-thumb.in-range::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(196,150,59,0.12);
+  pointer-events: none;
 }
 
 .frame-thumb img {
@@ -554,12 +567,13 @@ main {
 
 .frame-thumb-time {
   position: absolute;
-  bottom: 2px;
-  right: 4px;
-  font-size: 9px;
+  bottom: 3px;
+  right: 5px;
+  font-size: 10px;
   font-family: var(--font-mono);
   color: #fff;
-  text-shadow: 0 0 3px rgba(0,0,0,0.8);
+  text-shadow: 0 0 4px rgba(0,0,0,0.9);
+  z-index: 1;
 }
 
 .player-container {
@@ -679,64 +693,83 @@ main {
   color: var(--text-dim);
 }
 
-/* ── Dual-handle range slider ─────────────────────────────────────── */
+/* ── Range bar (visual timeline, no interaction) ────────────────────── */
 
-.dual-slider {
-  margin-bottom: 16px;
-  padding: 20px 0 36px 0;
-  position: relative;
-}
-
-.slider-track {
+.range-bar {
   position: relative;
   height: 8px;
   background: var(--border);
   border-radius: 4px;
-  cursor: pointer;
+  margin-bottom: 20px;
 }
 
-.slider-range {
+.range-bar-fill {
   position: absolute;
   top: 0;
   height: 100%;
   background: var(--gold);
   border-radius: 4px;
-  transition: left 0.05s linear, width 0.05s linear;
+  transition: left 0.15s ease, width 0.15s ease;
 }
 
-.slider-handle {
+.range-bar-marker {
   position: absolute;
   top: 50%;
-  width: 22px;
-  height: 22px;
-  margin-top: -11px;
-  margin-left: -11px;
+  width: 12px;
+  height: 20px;
+  margin-top: -10px;
+  margin-left: -6px;
   background: var(--gold);
-  border: 3px solid var(--bg);
-  border-radius: 50%;
-  cursor: grab;
-  z-index: 2;
-  box-shadow: 0 0 6px rgba(0,0,0,0.5);
-  transition: transform 0.1s;
-  user-select: none;
-  -webkit-user-select: none;
+  border-radius: 3px;
+  pointer-events: none;
+  transition: left 0.15s ease;
 }
 
-.slider-handle:active {
-  cursor: grabbing;
-  transform: scale(1.2);
+.range-bar-marker-start {
+  border-radius: 3px 0 0 3px;
 }
 
-.handle-time {
+.range-bar-marker-end {
+  border-radius: 0 3px 3px 0;
+}
+
+/* Playhead — moving dot showing current preview position */
+.range-bar-playhead {
   position: absolute;
-  top: -22px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 50%;
+  width: 6px;
+  height: 18px;
+  margin-top: -9px;
+  margin-left: -3px;
+  background: #fff;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  display: none;
+  box-shadow: 0 0 4px rgba(255,255,255,0.6);
+  transition: left 0.1s linear;
+}
+
+/* ── Clip duration badge ─────────────────────────────────────────────── */
+
+.clip-duration {
+  display: inline-block;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   color: var(--gold);
-  white-space: nowrap;
-  font-weight: 600;
+  background: rgba(196,150,59,0.1);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  margin-left: 8px;
+}
+
+/* ── Frame strip hint ───────────────────────────────────────────────── */
+
+.strip-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  text-align: center;
 }
 
 .preset-buttons {
