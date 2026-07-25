@@ -110,15 +110,17 @@
         <span class="time-dur" id="time-duration">/ 0:00</span>
       </div>
 
-      <div class="range-sliders">
-        <label class="range-label">
-          Start
-          <input type="range" id="range-start" min="0" max="100" value="0">
-        </label>
-        <label class="range-label">
-          End
-          <input type="range" id="range-end" min="0" max="100" value="30">
-        </label>
+      <!-- Dual-handle range slider -->
+      <div class="dual-slider" id="dual-slider">
+        <div class="slider-track" id="slider-track">
+          <div class="slider-range" id="slider-range"></div>
+          <div class="slider-handle slider-handle-start" id="slider-handle-start">
+            <span class="handle-time" id="handle-time-start">0:00</span>
+          </div>
+          <div class="slider-handle slider-handle-end" id="slider-handle-end">
+            <span class="handle-time" id="handle-time-end">0:30</span>
+          </div>
+        </div>
       </div>
 
       <div class="preset-buttons">

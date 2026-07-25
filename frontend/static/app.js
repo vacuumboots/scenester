@@ -54,8 +54,13 @@ function getDom() {
     frameOverlay:    qs("#frame-overlay"),
     frameStrip:      qs("#frame-strip"),
     frameStripInner: qs("#frame-strip-inner"),
-    rangeStart:   qs("#range-start"),
-    rangeEnd:     qs("#range-end"),
+    // Dual slider
+    sliderTrack:       qs("#slider-track"),
+    sliderRange:       qs("#slider-range"),
+    handleStart:       qs("#slider-handle-start"),
+    handleEnd:         qs("#slider-handle-end"),
+    handleTimeStart:   qs("#handle-time-start"),
+    handleTimeEnd:     qs("#handle-time-end"),
     timeStart:    qs("#time-start"),
     timeEnd:      qs("#time-end"),
     timeDuration: qs("#time-duration"),
@@ -72,6 +77,11 @@ function getDom() {
 }
 
 let dom;
+
+// Dual slider state
+var _sliderStart = 0;
+var _sliderEnd = 30;
+var _sliderDragging = null;  // "start" | "end" | null
 
 // ── Formatting ─────────────────────────────────────────────────────────
 
@@ -272,29 +282,24 @@ function showDetailView() {
   var mediaId = item.media_id || item.id;
   buildFrameStrip(mediaId, durationS);
 
-  if (dom.rangeStart) dom.rangeStart.max = Math.floor(durationS);
-  if (dom.rangeEnd) dom.rangeEnd.max = Math.floor(durationS);
-
   // Handle jump-to-clip offset from session banner
   if (window._jumpOffset != null) {
     var offset = window._jumpOffset;
-    var start = Math.max(0, offset - 5);
-    var end = Math.min(durationS, offset + 25);
-    if (dom.rangeStart) dom.rangeStart.value = Math.floor(start);
-    if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(end);
+    _sliderStart = Math.max(0, Math.floor(offset - 5));
+    _sliderEnd = Math.min(durationS, Math.floor(offset + 25));
     window._jumpOffset = null;
     window._jumpDuration = null;
   } else {
-    if (dom.rangeStart) dom.rangeStart.value = 0;
-    if (dom.rangeEnd) dom.rangeEnd.value = Math.min(30, Math.floor(durationS));
+    _sliderStart = 0;
+    _sliderEnd = Math.min(30, Math.floor(durationS));
   }
 
   updateTimeDisplay();
+  updateSliderUI();
   if (dom.btnDownload) dom.btnDownload.disabled = false;
 
   // Load first frame
-  var startVal = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  showFrame(startVal);
+  showFrame(_sliderStart);
 }
 
 function goBack() {
@@ -493,8 +498,7 @@ function restorePreviewFrame() {
 
 function jumpToFrame(t) {
   _previewRestoreSrc = null;
-  if (dom.rangeStart) dom.rangeStart.value = t;
-  updateTimeDisplay();
+  setSliderStart(t);
   showFrame(t);
   highlightFrameStrip(t);
 }
@@ -505,7 +509,6 @@ function highlightFrameStrip(currentT) {
     var dist = Math.abs(t.time - currentT);
     if (dist < 3 || (i > 0 && currentT > _stripThumbs[i-1].time && currentT <= t.time)) {
       t.el.classList.add("active");
-      // Scroll into view
       t.el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     } else {
       t.el.classList.remove("active");
@@ -514,14 +517,11 @@ function highlightFrameStrip(currentT) {
 }
 
 function showFrame(absoluteSec) {
-  // Update the frame preview image to show the frame at this timestamp
   if (!state.currentItem) return;
   var mediaId = state.currentItem.media_id || state.currentItem.id;
   if (!mediaId) return;
 
   if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(absoluteSec));
-
-  // Show loading overlay
   if (dom.frameOverlay) dom.frameOverlay.style.display = "flex";
   if (dom.frameImg) dom.frameImg.style.opacity = "0.5";
 
@@ -540,66 +540,128 @@ function showFrame(absoluteSec) {
   img.src = "api/frame/" + mediaId + "?t=" + absoluteSec;
 }
 
-// Debounced frame fetch during drag
-function onRangeInput() {
-  updateTimeDisplay();
-  if (_frameTimer) clearTimeout(_frameTimer);
-  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  _frameTimer = setTimeout(function() { showFrame(start); }, 150);
+// ── Dual-handle slider ──────────────────────────────────────────────
+
+function sliderGetPct(t) {
+  return Math.max(0, Math.min(100, (t / state.proxyDuration) * 100));
 }
 
-// On release: fetch frame immediately
-function onStartReleased() {
-  updateTimeDisplay();
-  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  if (_frameTimer) clearTimeout(_frameTimer);
-  showFrame(start);
+function updateSliderUI() {
+  if (!dom.sliderTrack) return;
+  var pctStart = sliderGetPct(_sliderStart);
+  var pctEnd = sliderGetPct(_sliderEnd);
+
+  if (dom.sliderRange) {
+    dom.sliderRange.style.left = pctStart + "%";
+    dom.sliderRange.style.width = (pctEnd - pctStart) + "%";
+  }
+  if (dom.handleStart) dom.handleStart.style.left = pctStart + "%";
+  if (dom.handleEnd) dom.handleEnd.style.left = pctEnd + "%";
+  if (dom.handleTimeStart) dom.handleTimeStart.textContent = fmtTime(_sliderStart);
+  if (dom.handleTimeEnd) dom.handleTimeEnd.textContent = fmtTime(_sliderEnd);
 }
 
 function updateTimeDisplay() {
-  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  var end = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || 0;
-
-  if (dom.timeStart) dom.timeStart.textContent = fmtTime(start);
-  if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(end);
+  if (dom.timeStart) dom.timeStart.textContent = fmtTime(_sliderStart);
+  if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(_sliderEnd);
   if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.proxyDuration);
 
-  if (end <= start && dom.rangeEnd) {
-    dom.rangeEnd.value = start + 1;
-    if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 1);
+  // Enforce constraints
+  if (_sliderEnd <= _sliderStart) _sliderEnd = _sliderStart + 1;
+  if (_sliderEnd - _sliderStart > 140) _sliderEnd = _sliderStart + 140;
+  if (_sliderEnd > state.proxyDuration) _sliderEnd = Math.floor(state.proxyDuration);
+  if (_sliderStart > state.proxyDuration) _sliderStart = Math.floor(state.proxyDuration);
+  if (_sliderStart < 0) _sliderStart = 0;
+}
+
+function setSliderStart(t) {
+  _sliderStart = Math.max(0, Math.min(state.proxyDuration, Math.floor(t)));
+  updateTimeDisplay();
+  updateSliderUI();
+}
+
+function setSliderEnd(t) {
+  _sliderEnd = Math.max(1, Math.min(state.proxyDuration, Math.floor(t)));
+  updateTimeDisplay();
+  updateSliderUI();
+}
+
+function sliderValueFromEvent(e) {
+  if (!dom.sliderTrack) return 0;
+  var rect = dom.sliderTrack.getBoundingClientRect();
+  var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  var pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  return Math.floor(pct * state.proxyDuration);
+}
+
+function initDualSlider() {
+  if (!dom.handleStart || !dom.handleEnd || !dom.sliderTrack) return;
+
+  function onDragStart(which, e) {
+    e.preventDefault();
+    _sliderDragging = which;
+    document.addEventListener("mousemove", onDragMove);
+    document.addEventListener("mouseup", onDragEnd);
+    document.addEventListener("touchmove", onDragMove, {passive: false});
+    document.addEventListener("touchend", onDragEnd);
   }
-  if (end - start > 140 && dom.rangeEnd) {
-    dom.rangeEnd.value = start + 140;
-    if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(start + 140);
+
+  function onDragMove(e) {
+    if (!_sliderDragging) return;
+    e.preventDefault();
+    var t = sliderValueFromEvent(e);
+    if (_sliderDragging === "start") {
+      setSliderStart(t);
+      if (_frameTimer) clearTimeout(_frameTimer);
+      _frameTimer = setTimeout(function() { showFrame(_sliderStart); }, 120);
+    } else {
+      setSliderEnd(t);
+    }
   }
-  if (dom.rangeEnd && parseInt(dom.rangeEnd.value) > state.proxyDuration) {
-    dom.rangeEnd.value = Math.floor(state.proxyDuration);
-    if (dom.timeEnd) dom.timeEnd.textContent = fmtTime(Math.floor(state.proxyDuration));
+
+  function onDragEnd() {
+    _sliderDragging = null;
+    document.removeEventListener("mousemove", onDragMove);
+    document.removeEventListener("mouseup", onDragEnd);
+    document.removeEventListener("touchmove", onDragMove);
+    document.removeEventListener("touchend", onDragEnd);
+    if (_frameTimer) clearTimeout(_frameTimer);
+    showFrame(_sliderStart);
   }
-  if (dom.rangeStart && parseInt(dom.rangeStart.value) > state.proxyDuration) {
-    dom.rangeStart.value = Math.floor(state.proxyDuration);
-    if (dom.timeStart) dom.timeStart.textContent = fmtTime(Math.floor(state.proxyDuration));
-  }
+
+  dom.handleStart.addEventListener("mousedown", function(e) { onDragStart("start", e); });
+  dom.handleStart.addEventListener("touchstart", function(e) { onDragStart("start", e); }, {passive: false});
+  dom.handleEnd.addEventListener("mousedown", function(e) { onDragStart("end", e); });
+  dom.handleEnd.addEventListener("touchstart", function(e) { onDragStart("end", e); }, {passive: false});
+
+  // Click on track: move nearest handle
+  dom.sliderTrack.addEventListener("mousedown", function(e) {
+    if (e.target === dom.handleStart || e.target === dom.handleEnd) return;
+    if (e.target.closest && e.target.closest(".slider-handle")) return;
+    var t = sliderValueFromEvent(e);
+    var distStart = Math.abs(t - _sliderStart);
+    var distEnd = Math.abs(t - _sliderEnd);
+    if (distStart <= distEnd) {
+      setSliderStart(t);
+    } else {
+      setSliderEnd(t);
+    }
+    showFrame(_sliderStart);
+  });
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
 
 function handlePreset(action, value) {
-  var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-
   if (action === "shift-start") {
-    var newStart = Math.max(0, start + value);
-    if (dom.rangeStart) dom.rangeStart.value = newStart;
-    var currentEnd = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || (start + 30);
-    var dur = currentEnd - start;
-    if (dom.rangeEnd) dom.rangeEnd.value = Math.min(state.proxyDuration, newStart + Math.max(1, dur));
-    updateTimeDisplay();
-    showFrame(newStart);
+    var ns = Math.max(0, _sliderStart + value);
+    var dur = _sliderEnd - _sliderStart;
+    setSliderStart(ns);
+    setSliderEnd(Math.min(state.proxyDuration, ns + Math.max(1, dur)));
+    showFrame(_sliderStart);
   } else if (action === "set-duration") {
-    var newEnd = Math.min(state.proxyDuration, start + value);
-    if (dom.rangeEnd) dom.rangeEnd.value = Math.floor(newEnd);
-    updateTimeDisplay();
-    showFrame(start);
+    setSliderEnd(Math.min(state.proxyDuration, _sliderStart + value));
+    showFrame(_sliderStart);
   }
 }
 
@@ -611,8 +673,8 @@ async function downloadClip() {
   if (!state.currentItem) return;
 
   var mediaId = state.currentItem.media_id || state.currentItem.id;
-  var startSec = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
-  var endSec = parseInt(dom.rangeEnd ? dom.rangeEnd.value : 0) || 0;
+  var startSec = _sliderStart;
+  var endSec = _sliderEnd;
 
   if (endSec <= startSec) {
     if (dom.clipStatus) dom.clipStatus.textContent = "Invalid range — end must be after start";
@@ -802,14 +864,8 @@ function init() {
   // Detail back button
   if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
 
-  // Range sliders: input = live display update, change = seek-on-release
-  if (dom.rangeStart) {
-    dom.rangeStart.addEventListener("input", onRangeInput);
-    dom.rangeStart.addEventListener("change", onStartReleased);
-  }
-  if (dom.rangeEnd) {
-    dom.rangeEnd.addEventListener("input", onRangeInput);
-  }
+  // Initialize dual-handle slider
+  initDualSlider();
 
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
@@ -826,21 +882,19 @@ function init() {
     // Don't capture when typing in inputs
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
 
-    var start = parseInt(dom.rangeStart ? dom.rangeStart.value : 0) || 0;
+    var start = _sliderStart;
     var step = e.shiftKey ? 10 : 1;
 
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       var ns = Math.max(0, start - step);
-      if (dom.rangeStart) dom.rangeStart.value = ns;
-      updateTimeDisplay();
-      showFrame(ns);
+      setSliderStart(ns);
+      showFrame(_sliderStart);
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       var ns = Math.min(state.proxyDuration, start + step);
-      if (dom.rangeStart) dom.rangeStart.value = ns;
-      updateTimeDisplay();
-      showFrame(ns);
+      setSliderStart(ns);
+      showFrame(_sliderStart);
     } else if (e.key === "Enter") {
       e.preventDefault();
       downloadClip();
