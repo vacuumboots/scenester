@@ -448,6 +448,7 @@ main {
   display: block;
   max-height: 480px;
   object-fit: contain;
+  transition: opacity 0.15s ease;
 }
 
 .frame-overlay {

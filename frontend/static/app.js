@@ -458,14 +458,16 @@ function buildFrameStrip(mediaId, durationS) {
   var html = "";
   for (var i = 0; i < count; i++) {
     var t = Math.floor((durationS / (count - 1)) * i);
-    html += '<div class="frame-thumb" data-time="' + t + '" onclick="jumpToFrame(' + t + ')">' +
+    html += '<div class="frame-thumb" data-time="' + t + '" ' +
+            'onclick="jumpToFrame(' + t + ')" ' +
+            'onmouseenter="previewFrame(' + t + ')" ' +
+            'onmouseleave="restorePreviewFrame()">' +
             '<img src="api/frame/' + mediaId + '?t=' + t + '" loading="lazy" />' +
             '<span class="frame-thumb-time">' + fmtTime(t) + '</span></div>';
   }
   dom.frameStripInner.innerHTML = html;
   dom.frameStrip.style.display = "block";
 
-  // Cache elements
   var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
   for (var j = 0; j < thumbs.length; j++) {
     var t = parseInt(thumbs[j].getAttribute("data-time"));
@@ -473,7 +475,24 @@ function buildFrameStrip(mediaId, durationS) {
   }
 }
 
+var _previewRestoreSrc = null;
+
+function previewFrame(t) {
+  if (!_previewRestoreSrc && dom.frameImg) {
+    _previewRestoreSrc = dom.frameImg.src;
+  }
+  showFrame(t);
+}
+
+function restorePreviewFrame() {
+  if (_previewRestoreSrc && dom.frameImg) {
+    dom.frameImg.src = _previewRestoreSrc;
+    _previewRestoreSrc = null;
+  }
+}
+
 function jumpToFrame(t) {
+  _previewRestoreSrc = null;
   if (dom.rangeStart) dom.rangeStart.value = t;
   updateTimeDisplay();
   showFrame(t);
@@ -504,10 +523,14 @@ function showFrame(absoluteSec) {
 
   // Show loading overlay
   if (dom.frameOverlay) dom.frameOverlay.style.display = "flex";
+  if (dom.frameImg) dom.frameImg.style.opacity = "0.5";
 
   var img = new Image();
   img.onload = function() {
-    if (dom.frameImg) dom.frameImg.src = img.src;
+    if (dom.frameImg) {
+      dom.frameImg.src = img.src;
+      dom.frameImg.style.opacity = "1";
+    }
     if (dom.frameOverlay) dom.frameOverlay.style.display = "none";
     highlightFrameStrip(absoluteSec);
   };
