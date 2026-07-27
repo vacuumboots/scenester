@@ -163,6 +163,22 @@ body {
   font-size: 13px;
 }
 
+.login-pin-cancel {
+  margin-top: 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.login-pin-cancel:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
 .login-error-icon {
   font-size: 48px;
   margin-bottom: 12px;

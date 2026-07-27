@@ -1196,6 +1196,17 @@ function init() {
 
 var _authPinId = null;
 var _authPollTimer = null;
+var _authPollCount = 0;
+var MAX_PIN_POLLS = 150;  // 5 minutes at 2s intervals
+
+function stopPinPolling() {
+  if (_authPollTimer) {
+    clearInterval(_authPollTimer);
+    _authPollTimer = null;
+  }
+  _authPinId = null;
+  _authPollCount = 0;
+}
 
 function showLoginStep(step) {
   var steps = ["login-step-connect", "login-step-pin", "login-step-error"];
@@ -1209,6 +1220,7 @@ function initAuth() {
   var overlay = qs("#login-overlay");
   var btnConnect = qs("#btn-plex-connect");
   var btnRetry = qs("#btn-login-retry");
+  var btnCancel = qs("#btn-pin-cancel");
 
   // Check if already authenticated
   fetch("api/auth/status")
@@ -1237,12 +1249,25 @@ function initAuth() {
     });
   }
 
+  // Cancel button
+  if (btnCancel) {
+    btnCancel.addEventListener("click", function() {
+      cancelPinFlow();
+    });
+  }
+
   // Retry button
   if (btnRetry) {
     btnRetry.addEventListener("click", function() {
+      stopPinPolling();
       showLoginStep("login-step-connect");
     });
   }
+}
+
+function cancelPinFlow() {
+  stopPinPolling();
+  showLoginStep("login-step-connect");
 }
 
 function startPinFlow() {
@@ -1255,6 +1280,7 @@ function startPinFlow() {
         var codeEl = qs("#login-pin-code");
         if (codeEl) codeEl.textContent = data.code;
         _authPinId = data.id;
+        _authPollCount = 0;
         // Start polling
         _authPollTimer = setInterval(pollPinStatus, 2000);
       }
@@ -1267,19 +1293,23 @@ function startPinFlow() {
 function pollPinStatus() {
   if (!_authPinId) return;
 
+  _authPollCount++;
+  if (_authPollCount > MAX_PIN_POLLS) {
+    stopPinPolling();
+    showLoginError("PIN expired. Please try again.");
+    return;
+  }
+
   fetch("api/auth/pin/" + _authPinId)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.status === "done") {
-        // Authenticated! Hide overlay, init app
-        clearInterval(_authPollTimer);
-        _authPollTimer = null;
+        stopPinPolling();
         var overlay = qs("#login-overlay");
         if (overlay) overlay.classList.add("hidden");
         init();
       } else if (data.status === "error") {
-        clearInterval(_authPollTimer);
-        _authPollTimer = null;
+        stopPinPolling();
         showLoginError(data.error || "Authentication failed. Please try again.");
       }
       // "waiting" — keep polling
