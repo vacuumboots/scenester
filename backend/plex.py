@@ -168,7 +168,7 @@ async def check_pin(pin_id: int) -> dict:
 
     Returns dict with:
       status: "waiting" | "done" | "error"
-      token:  str (only when status="done")
+      error:  str (only when status="error")
     """
     client = get_client()
     try:
@@ -184,7 +184,7 @@ async def check_pin(pin_id: int) -> dict:
     auth_token = data.get("authToken")
     if auth_token:
         set_token(auth_token)
-        return {"status": "done", "token": auth_token}
+        return {"status": "done"}
     return {"status": "waiting"}
 
 
