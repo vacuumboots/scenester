@@ -872,6 +872,11 @@ main {
   margin-left: 8px;
 }
 
+.clip-duration.over-max {
+  color: var(--red);
+  background: rgba(201,107,107,0.12);
+}
+
 /* ── Frame strip hint ───────────────────────────────────────────────── */
 
 .strip-hint {

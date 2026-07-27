@@ -313,7 +313,7 @@ function showDetailView() {
 
   updateTimeDisplay();
   updateRangeBar();
-  if (dom.btnDownload) dom.btnDownload.disabled = false;
+  updateDownloadButton();
   updateStripRange();
 
   // Seek video to start position once ready
@@ -532,6 +532,10 @@ function onPreviewError() {
 
 function seekVideoTo(t) {
   if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(t));
+  if (dom.rangeBarPlayhead) {
+    dom.rangeBarPlayhead.style.display = "block";
+    dom.rangeBarPlayhead.style.left = sliderGetPct(t) + "%";
+  }
   if (dom.previewVideo && dom.previewVideo.readyState >= 2) {
     dom.previewVideo.currentTime = t;
   }
@@ -611,13 +615,10 @@ function buildFrameStrip(mediaId, durationS) {
 
 // Click: set start (normal) or end (shift+click).
 // Drag: slides the entire range, maintaining current clip duration.
-var _stripDragStart = null;
 var _stripDragActive = false;
-var _stripStartBeforeDrag = 0;
 var _stripDidMove = false;
 var _stripClickTime = null;
 var _stripDragDuration = 0;   // clip duration when drag started
-var _stripDragMidpoint = 0;   // range midpoint when drag started
 
 function initStripDrag() {
   if (!dom.frameStripInner) return;
@@ -629,38 +630,43 @@ function initStripDrag() {
 
     _stripDragActive = false;
     _stripDidMove = false;
-    _stripDragStart = parseInt(thumb.getAttribute("data-time"));
-    _stripClickTime = _stripDragStart;
-    _stripStartBeforeDrag = _sliderStart;
-    _stripDragDuration = _sliderEnd - _sliderStart;
-    _stripDragMidpoint = (_sliderStart + _sliderEnd) / 2;
+    _stripClickTime = parseInt(thumb.getAttribute("data-time"));
+    _stripDragDuration = Math.min(_sliderEnd - _sliderStart, 140);
+
+    // Cache strip rect for smooth continuous tracking
+    var stripRect = dom.frameStripInner.getBoundingClientRect();
+    var stripLeft = stripRect.left;
+    var stripWidth = stripRect.width;
+
+    // Immediate seek on mousedown for responsive feel
+    seekVideoTo(_stripClickTime);
 
     function onMove(ev) {
       if (_handleDrag) return;
       _stripDidMove = true;
       _stripDragActive = true;
 
-      var nearest = findNearestThumb(ev.clientX);
-      if (nearest === null) return;
+      // Continuous time from mouse position (no snapping to thumbs)
+      var pct = Math.max(0, Math.min(1, (ev.clientX - stripLeft) / stripWidth));
+      var pos = pct * state.mediaDuration;
 
       // Slide the range so its center follows the cursor
       var halfDur = _stripDragDuration / 2;
-      var newStart = Math.max(0, nearest - halfDur);
-      var newEnd = Math.min(state.mediaDuration, nearest + halfDur);
+      var newStart = Math.max(0, pos - halfDur);
+      var newEnd = Math.min(state.mediaDuration, pos + halfDur);
 
       // If clamped at left edge, pin start to 0
-      if (newStart === 0 && nearest < halfDur) {
+      if (newStart === 0 && pos < halfDur) {
         newEnd = Math.min(state.mediaDuration, _stripDragDuration);
       }
       // If clamped at right edge, pin end to media duration
-      if (newEnd === state.mediaDuration && nearest + halfDur > state.mediaDuration) {
+      if (newEnd === state.mediaDuration && pos + halfDur > state.mediaDuration) {
         newStart = Math.max(0, state.mediaDuration - _stripDragDuration);
       }
 
       setSliderStart(Math.floor(newStart));
       setSliderEnd(Math.floor(newEnd));
       seekVideoTo(_sliderStart);
-      updateStripRange();
       if (dom.clipStatus) dom.clipStatus.textContent = "Range: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + _stripDragDuration + "s)";
     }
 
@@ -682,6 +688,7 @@ function initStripDrag() {
           if (dur > 0 && dur <= 140) {
             setSliderEnd(Math.min(state.mediaDuration, _stripClickTime + dur));
           }
+          seekVideoTo(_sliderStart);
         }
         updateStripRange();
       }
@@ -765,6 +772,8 @@ function updateRangeBar() {
 // ── Range bar drag handles ──────────────────────────────────────────
 
 var _handleDrag = null;  // 'start' | 'end' | null
+var _dragGrabPct = 0;    // mouse pct at grab point
+var _dragHandlePct = 0;  // handle pct at grab point
 
 function initRangeBarHandles() {
   if (!dom.rangeBar) return;
@@ -781,20 +790,28 @@ function initRangeBarHandles() {
     if (e.button !== 0 || _stripDragActive) return;
 
     var target = e.target;
-    var pct = pctFromEvent(e);
-    var sec = (pct / 100) * state.mediaDuration;
+    var mousePct = pctFromEvent(e);
+    var sec = (mousePct / 100) * state.mediaDuration;
 
     if (target === dom.rangeBarMarkerStart || (target.closest && target.closest("#range-bar-marker-start"))) {
       _handleDrag = "start";
+      _dragGrabPct = mousePct;
+      _dragHandlePct = sliderGetPct(_sliderStart);
+      seekVideoTo(_sliderStart);
     } else if (target === dom.rangeBarMarkerEnd || (target.closest && target.closest("#range-bar-marker-end"))) {
       _handleDrag = "end";
+      _dragGrabPct = mousePct;
+      _dragHandlePct = sliderGetPct(_sliderEnd);
+      seekVideoTo(_sliderEnd);
     } else {
-      // Clicked on bar itself — snap nearest handle
+      // Clicked on bar itself — snap nearest handle (seek happens in applyDrag)
       var distStart = Math.abs(_sliderStart - sec);
       var distEnd = Math.abs(_sliderEnd - sec);
       _handleDrag = distStart <= distEnd ? "start" : "end";
+      _dragGrabPct = mousePct;
+      _dragHandlePct = _handleDrag === "start" ? sliderGetPct(_sliderStart) : sliderGetPct(_sliderEnd);
       // Apply immediately
-      applyDrag(pct);
+      applyDrag(mousePct);
     }
 
     dom.rangeBar.classList.add("dragging");
@@ -806,7 +823,11 @@ function initRangeBarHandles() {
     // Dynamic listeners (removed on mouseup — matches strip drag pattern)
     function onMove(ev) {
       if (!_handleDrag) return;
-      applyDrag(pctFromEvent(ev));
+      // Track offset from grab point: new = handlePct + (mousePct - grabPct)
+      var movePct = pctFromEvent(ev);
+      var delta = movePct - _dragGrabPct;
+      var newPct = _dragHandlePct + delta;
+      applyDrag(newPct);
     }
 
     function onUp() {
@@ -832,12 +853,15 @@ function applyDrag(pct) {
   var sec = Math.floor((pct / 100) * state.mediaDuration);
 
   if (_handleDrag === "start") {
+    // Prevent crossing past end handle (leave at least 1s gap)
+    if (sec >= _sliderEnd - 1) sec = _sliderEnd - 1;
     setSliderStart(sec);
-    updateRangeBar();
     seekVideoTo(_sliderStart);
   } else if (_handleDrag === "end") {
+    // Prevent crossing before start handle (leave at least 1s gap)
+    if (sec <= _sliderStart + 1) sec = _sliderStart + 1;
     setSliderEnd(sec);
-    updateRangeBar();
+    seekVideoTo(_sliderEnd);
   }
 
   // Live feedback during drag
@@ -847,17 +871,25 @@ function applyDrag(pct) {
 }
 
 function updateTimeDisplay() {
-  if (dom.timeStartInput) dom.timeStartInput.value = fmtTime(_sliderStart);
-  if (dom.timeEndInput) dom.timeEndInput.value = fmtTime(_sliderEnd);
-  if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.mediaDuration);
-  if (dom.clipDuration) dom.clipDuration.textContent = (_sliderEnd - _sliderStart) + "s";
-
-  // Enforce constraints
+  // Enforce constraints FIRST, then display
   if (_sliderEnd <= _sliderStart) _sliderEnd = _sliderStart + 1;
   if (_sliderEnd - _sliderStart > 140) _sliderEnd = _sliderStart + 140;
   if (_sliderEnd > state.mediaDuration) _sliderEnd = Math.floor(state.mediaDuration);
   if (_sliderStart > state.mediaDuration) _sliderStart = Math.floor(state.mediaDuration);
   if (_sliderStart < 0) _sliderStart = 0;
+
+  if (dom.timeStartInput) dom.timeStartInput.value = fmtTime(_sliderStart);
+  if (dom.timeEndInput) dom.timeEndInput.value = fmtTime(_sliderEnd);
+  if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.mediaDuration);
+
+  var dur = _sliderEnd - _sliderStart;
+  if (dom.clipDuration) {
+    dom.clipDuration.textContent = dur + "s";
+    // Warn when exceeding max clip length
+    dom.clipDuration.classList.toggle("over-max", dur > 140);
+  }
+
+  updateDownloadButton();
 }
 
 function setSliderStart(t) {
@@ -873,6 +905,20 @@ function setSliderEnd(t) {
   updateTimeDisplay();
   updateRangeBar();
   updateStripRange();
+}
+
+// ── Download button state ──────────────────────────────────────────────
+
+function updateDownloadButton() {
+  if (!dom.btnDownload) return;
+  var dur = _sliderEnd - _sliderStart;
+  if (dur <= 0 || dur > 140) {
+    dom.btnDownload.disabled = true;
+    dom.btnDownload.textContent = dur > 140 ? "⚠ Clip too long (max 140s)" : "⚠ Set a clip range";
+  } else {
+    dom.btnDownload.disabled = false;
+    dom.btnDownload.textContent = "⬇ Download Clip";
+  }
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
@@ -1128,17 +1174,30 @@ function init() {
 
     var start = _sliderStart;
     var step = e.shiftKey ? 10 : 1;
+    var isEnd = e.altKey;
 
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      var ns = Math.max(0, start - step);
-      setSliderStart(ns);
-      seekVideoTo(_sliderStart);
+      if (isEnd) {
+        var ne = Math.max(_sliderStart + 1, _sliderEnd - step);
+        setSliderEnd(ne);
+        seekVideoTo(_sliderEnd);
+      } else {
+        var ns = Math.max(0, start - step);
+        setSliderStart(ns);
+        seekVideoTo(_sliderStart);
+      }
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
-      var ns = Math.min(state.mediaDuration, start + step);
-      setSliderStart(ns);
-      seekVideoTo(_sliderStart);
+      if (isEnd) {
+        var ne = Math.min(state.mediaDuration, _sliderEnd + step);
+        setSliderEnd(ne);
+        seekVideoTo(_sliderEnd);
+      } else {
+        var ns = Math.min(state.mediaDuration, start + step);
+        setSliderStart(ns);
+        seekVideoTo(_sliderStart);
+      }
     } else if (e.key === "Enter") {
       e.preventDefault();
       downloadClip();
