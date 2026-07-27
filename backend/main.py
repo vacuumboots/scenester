@@ -60,8 +60,7 @@ async def auth_status():
 async def auth_create_pin():
     """Start the Plex OAuth PIN flow.
 
-    Returns a 4-character code the user enters at https://plex.tv/link.
-    """
+    Returns a code the user enters at https://plex.tv/link."""
     try:
         pin = await plex.create_pin()
         return pin

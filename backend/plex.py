@@ -150,9 +150,8 @@ async def _get(path: str) -> dict:
 async def create_pin() -> dict:
     """Create a Plex PIN for OAuth login.
 
-    Returns dict with keys: id (int), code (str, 4-char PIN).
-    The user enters this code at https://plex.tv/link.
-    """
+    Returns dict with keys: id (int), code (str).
+    The user enters this code at https://plex.tv/link."""
     client = get_client()
     resp = await client.post(
         f"{PLEX_TV}/api/v2/pins",
