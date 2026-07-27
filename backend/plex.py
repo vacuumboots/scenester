@@ -5,8 +5,8 @@ Talks to the Plex server to fetch library metadata, active sessions,
 thumbnails, and media file paths. Paths are translated from Plex's
 internal `/data/media` prefix to the `/media` bind mount inside the container.
 
-Supports OAuth login via plex.tv/pin flow — a 4-character code the user
-enters at https://plex.tv/link. The resulting token is persisted to
+Supports OAuth login via plex.tv/pin flow — the user
+enters a code at https://plex.tv/link. The resulting token is persisted to
 /data/plex_token.json so it survives container restarts.
 """
 
