@@ -37,13 +37,26 @@ def _translate_path(mc: dict) -> str:
     Plex stores media at /data/media/movies/Film.mkv inside
     Media[0].Part[0].file, but the container sees /media/movies/Film.mkv
     via the bind mount.
+
+    When multiple versions exist (e.g. 4K + 1080p), prefers 1080p
+    (height <= 1080) to produce clips at a manageable resolution.
     """
+    candidates: list[tuple[str, int]] = []  # (path, height)
     for media in mc.get("Media", []):
+        height = media.get("height", 0)
         for part in media.get("Part", []):
             fp = part.get("file", "")
             if fp:
-                return fp.replace("/data/media", "/media", 1)
-    return ""
+                candidates.append((fp, height))
+    if not candidates:
+        return ""
+
+    # Prefer 1080p or lower; pick smallest height that's >= 720
+    for fp, h in candidates:
+        if 720 <= h <= 1080:
+            return fp.replace("/data/media", "/media", 1)
+    # Fall back to any height (e.g. 4K-only content)
+    return candidates[0][0].replace("/data/media", "/media", 1)
 
 
 async def _get(path: str) -> dict:
