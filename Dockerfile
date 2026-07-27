@@ -11,6 +11,6 @@ COPY --from=frontend /app/static ./static
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
-RUN mkdir -p /tmp/proxy /tmp/clips
+RUN mkdir -p /tmp/clips /data
 EXPOSE 8096
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8096"]

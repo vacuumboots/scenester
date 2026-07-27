@@ -4,23 +4,128 @@ Plex API client for Cliparr.
 Talks to the Plex server to fetch library metadata, active sessions,
 thumbnails, and media file paths. Paths are translated from Plex's
 internal `/data/media` prefix to the `/media` bind mount inside the container.
+
+Supports OAuth login via plex.tv/pin flow — a 4-character code the user
+enters at https://plex.tv/link. The resulting token is persisted to
+/data/plex_token.json so it survives container restarts.
 """
 
+import json
 import os
+import uuid
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
 
 PLEX_URL = os.getenv("PLEX_URL", "http://host.docker.internal:32400")
-PLEX_TOKEN = os.getenv("PLEX_TOKEN", "")
+PLEX_TV = "https://plex.tv"
 
-HEADERS = {
-    "Accept": "application/json",
-    "X-Plex-Token": PLEX_TOKEN,
-}
+# Token persistence
+TOKEN_FILE = Path(os.getenv("CLIPARR_DATA_DIR", "/data")) / "plex_token.json"
+CLIENT_ID_FILE = Path(os.getenv("CLIPARR_DATA_DIR", "/data")) / "client_id.json"
 
+_token: Optional[str] = None
+_client_id: Optional[str] = None
 _client: Optional[httpx.AsyncClient] = None
+
+
+# ── Token management ──────────────────────────────────────────────────────
+
+def _load_token() -> Optional[str]:
+    """Try to load a persisted token from disk."""
+    try:
+        if TOKEN_FILE.exists():
+            data = json.loads(TOKEN_FILE.read_text())
+            return data.get("token")
+    except Exception:
+        pass
+    return None
+
+
+def get_token() -> str:
+    """Return the current Plex token, trying: memory → file → env var."""
+    global _token
+    if _token:
+        return _token
+    _token = _load_token()
+    if _token:
+        return _token
+    return os.getenv("PLEX_TOKEN", "")
+
+
+def set_token(t: str) -> None:
+    """Save a token to memory and persist to disk."""
+    global _token
+    _token = t
+    try:
+        TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        TOKEN_FILE.write_text(json.dumps({"token": t}))
+    except Exception:
+        pass  # Non-fatal — still have it in memory
+
+
+def clear_token() -> None:
+    """Remove the token from memory and disk."""
+    global _token
+    _token = None
+    try:
+        if TOKEN_FILE.exists():
+            TOKEN_FILE.unlink()
+    except Exception:
+        pass
+
+
+def is_authenticated() -> bool:
+    """Check whether we have a usable token."""
+    return bool(get_token())
+
+
+# ── Client identifier ─────────────────────────────────────────────────────
+
+def _load_client_id() -> str:
+    """Load or generate a persistent client identifier for plex.tv."""
+    global _client_id
+    if _client_id:
+        return _client_id
+    try:
+        if CLIENT_ID_FILE.exists():
+            data = json.loads(CLIENT_ID_FILE.read_text())
+            _client_id = data.get("client_id")
+            if _client_id:
+                return _client_id
+    except Exception:
+        pass
+    # Generate a new one
+    _client_id = str(uuid.uuid4())
+    try:
+        CLIENT_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CLIENT_ID_FILE.write_text(json.dumps({"client_id": _client_id}))
+    except Exception:
+        pass
+    return _client_id
+
+
+# ── HTTP ──────────────────────────────────────────────────────────────────
+
+def _headers() -> dict:
+    """Build request headers, using the current token."""
+    token = get_token()
+    h = {"Accept": "application/json"}
+    if token:
+        h["X-Plex-Token"] = token
+    return h
+
+
+def _plex_tv_headers() -> dict:
+    """Headers for plex.tv OAuth endpoints (no auth token needed)."""
+    return {
+        "Accept": "application/json",
+        "X-Plex-Client-Identifier": _load_client_id(),
+        "X-Plex-Product": "Cliparr",
+        "X-Plex-Version": "1.0",
+    }
 
 
 def get_client() -> httpx.AsyncClient:
@@ -30,6 +135,61 @@ def get_client() -> httpx.AsyncClient:
         _client = httpx.AsyncClient(timeout=30)
     return _client
 
+
+async def _get(path: str) -> dict:
+    """GET a Plex API endpoint, return parsed JSON."""
+    client = get_client()
+    url = urljoin(PLEX_URL, path)
+    resp = await client.get(url, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ── OAuth: PIN flow ───────────────────────────────────────────────────────
+
+async def create_pin() -> dict:
+    """Create a Plex PIN for OAuth login.
+
+    Returns dict with keys: id (int), code (str, 4-char PIN).
+    The user enters this code at https://plex.tv/link.
+    """
+    client = get_client()
+    resp = await client.post(
+        f"{PLEX_TV}/api/v2/pins",
+        headers=_plex_tv_headers(),
+        data={"strong": "true"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {"id": data["id"], "code": data["code"]}
+
+
+async def check_pin(pin_id: int) -> dict:
+    """Check the status of a Plex OAuth PIN.
+
+    Returns dict with:
+      status: "waiting" | "done" | "error"
+      token:  str (only when status="done")
+    """
+    client = get_client()
+    try:
+        resp = await client.get(
+            f"{PLEX_TV}/api/v2/pins/{pin_id}",
+            headers=_plex_tv_headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+    auth_token = data.get("authToken")
+    if auth_token:
+        set_token(auth_token)
+        return {"status": "done", "token": auth_token}
+    return {"status": "waiting"}
+
+
+# ── Path translation ──────────────────────────────────────────────────────
 
 def _translate_path(mc: dict) -> str:
     """Convert Plex internal path to container bind-mount path.
@@ -59,14 +219,7 @@ def _translate_path(mc: dict) -> str:
     return candidates[0][0].replace("/data/media", "/media", 1)
 
 
-async def _get(path: str) -> dict:
-    """GET a Plex API endpoint, return parsed JSON."""
-    client = get_client()
-    url = urljoin(PLEX_URL, path)
-    resp = await client.get(url, headers=HEADERS)
-    resp.raise_for_status()
-    return resp.json()
-
+# ── Plex API ──────────────────────────────────────────────────────────────
 
 async def get_sessions() -> list[dict]:
     """Return currently active Plex sessions.
@@ -173,6 +326,6 @@ async def get_thumb_url(media_id: int) -> tuple[bytes, str]:
 
     client = get_client()
     url = urljoin(PLEX_URL, thumb)
-    resp = await client.get(url, headers=HEADERS)
+    resp = await client.get(url, headers=_headers())
     resp.raise_for_status()
     return resp.content, resp.headers.get("content-type", "image/jpeg")

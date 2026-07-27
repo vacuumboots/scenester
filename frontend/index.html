@@ -8,6 +8,41 @@
 </head>
 <body>
 
+<!-- ── Login overlay (OAuth PIN flow) ──────────────────────────────── -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">Cliparr</div>
+    <div class="login-sub">Plex Clip Maker</div>
+
+    <!-- Step 1: Connect button -->
+    <div class="login-step" id="login-step-connect">
+      <button class="btn btn-primary btn-plex-connect" id="btn-plex-connect">
+        Connect to Plex
+      </button>
+    </div>
+
+    <!-- Step 2: PIN display + waiting -->
+    <div class="login-step" id="login-step-pin" style="display:none">
+      <div class="login-pin-code" id="login-pin-code"></div>
+      <div class="login-pin-label">Enter this code at</div>
+      <a class="login-pin-link" href="https://plex.tv/link" target="_blank" rel="noopener">
+        plex.tv/link →
+      </a>
+      <div class="login-pin-waiting" id="login-pin-waiting">
+        <span class="login-spinner"></span> Waiting for approval...
+      </div>
+      <div class="login-pin-error" id="login-pin-error" style="display:none"></div>
+    </div>
+
+    <!-- Step 3: Error state -->
+    <div class="login-step" id="login-step-error" style="display:none">
+      <div class="login-error-icon">⚠️</div>
+      <div class="login-error-text" id="login-error-text"></div>
+      <button class="btn btn-small" id="btn-login-retry">Try again</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="header-inner">
     <h1>Cliparr <span>plex clip maker</span></h1>

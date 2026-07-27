@@ -1192,10 +1192,113 @@ function init() {
   wireTimeInput(dom.timeEndInput, false);
 }
 
+// ── Auth: Plex OAuth PIN flow ───────────────────────────────────────────
+
+var _authPinId = null;
+var _authPollTimer = null;
+
+function showLoginStep(step) {
+  var steps = ["login-step-connect", "login-step-pin", "login-step-error"];
+  for (var i = 0; i < steps.length; i++) {
+    var el = qs("#" + steps[i]);
+    if (el) el.style.display = steps[i] === step ? "" : "none";
+  }
+}
+
+function initAuth() {
+  var overlay = qs("#login-overlay");
+  var btnConnect = qs("#btn-plex-connect");
+  var btnRetry = qs("#btn-login-retry");
+
+  // Check if already authenticated
+  fetch("api/auth/status")
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.authenticated) {
+        // Already have a token — hide login, init app
+        if (overlay) overlay.classList.add("hidden");
+        init();
+        return;
+      }
+      // Show login
+      if (overlay) overlay.classList.remove("hidden");
+      showLoginStep("login-step-connect");
+    })
+    .catch(function() {
+      // Can't reach backend — show login anyway
+      if (overlay) overlay.classList.remove("hidden");
+      showLoginStep("login-step-connect");
+    });
+
+  // Connect button
+  if (btnConnect) {
+    btnConnect.addEventListener("click", function() {
+      startPinFlow();
+    });
+  }
+
+  // Retry button
+  if (btnRetry) {
+    btnRetry.addEventListener("click", function() {
+      showLoginStep("login-step-connect");
+    });
+  }
+}
+
+function startPinFlow() {
+  showLoginStep("login-step-pin");
+
+  fetch("api/auth/pin", { method: "POST" })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.code) {
+        var codeEl = qs("#login-pin-code");
+        if (codeEl) codeEl.textContent = data.code;
+        _authPinId = data.id;
+        // Start polling
+        _authPollTimer = setInterval(pollPinStatus, 2000);
+      }
+    })
+    .catch(function(err) {
+      showLoginError("Could not connect to Plex.tv. Is the server online?");
+    });
+}
+
+function pollPinStatus() {
+  if (!_authPinId) return;
+
+  fetch("api/auth/pin/" + _authPinId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.status === "done") {
+        // Authenticated! Hide overlay, init app
+        clearInterval(_authPollTimer);
+        _authPollTimer = null;
+        var overlay = qs("#login-overlay");
+        if (overlay) overlay.classList.add("hidden");
+        init();
+      } else if (data.status === "error") {
+        clearInterval(_authPollTimer);
+        _authPollTimer = null;
+        showLoginError(data.error || "Authentication failed. Please try again.");
+      }
+      // "waiting" — keep polling
+    })
+    .catch(function() {
+      // Backend error during poll — keep trying
+    });
+}
+
+function showLoginError(msg) {
+  showLoginStep("login-step-error");
+  var errEl = qs("#login-error-text");
+  if (errEl) errEl.textContent = msg;
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", initAuth);
 } else {
-  init();
+  initAuth();
 }

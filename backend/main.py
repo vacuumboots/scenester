@@ -48,6 +48,44 @@ if static_path.exists():
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 
+# ── API: Auth ─────────────────────────────────────────────────────────────
+
+@app.get("/api/auth/status")
+async def auth_status():
+    """Return whether we have a working Plex token."""
+    return {"authenticated": plex.is_authenticated()}
+
+
+@app.post("/api/auth/pin")
+async def auth_create_pin():
+    """Start the Plex OAuth PIN flow.
+
+    Returns a 4-character code the user enters at https://plex.tv/link.
+    """
+    try:
+        pin = await plex.create_pin()
+        return pin
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex.tv error: {e}")
+
+
+@app.get("/api/auth/pin/{pin_id}")
+async def auth_check_pin(pin_id: int):
+    """Check whether the user has approved the PIN at plex.tv/link."""
+    try:
+        result = await plex.check_pin(pin_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex.tv error: {e}")
+
+
+@app.post("/api/auth/logout")
+async def auth_logout():
+    """Clear the stored Plex token."""
+    plex.clear_token()
+    return {"authenticated": False}
+
+
 # ── API: Sessions ────────────────────────────────────────────────────────
 
 @app.get("/api/sessions")
