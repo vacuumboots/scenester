@@ -114,7 +114,7 @@
 
     <!-- Preview -->
     <div id="frame-preview" style="display:none">
-      <video id="preview-video" preload="metadata" playsinline controls
+      <video id="preview-video" preload="metadata" playsinline muted
              style="width:100%; max-height:480px; background:#000; border-radius:10px;"></video>
       <div id="preview-error" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
         <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
@@ -128,8 +128,8 @@
         <span class="frame-time-label">Frame at</span>
         <span class="frame-time-value" id="frame-time-value">0:00</span>
         <span class="frame-time-sep">·</span>
-        <button class="btn btn-small" id="btn-play-preview">▶ Play from here</button>
-        <button class="btn btn-small" id="btn-mute-toggle" title="Toggle audio">🔊</button>
+        <button class="btn btn-small" id="btn-play-preview" onclick="playFromHere()">▶ Play clip</button>
+        <button class="btn btn-small" id="btn-mute-toggle" onclick="toggleMute()" title="Toggle audio">🔊</button>
         <span class="frame-time-sep">·</span>
         <input id="jump-time" type="text" placeholder="jump to..." size="8" title="Type time like 1:23 or 90s and press Enter">
       </div>

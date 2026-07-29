@@ -530,7 +530,12 @@ function loadVideoPreview(mediaId) {
     }
     // Loop within clip range when playing a clip preview
     if (_loopPlayback && ct >= _sliderEnd) {
+      if (dom.clipStatus) dom.clipStatus.textContent = "⟳ looping: " + fmtTime(Math.floor(ct)) + " → " + fmtTime(_sliderStart) + " (end=" + fmtTime(_sliderEnd) + ")";
       vid.currentTime = _sliderStart;
+    }
+    // Diagnostic: show we're approaching loop point
+    if (_loopPlayback && ct >= _sliderEnd - 1 && ct < _sliderEnd) {
+      if (dom.clipStatus) dom.clipStatus.textContent = "⏳ approaching end: " + fmtTime(Math.floor(ct)) + " / " + fmtTime(_sliderEnd) + " (loop=" + _loopPlayback + ")";
     }
   };
 
@@ -576,6 +581,7 @@ function playFromHere() {
   if (vid.paused) {
     _loopPlayback = true;
     vid.currentTime = _sliderStart;
+    if (dom.clipStatus) dom.clipStatus.textContent = "▶ playing clip: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " (loop)";
     var promise = vid.play();
     if (promise) {
       promise.catch(function(err) {
@@ -1248,11 +1254,8 @@ function init() {
   // Download clip
   if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
 
-  // Play/pause button
-  if (dom.btnPlayPreview) dom.btnPlayPreview.addEventListener("click", playFromHere);
-
-  // Mute toggle
-  if (dom.btnMuteToggle) dom.btnMuteToggle.addEventListener("click", toggleMute);
+  // Play/pause + mute are wired via onclick in HTML (survives partial DOM failures)
+  initPlayStateTracking();
 
   // Frame strip drag-to-select
   initStripDrag();
