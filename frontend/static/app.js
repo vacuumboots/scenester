@@ -697,7 +697,7 @@ function initStripDrag() {
     _stripDragActive = false;
     _stripDidMove = false;
     _stripClickTime = parseInt(thumb.getAttribute("data-time"));
-    _stripDragDuration = _rangeLocked ? _lockedDuration : Math.min(_sliderEnd - _sliderStart, 140);
+    _stripDragDuration = _rangeLocked ? _lockedDuration : (_sliderEnd - _sliderStart);
 
     // Cache strip rect for smooth continuous tracking
     var stripRect = dom.frameStripInner.getBoundingClientRect();
@@ -767,7 +767,7 @@ function initStripDrag() {
           } else {
             var dur = _sliderEnd - _sliderStart;
             setSliderStart(_stripClickTime);
-            if (dur > 0 && dur <= 140) {
+            if (dur > 0) {
               setSliderEnd(Math.min(state.mediaDuration, _stripClickTime + dur));
             }
           }
@@ -837,7 +837,7 @@ function jumpToFrame(t) {
     var dur = _sliderEnd - _sliderStart;
     var ns = Math.max(0, t);
     setSliderStart(ns);
-    if (dur > 0 && dur <= 140) {
+    if (dur > 0) {
       setSliderEnd(Math.min(state.mediaDuration, ns + dur));
     }
   }
@@ -1014,8 +1014,6 @@ function updateTimeDisplay() {
   var dur = _sliderEnd - _sliderStart;
   if (dom.clipDuration) {
     dom.clipDuration.textContent = dur + "s";
-    // Warn when exceeding max clip length
-    dom.clipDuration.classList.toggle("over-max", dur > 140);
   }
 
   updateDownloadButton();
@@ -1041,9 +1039,9 @@ function setSliderEnd(t) {
 function updateDownloadButton() {
   if (!dom.btnDownload) return;
   var dur = _sliderEnd - _sliderStart;
-  if (dur <= 0 || dur > 140) {
+  if (dur <= 0) {
     dom.btnDownload.disabled = true;
-    dom.btnDownload.textContent = dur > 140 ? "⚠ Clip too long (max 140s)" : "⚠ Set a clip range";
+    dom.btnDownload.textContent = "⚠ Set a clip range";
   } else {
     dom.btnDownload.disabled = false;
     dom.btnDownload.textContent = "⬇ Download Clip";

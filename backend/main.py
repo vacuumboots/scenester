@@ -342,8 +342,6 @@ async def create_clip(req: ClipRequest):
     duration = req.end_sec - req.start_sec
     if duration <= 0:
         raise HTTPException(status_code=400, detail="End must be after start")
-    if duration > 140:
-        raise HTTPException(status_code=400, detail="Max clip length is 140 seconds")
 
     try:
         meta = await plex.get_metadata(req.media_id)
