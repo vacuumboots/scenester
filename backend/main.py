@@ -22,6 +22,34 @@ import plex
 
 app = FastAPI(title="Cliparr")
 
+# ── Helpers ───────────────────────────────────────────────────────────────
+
+def _slugify(text: str) -> str:
+    """Convert a title to a filename-safe slug: letters, digits, underscores."""
+    # Replace non-alphanumeric (except spaces/hyphens) with nothing
+    s = re.sub(r"[^a-zA-Z0-9 _-]", "", text)
+    # Replace spaces and hyphens with underscores, collapse multiples
+    s = re.sub(r"[ _-]+", "_", s).strip("_")
+    return s or "unknown"
+
+def _clip_basename(meta: dict, start_sec: float, end_sec: float) -> str:
+    """Build a human-friendly clip filename without extension.
+
+    Movies:    Movie_Title_5307-5337
+    Episodes:  Show_Title_S01E03_5307-5337
+    """
+    title = _slugify(meta.get("title", "Unknown"))
+    if meta.get("type") == "episode":
+        show = _slugify(meta.get("show_title", ""))
+        s = str(meta.get("season", 0)).zfill(2)
+        e = str(meta.get("episode", 0)).zfill(2)
+        prefix = f"{show}_{title}_S{s}E{e}" if show else f"{title}_S{s}E{e}"
+    else:
+        prefix = title
+    start = int(start_sec)
+    end = int(end_sec)
+    return f"{prefix}_{start}-{end}"
+
 # ── Paths ────────────────────────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent / "static"
 CLIPS_DIR = Path("/tmp/clips")
@@ -328,7 +356,7 @@ async def create_clip(req: ClipRequest):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Media file not found on disk")
 
-    filename = f"clip_{req.media_id}_{int(req.start_sec)}-{int(req.end_sec)}.mp4"
+    filename = f"{_clip_basename(meta, req.start_sec, req.end_sec)}.mp4"
 
     # Check if already running
     if filename in clip_jobs and not clip_jobs[filename].get("done"):
@@ -371,8 +399,8 @@ async def clip_status(filename: str):
 @app.get("/api/download/{filename}")
 async def download(filename: str):
     """Serve a generated clip for download."""
-    # Sanitize: only allow filenames matching our pattern
-    if not filename.startswith("clip_") or not filename.endswith(".mp4"):
+    # Sanitize: prevent path traversal, only allow .mp4 files
+    if ".." in filename or "/" in filename or not filename.endswith(".mp4"):
         raise HTTPException(status_code=400, detail="Invalid filename")
     file_path = CLIPS_DIR / filename
     if not file_path.exists():
@@ -390,7 +418,7 @@ async def download(filename: str):
 async def list_clips():
     """List all generated clips, newest first (skip zero-byte files from failed encodes)."""
     clips = []
-    for f in sorted(CLIPS_DIR.glob("clip_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for f in sorted(CLIPS_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
         size = f.stat().st_size
         if size == 0:
             continue
@@ -407,7 +435,7 @@ async def list_clips():
 @app.delete("/api/clips/{filename}")
 async def delete_clip(filename: str):
     """Delete a generated clip."""
-    if not filename.startswith("clip_") or not filename.endswith(".mp4"):
+    if ".." in filename or "/" in filename or not filename.endswith(".mp4"):
         raise HTTPException(status_code=400, detail="Invalid filename")
     file_path = CLIPS_DIR / filename
     if not file_path.exists():
