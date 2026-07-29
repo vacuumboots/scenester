@@ -787,7 +787,20 @@ function highlightFrameStrip(currentT) {
 }
 
 function jumpToFrame(t) {
-  setSliderStart(t);
+  // Slide the clip range to follow the jump point
+  if (_rangeLocked) {
+    var ns = Math.max(0, t);
+    if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
+    setSliderStart(ns);
+    setSliderEnd(ns + _lockedDuration);
+  } else {
+    var dur = _sliderEnd - _sliderStart;
+    var ns = Math.max(0, t);
+    setSliderStart(ns);
+    if (dur > 0 && dur <= 140) {
+      setSliderEnd(Math.min(state.mediaDuration, ns + dur));
+    }
+  }
   seekVideoTo(t);
   highlightFrameStrip(t);
   updateStripRange();
