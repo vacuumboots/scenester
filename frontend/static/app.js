@@ -83,7 +83,7 @@ let dom;
 
 // Clip range state
 var _sliderStart = 0;
-var _sliderEnd = 30;
+var _sliderEnd = 139;
 
 // Range lock mode: when _rangeLocked is true, dragging either handle
 // slides the entire range as a unit, maintaining _lockedDuration.
@@ -313,7 +313,7 @@ function showDetailView() {
     window._jumpDuration = null;
   } else {
     _sliderStart = 0;
-    _sliderEnd = Math.min(30, Math.floor(durationS));
+    _sliderEnd = Math.min(139, Math.floor(durationS));
   }
 
   updateTimeDisplay();
@@ -530,12 +530,7 @@ function loadVideoPreview(mediaId) {
     }
     // Loop within clip range when playing a clip preview
     if (_loopPlayback && ct >= _sliderEnd) {
-      if (dom.clipStatus) dom.clipStatus.textContent = "⟳ looping: " + fmtTime(Math.floor(ct)) + " → " + fmtTime(_sliderStart) + " (end=" + fmtTime(_sliderEnd) + ")";
       vid.currentTime = _sliderStart;
-    }
-    // Diagnostic: show we're approaching loop point
-    if (_loopPlayback && ct >= _sliderEnd - 1 && ct < _sliderEnd) {
-      if (dom.clipStatus) dom.clipStatus.textContent = "⏳ approaching end: " + fmtTime(Math.floor(ct)) + " / " + fmtTime(_sliderEnd) + " (loop=" + _loopPlayback + ")";
     }
   };
 
@@ -554,10 +549,6 @@ function seekVideoTo(t) {
   if (dom.rangeBarPlayhead) {
     dom.rangeBarPlayhead.style.display = "block";
     dom.rangeBarPlayhead.style.left = sliderGetPct(t) + "%";
-  }
-  // Manually seeking while looping — cancel loop so handle drags work
-  if (_loopPlayback && dom.previewVideo && !dom.previewVideo.paused) {
-    _loopPlayback = false;
   }
   // readyState >= 1 means metadata is loaded — browser can seek, it'll buffer
   // data at the new position. Using >= 2 was too strict: during seeks,
@@ -581,7 +572,6 @@ function playFromHere() {
   if (vid.paused) {
     _loopPlayback = true;
     vid.currentTime = _sliderStart;
-    if (dom.clipStatus) dom.clipStatus.textContent = "▶ playing clip: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " (loop)";
     var promise = vid.play();
     if (promise) {
       promise.catch(function(err) {
