@@ -899,6 +899,13 @@ main {
   margin: 0 4px;
 }
 
+.preset-duration-btn.active {
+  background: var(--gold);
+  color: #0d0d0d;
+  border-color: var(--gold);
+  font-weight: 600;
+}
+
 /* ── Progress Bar ──────────────────────────────────────────────────── */
 
 .progress-bar {

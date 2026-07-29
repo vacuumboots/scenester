@@ -85,6 +85,11 @@ let dom;
 var _sliderStart = 0;
 var _sliderEnd = 30;
 
+// Range lock mode: when _rangeLocked is true, dragging either handle
+// slides the entire range as a unit, maintaining _lockedDuration.
+var _rangeLocked = false;
+var _lockedDuration = 30;
+
 // ── Formatting ─────────────────────────────────────────────────────────
 
 function fmtTime(seconds) {
@@ -315,6 +320,10 @@ function showDetailView() {
   updateRangeBar();
   updateDownloadButton();
   updateStripRange();
+
+  // Reset lock state for new item
+  _rangeLocked = false;
+  updatePresetButtons();
 
   // Seek video to start position once ready
   seekVideoTo(_sliderStart);
@@ -634,7 +643,7 @@ function initStripDrag() {
     _stripDragActive = false;
     _stripDidMove = false;
     _stripClickTime = parseInt(thumb.getAttribute("data-time"));
-    _stripDragDuration = Math.min(_sliderEnd - _sliderStart, 140);
+    _stripDragDuration = _rangeLocked ? _lockedDuration : Math.min(_sliderEnd - _sliderStart, 140);
 
     // Cache strip rect for smooth continuous tracking
     var stripRect = dom.frameStripInner.getBoundingClientRect();
@@ -679,17 +688,34 @@ function initStripDrag() {
 
       if (_stripDragActive) {
         seekVideoTo(_sliderStart);
-        if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration);
+        if (dom.clipStatus) {
+          var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
+          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
+        }
       } else if (!_stripDidMove) {
         // It was a click, not a drag
         if (ev && ev.shiftKey) {
-          setSliderEnd(_stripClickTime);
+          if (_rangeLocked) {
+            // Locked shift+click: set end to thumb time, slide start to maintain duration
+            setSliderEnd(_stripClickTime);
+            setSliderStart(Math.max(0, _stripClickTime - _lockedDuration));
+          } else {
+            setSliderEnd(_stripClickTime);
+          }
           seekVideoTo(_sliderStart);
         } else {
-          var dur = _sliderEnd - _sliderStart;
-          setSliderStart(_stripClickTime);
-          if (dur > 0 && dur <= 140) {
-            setSliderEnd(Math.min(state.mediaDuration, _stripClickTime + dur));
+          if (_rangeLocked) {
+            // Locked click: slide the entire window to center on thumb time
+            var ns = Math.max(0, _stripClickTime);
+            if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
+            setSliderStart(ns);
+            setSliderEnd(ns + _lockedDuration);
+          } else {
+            var dur = _sliderEnd - _sliderStart;
+            setSliderStart(_stripClickTime);
+            if (dur > 0 && dur <= 140) {
+              setSliderEnd(Math.min(state.mediaDuration, _stripClickTime + dur));
+            }
           }
           seekVideoTo(_sliderStart);
         }
@@ -807,7 +833,20 @@ function initRangeBarHandles() {
       _dragHandlePct = sliderGetPct(_sliderEnd);
       seekVideoTo(_sliderEnd);
     } else {
-      // Clicked on bar itself — snap nearest handle (seek happens in applyDrag)
+      // Clicked on bar itself
+      if (_rangeLocked) {
+        // Locked: slide range to position at click (clamped to edges)
+        var newStart = Math.floor(sec);
+        if (newStart + _lockedDuration > state.mediaDuration) newStart = Math.max(0, state.mediaDuration - _lockedDuration);
+        setSliderStart(newStart);
+        setSliderEnd(newStart + _lockedDuration);
+        seekVideoTo(_sliderStart);
+        if (dom.clipStatus) {
+          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + " [locked " + _lockedDuration + "s]";
+        }
+        return;  // Immediate snap, no drag setup in locked mode
+      }
+      // Free mode: snap nearest handle
       var distStart = Math.abs(_sliderStart - sec);
       var distEnd = Math.abs(_sliderEnd - sec);
       _handleDrag = distStart <= distEnd ? "start" : "end";
@@ -840,7 +879,8 @@ function initRangeBarHandles() {
         dom.rangeBar.classList.remove("dragging");
         _handleDrag = null;
         if (dom.clipStatus) {
-          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration);
+          var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
+          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
         }
       }
       document.removeEventListener("mousemove", onMove);
@@ -855,28 +895,47 @@ function initRangeBarHandles() {
 function applyDrag(pct) {
   var sec = Math.floor((pct / 100) * state.mediaDuration);
 
-  if (_handleDrag === "start") {
-    // Prevent crossing past end handle (leave at least 1s gap)
-    if (sec >= _sliderEnd - 1) sec = _sliderEnd - 1;
-    setSliderStart(sec);
+  if (_rangeLocked) {
+    // Locked mode: dragging either handle slides the entire range,
+    // maintaining _lockedDuration. Both handles move together.
+    if (_handleDrag === "start") {
+      if (sec + _lockedDuration > state.mediaDuration) sec = state.mediaDuration - _lockedDuration;
+      if (sec < 0) sec = 0;
+      setSliderStart(sec);
+      setSliderEnd(sec + _lockedDuration);
+    } else if (_handleDrag === "end") {
+      var newStart = sec - _lockedDuration;
+      if (newStart < 0) { newStart = 0; sec = _lockedDuration; }
+      if (sec > state.mediaDuration) { sec = state.mediaDuration; newStart = sec - _lockedDuration; }
+      setSliderStart(newStart);
+      setSliderEnd(sec);
+    }
     seekVideoTo(_sliderStart);
-  } else if (_handleDrag === "end") {
-    // Prevent crossing before start handle (leave at least 1s gap)
-    if (sec <= _sliderStart + 1) sec = _sliderStart + 1;
-    setSliderEnd(sec);
-    seekVideoTo(_sliderEnd);
+  } else {
+    // Free mode: handles move independently
+    if (_handleDrag === "start") {
+      if (sec >= _sliderEnd - 1) sec = _sliderEnd - 1;
+      setSliderStart(sec);
+      seekVideoTo(_sliderStart);
+    } else if (_handleDrag === "end") {
+      if (sec <= _sliderStart + 1) sec = _sliderStart + 1;
+      setSliderEnd(sec);
+      seekVideoTo(_sliderEnd);
+    }
   }
 
   // Live feedback during drag
   if (dom.clipStatus) {
-    dom.clipStatus.textContent = "Range: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + (_sliderEnd - _sliderStart) + "s)";
+    var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
+    dom.clipStatus.textContent = "Range: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + (_sliderEnd - _sliderStart) + "s)" + mode;
   }
 }
 
 function updateTimeDisplay() {
-  // Enforce constraints FIRST, then display
+  // Enforce constraints FIRST, then display.
+  // NOTE: no hard 140s cap — handles should move freely. The download
+  // button disables itself when duration > 140s; that's the enforcement point.
   if (_sliderEnd <= _sliderStart) _sliderEnd = _sliderStart + 1;
-  if (_sliderEnd - _sliderStart > 140) _sliderEnd = _sliderStart + 140;
   if (_sliderEnd > state.mediaDuration) _sliderEnd = Math.floor(state.mediaDuration);
   if (_sliderStart > state.mediaDuration) _sliderStart = Math.floor(state.mediaDuration);
   if (_sliderStart < 0) _sliderStart = 0;
@@ -929,14 +988,37 @@ function updateDownloadButton() {
 function handlePreset(action, value) {
   if (action === "shift-start") {
     var ns = Math.max(0, _sliderStart + value);
-    var dur = _sliderEnd - _sliderStart;
-    setSliderStart(ns);
-    setSliderEnd(Math.min(state.mediaDuration, ns + Math.max(1, dur)));
+    if (_rangeLocked) {
+      // Locked: slide the entire window, keeping duration fixed
+      setSliderStart(ns);
+      setSliderEnd(Math.min(state.mediaDuration, ns + _lockedDuration));
+    } else {
+      var dur = _sliderEnd - _sliderStart;
+      setSliderStart(ns);
+      setSliderEnd(Math.min(state.mediaDuration, ns + Math.max(1, dur)));
+    }
     seekVideoTo(_sliderStart);
   } else if (action === "set-duration") {
+    _rangeLocked = true;
+    _lockedDuration = value;
     setSliderEnd(Math.min(state.mediaDuration, _sliderStart + value));
     seekVideoTo(_sliderStart);
+    updatePresetButtons();
+  } else if (action === "unlock") {
+    _rangeLocked = false;
+    updatePresetButtons();
   }
+}
+
+// Highlight the active preset button when range is locked.
+function updatePresetButtons() {
+  var btns = document.querySelectorAll(".preset-duration-btn");
+  for (var i = 0; i < btns.length; i++) {
+    var dur = parseInt(btns[i].getAttribute("data-duration"));
+    btns[i].classList.toggle("active", _rangeLocked && dur === _lockedDuration);
+  }
+  var freeBtn = document.getElementById("btn-preset-free");
+  if (freeBtn) freeBtn.classList.toggle("active", !_rangeLocked);
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────
