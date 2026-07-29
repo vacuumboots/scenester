@@ -536,7 +536,10 @@ function seekVideoTo(t) {
     dom.rangeBarPlayhead.style.display = "block";
     dom.rangeBarPlayhead.style.left = sliderGetPct(t) + "%";
   }
-  if (dom.previewVideo && dom.previewVideo.readyState >= 2) {
+  // readyState >= 1 means metadata is loaded — browser can seek, it'll buffer
+  // data at the new position. Using >= 2 was too strict: during seeks,
+  // readyState temporarily drops to 1, silently dropping rapid clicks.
+  if (dom.previewVideo && dom.previewVideo.readyState >= 1) {
     dom.previewVideo.currentTime = t;
   }
 }

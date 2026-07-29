@@ -842,20 +842,18 @@ main {
   border-radius: 0 3px 3px 0;
 }
 
-/* Playhead — moving dot showing current preview position */
+/* Playhead — vertical line showing current preview position on timeline */
 .range-bar-playhead {
   position: absolute;
-  top: 50%;
-  width: 6px;
-  height: 18px;
-  margin-top: -9px;
-  margin-left: -3px;
+  top: -2px;
+  width: 2px;
+  height: calc(100% + 4px);
+  margin-left: -1px;
   background: #fff;
-  border-radius: 50%;
   pointer-events: none;
   z-index: 2;
   display: none;
-  box-shadow: 0 0 4px rgba(255,255,255,0.6);
+  box-shadow: 0 0 4px rgba(255,255,255,0.5);
   transition: left 0.1s linear;
 }
 
