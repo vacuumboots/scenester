@@ -494,6 +494,7 @@ function startSessionPolling() {
 
 var _videoReady = false;
 var _videoFailed = false;
+var _loopPlayback = false;   // true when playing within clip range (loops)
 
 function loadVideoPreview(mediaId) {
   _videoReady = false;
@@ -527,6 +528,10 @@ function loadVideoPreview(mediaId) {
       dom.rangeBarPlayhead.style.display = "block";
       dom.rangeBarPlayhead.style.left = sliderGetPct(ct) + "%";
     }
+    // Loop within clip range when playing a clip preview
+    if (_loopPlayback && ct >= _sliderEnd) {
+      vid.currentTime = _sliderStart;
+    }
   };
 
   vid.src = "api/media/" + mediaId + "/stream";
@@ -544,6 +549,10 @@ function seekVideoTo(t) {
   if (dom.rangeBarPlayhead) {
     dom.rangeBarPlayhead.style.display = "block";
     dom.rangeBarPlayhead.style.left = sliderGetPct(t) + "%";
+  }
+  // Manually seeking while looping — cancel loop so handle drags work
+  if (_loopPlayback && dom.previewVideo && !dom.previewVideo.paused) {
+    _loopPlayback = false;
   }
   // readyState >= 1 means metadata is loaded — browser can seek, it'll buffer
   // data at the new position. Using >= 2 was too strict: during seeks,
@@ -565,14 +574,17 @@ function playFromHere() {
   }
 
   if (vid.paused) {
+    _loopPlayback = true;
     vid.currentTime = _sliderStart;
     var promise = vid.play();
     if (promise) {
       promise.catch(function(err) {
+        _loopPlayback = false;
         if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
       });
     }
   } else {
+    _loopPlayback = false;
     vid.pause();
   }
 }
@@ -580,7 +592,13 @@ function playFromHere() {
 // Update play button text based on video state
 function updatePlayButton() {
   if (!dom.btnPlayPreview || !dom.previewVideo) return;
-  dom.btnPlayPreview.textContent = dom.previewVideo.paused ? '▶ Play from here' : '⏸ Pause';
+  if (dom.previewVideo.paused) {
+    dom.btnPlayPreview.textContent = '▶ Play clip';
+  } else if (_loopPlayback) {
+    dom.btnPlayPreview.textContent = '⏸ Stop loop';
+  } else {
+    dom.btnPlayPreview.textContent = '⏸ Pause';
+  }
 }
 
 // Wire play/pause state tracking
