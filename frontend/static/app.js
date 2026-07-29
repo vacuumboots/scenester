@@ -809,17 +809,17 @@ function initRangeBarHandles() {
 
   var bar = dom.rangeBar;
 
-  function pctFromEvent(e) {
-    var rect = bar.getBoundingClientRect();
-    return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-  }
-
   bar.addEventListener("mousedown", function(e) {
     // Ignore right-click and strip drags
     if (e.button !== 0 || _stripDragActive) return;
 
+    // Cache bar rect at mousedown — never recalculate in onMove
+    var barRect = bar.getBoundingClientRect();
+    var barLeft = barRect.left;
+    var barWidth = barRect.width;
+
     var target = e.target;
-    var mousePct = pctFromEvent(e);
+    var mousePct = Math.max(0, Math.min(100, ((e.clientX - barLeft) / barWidth) * 100));
     var sec = (mousePct / 100) * state.mediaDuration;
 
     if (target === dom.rangeBarMarkerStart || (target.closest && target.closest("#range-bar-marker-start"))) {
@@ -865,8 +865,8 @@ function initRangeBarHandles() {
     // Dynamic listeners (removed on mouseup — matches strip drag pattern)
     function onMove(ev) {
       if (!_handleDrag) return;
-      // Track offset from grab point: new = handlePct + (mousePct - grabPct)
-      var movePct = pctFromEvent(ev);
+      // Use cached bar rect for zero-layout-thrash tracking
+      var movePct = Math.max(0, Math.min(100, ((ev.clientX - barLeft) / barWidth) * 100));
       var delta = movePct - _dragGrabPct;
       var newPct = _dragHandlePct + delta;
       applyDrag(newPct);
