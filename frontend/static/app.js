@@ -53,7 +53,8 @@ function getDom() {
     previewError:    qs("#preview-error"),
     previewLoading:  qs("#preview-loading"),
     frameTimeValue:  qs("#frame-time-value"),
-    btnPlayPreview:  qs("#btn-play-preview"),
+    btnPlayClip:  qs("#btn-play-clip"),
+    btnPlayFull:  qs("#btn-play-full"),
     btnMuteToggle:  qs("#btn-mute-toggle"),
     frameStrip:      qs("#frame-strip"),
     frameStripInner: qs("#frame-strip-inner"),
@@ -292,7 +293,8 @@ function showDetailView() {
 
   // Show frame preview area
   if (dom.framePreview) dom.framePreview.style.display = "block";
-  if (dom.btnPlayPreview) dom.btnPlayPreview.style.display = "inline-flex";
+  if (dom.btnPlayClip) dom.btnPlayClip.style.display = "inline-flex";
+  if (dom.btnPlayFull) dom.btnPlayFull.style.display = "inline-flex";
   if (dom.btnMuteToggle) dom.btnMuteToggle.style.display = "inline-flex";
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   if (dom.clipStatus) dom.clipStatus.textContent = "";
@@ -559,51 +561,88 @@ function seekVideoTo(t) {
   }
 }
 
-function playFromHere() {
+function playClip() {
   if (!dom.previewVideo) return;
-
   var vid = dom.previewVideo;
-
-  // If video isn't loaded yet or failed, show what's happening
   if (vid.readyState < 2) {
     if (dom.clipStatus) dom.clipStatus.textContent = "Video still loading...";
     return;
   }
 
-  if (vid.paused) {
-    _loopPlayback = true;
-    vid.currentTime = _sliderStart;
-    var promise = vid.play();
-    if (promise) {
-      promise.catch(function(err) {
-        _loopPlayback = false;
-        if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
-      });
-    }
-  } else {
+  if (!vid.paused && _loopPlayback) {
+    // Already playing clip — pause
     _loopPlayback = false;
     vid.pause();
+    return;
+  }
+
+  _loopPlayback = true;
+  vid.currentTime = _sliderStart;
+  var promise = vid.play();
+  if (promise) {
+    promise.catch(function(err) {
+      _loopPlayback = false;
+      if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
+    });
   }
 }
 
-// Update play button text based on video state
-function updatePlayButton() {
-  if (!dom.btnPlayPreview || !dom.previewVideo) return;
-  if (dom.previewVideo.paused) {
-    dom.btnPlayPreview.textContent = '▶ Play clip';
-  } else if (_loopPlayback) {
-    dom.btnPlayPreview.textContent = '⏸ Stop loop';
-  } else {
-    dom.btnPlayPreview.textContent = '⏸ Pause';
+function playFull() {
+  if (!dom.previewVideo) return;
+  var vid = dom.previewVideo;
+  if (vid.readyState < 2) {
+    if (dom.clipStatus) dom.clipStatus.textContent = "Video still loading...";
+    return;
+  }
+
+  if (!vid.paused && !_loopPlayback) {
+    // Already playing full — pause
+    vid.pause();
+    return;
+  }
+
+  _loopPlayback = false;
+  vid.currentTime = _sliderStart;
+  var promise = vid.play();
+  if (promise) {
+    promise.catch(function(err) {
+      if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
+    });
+  }
+}
+
+// Update play buttons: active mode shows ⏸, inactive is dimmed
+function updatePlayButtons() {
+  if (!dom.previewVideo) return;
+  var playing = !dom.previewVideo.paused;
+
+  if (dom.btnPlayClip) {
+    if (playing && _loopPlayback) {
+      dom.btnPlayClip.textContent = '⏸ Clip';
+    } else {
+      dom.btnPlayClip.textContent = '▶ Clip';
+    }
+    dom.btnPlayClip.disabled = playing && !_loopPlayback;
+    dom.btnPlayClip.classList.toggle('active', playing && _loopPlayback);
+  }
+
+  if (dom.btnPlayFull) {
+    if (playing && !_loopPlayback) {
+      dom.btnPlayFull.textContent = '⏸ Full';
+    } else {
+      dom.btnPlayFull.textContent = '▶ Full';
+    }
+    dom.btnPlayFull.disabled = playing && _loopPlayback;
+    dom.btnPlayFull.classList.toggle('active', playing && !_loopPlayback);
   }
 }
 
 // Wire play/pause state tracking
 function initPlayStateTracking() {
   if (!dom.previewVideo) return;
-  dom.previewVideo.addEventListener('play', updatePlayButton);
-  dom.previewVideo.addEventListener('pause', updatePlayButton);
-  dom.previewVideo.addEventListener('ended', updatePlayButton);
+  dom.previewVideo.addEventListener('play', updatePlayButtons);
+  dom.previewVideo.addEventListener('pause', updatePlayButtons);
+  dom.previewVideo.addEventListener('ended', updatePlayButtons);
 }
 
 function toggleMute() {
