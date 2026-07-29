@@ -499,6 +499,7 @@ var _loopPlayback = false;   // true when playing within clip range (loops)
 function loadVideoPreview(mediaId) {
   _videoReady = false;
   _videoFailed = false;
+  _loopPlayback = false;
 
   if (!dom.previewVideo) return;
   var vid = dom.previewVideo;
