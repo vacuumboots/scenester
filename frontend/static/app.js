@@ -532,6 +532,28 @@ function loadVideoPreview(mediaId) {
     if (dom.previewLoading) dom.previewLoading.style.display = "none";
     if (dom.previewError) dom.previewError.style.display = "none";
     vid.currentTime = _sliderStart;
+    // Add subtitle track if available — must be AFTER metadata loads
+    // (adding before vid.src causes MEDIA_ERR_SRC_NOT_SUPPORTED on mobile)
+    if (state.currentItem && state.currentItem.subtitle_path) {
+      // Remove any old track elements first
+      var oldTracks = vid.querySelectorAll("track");
+      for (var ti = 0; ti < oldTracks.length; ti++) oldTracks[ti].remove();
+      try {
+        var track = document.createElement("track");
+        track.kind = "subtitles";
+        track.label = "English";
+        track.srclang = "en";
+        track.src = "api/subtitle/" + mediaId;
+        track.default = true;
+        track.onload = function() { console.log("Subtitle track loaded"); };
+        track.onerror = function() { console.warn("Subtitle track failed to load"); };
+        vid.appendChild(track);
+        // Enable native subtitle toggle in controls
+        if (!vid.hasAttribute("controls")) vid.setAttribute("controls", "controls");
+      } catch(e) {
+        console.warn("Failed to add subtitle track:", e);
+      }
+    }
   };
 
   vid.onerror = function() {
