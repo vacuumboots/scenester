@@ -988,6 +988,171 @@ main {
   min-width: 36px;
   text-align: center;
 }
+/* ── Phone (≤ 480px) ──────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+
+  /* Header */
+  .header-inner {
+    padding: 8px 0;
+  }
+  header h1 {
+    font-size: 16px;
+  }
+  .search-row {
+    gap: 6px;
+  }
+  .search-row input {
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  .search-row select {
+    padding: 7px 8px;
+    font-size: 11px;
+    min-width: auto;
+  }
+
+  /* Library grid — two columns */
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .card {
+    border-radius: 8px;
+  }
+  .card-info {
+    padding: 8px 10px 10px;
+  }
+  .card-name {
+    font-size: 13px;
+  }
+
+  /* Detail view */
+  main {
+    padding: 12px;
+  }
+  .target-card {
+    padding: 16px;
+    margin-bottom: 16px;
+    gap: 8px;
+  }
+  .target-name {
+    font-size: 18px;
+  }
+  .target-meta {
+    font-size: 12px;
+  }
+  .btn-back {
+    margin-bottom: 12px;
+  }
+
+  /* Video preview */
+  #preview-video {
+    max-height: 220px;
+  }
+  .frame-time {
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .frame-time-value {
+    font-size: 12px;
+  }
+
+  /* Frame strip — smaller thumbs, hide desktop hint */
+  .frame-thumb {
+    width: 70px;
+    height: 44px;
+  }
+  .strip-hint {
+    display: none;
+  }
+
+  /* Range bar — bigger touch target */
+  .range-bar {
+    height: 18px;
+    margin: 12px 0 20px;
+  }
+  .range-bar-marker {
+    width: 18px;
+    height: 30px;
+    margin-left: -9px;
+    border-radius: 9px;
+  }
+
+  /* Time display */
+  .time-box {
+    font-size: 16px;
+    padding: 5px 10px;
+    min-width: 64px;
+  }
+  .time-sep {
+    font-size: 14px;
+  }
+  .time-dur {
+    font-size: 12px;
+  }
+
+  /* Preset buttons — bigger tap targets */
+  .preset-buttons {
+    gap: 5px;
+  }
+  .preset-duration-btn {
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  .preset-sep {
+    display: none;
+  }
+
+  /* Social toggles — captions stays, options collapsible */
+  .social-toggles {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .caption-options {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .caption-options.visible {
+    display: flex;
+  }
+
+  /* Download button */
+  .btn-download {
+    padding: 14px;
+    font-size: 16px;
+    margin-top: 12px;
+  }
+
+  /* Clip gallery */
+  .clip-card {
+    width: 100%;
+    max-width: none;
+  }
+  .clip-gallery-grid {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Now Playing banner */
+  .np-content {
+    gap: 8px;
+    font-size: 12px;
+  }
+  .btn-quick-clip {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+
+  /* Scrubber section */
+  .scrubber-section {
+    padding: 16px;
+  }
+}
+
+
 
 /* ── Progress Bar ──────────────────────────────────────────────────── */
 

@@ -689,6 +689,9 @@ function buildFrameStrip(mediaId, durationS) {
   }
   dom.frameStripInner.innerHTML = html;
   dom.frameStrip.style.display = "block";
+  // Hide desktop hint on mobile
+  var hint = document.querySelector(".strip-hint");
+  if (hint && window.innerWidth <= 480) hint.style.display = "none";
 
   var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
   for (var j = 0; j < thumbs.length; j++) {
@@ -1302,6 +1305,10 @@ function updateToggleButtons() {
   if (dom.btnCaptions) {
     dom.btnCaptions.classList.toggle("active", _captionsEnabled);
     dom.btnCaptions.textContent = _captionsEnabled ? "💬 Captions ON" : "💬 Captions";
+
+  // Show/hide collapsible caption options on mobile
+  var capOpts = document.querySelector(".caption-options");
+  if (capOpts) capOpts.classList.toggle("visible", _captionsEnabled);
   }
   if (dom.btnCaptionColor) {
     var showColor = _captionsEnabled;

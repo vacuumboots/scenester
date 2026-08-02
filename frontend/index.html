@@ -193,12 +193,14 @@
         <button class="btn btn-small toggle-btn" id="btn-captions" onclick="toggleCaptions()" title="Burn word-by-word captions from subtitle file">
           💬 Captions
         </button>
-        <button class="btn btn-small toggle-btn caption-option" id="btn-caption-color" onclick="toggleCaptionColor()" title="Caption font color: white or yellow" style="display:none">
-          🎨 White
-        </button>
-        <button class="btn btn-small toggle-btn caption-option" id="btn-caption-placement" onclick="toggleCaptionPosition()" title="Caption placement: bottom or middle of frame" style="display:none">
-          📍 Bottom
-        </button>
+        <div class="caption-options">
+          <button class="btn btn-small toggle-btn caption-option" id="btn-caption-color" onclick="toggleCaptionColor()" title="Caption font color: white or yellow" style="display:none">
+            🎨 White
+          </button>
+          <button class="btn btn-small toggle-btn caption-option" id="btn-caption-placement" onclick="toggleCaptionPosition()" title="Caption placement: bottom or middle of frame" style="display:none">
+            📍 Bottom
+          </button>
+        </div>
         <button class="btn btn-small toggle-btn" id="btn-vertical" onclick="toggleVertical()" title="Crop to vertical 9:16 for TikTok/Reels/Shorts">
           📱 Vertical
         </button>
