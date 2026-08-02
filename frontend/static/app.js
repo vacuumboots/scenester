@@ -536,10 +536,14 @@ function loadVideoPreview(mediaId) {
   vid.onerror = function() {
     _videoFailed = true;
     if (dom.previewLoading) dom.previewLoading.style.display = "none";
-    if (dom.previewError) dom.previewError.style.display = "block";
-    var err = vid.error;
-    var codes = {1:"MEDIA_ERR_ABORTED",2:"MEDIA_ERR_NETWORK",3:"MEDIA_ERR_DECODE",4:"MEDIA_ERR_SRC_NOT_SUPPORTED"};
-    if (dom.clipStatus) dom.clipStatus.textContent = "Video error: " + (codes[err ? err.code : 0] || "unknown");
+    if (dom.previewError) {
+      dom.previewError.style.display = "block";
+      var err = vid.error;
+      var codes = {1:"MEDIA_ERR_ABORTED",2:"MEDIA_ERR_NETWORK",3:"MEDIA_ERR_DECODE",4:"MEDIA_ERR_SRC_NOT_SUPPORTED"};
+      var codeName = codes[err ? err.code : 0] || "unknown";
+      dom.previewError.innerHTML = '<div style="font-size:48px; margin-bottom:12px;">⚠️</div><div>Preview error: ' + codeName + '</div><div style="font-size:13px; margin-top:8px;">Use the frame strip below to navigate.</div>';
+    }
+    if (dom.clipStatus) dom.clipStatus.textContent = "Video error: " + codeName;
   };
 
   vid.ontimeupdate = function() {
