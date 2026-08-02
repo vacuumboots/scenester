@@ -1198,3 +1198,32 @@ main {
     flex-wrap: wrap;
   }
 }
+
+/* ── Phone (≤ 480px) ──────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  /* Stack fine-tune sliders vertically — easier one-thumb control */
+  .fine-tune-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .fine-tune-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .fine-tune-slider {
+    width: 100%;
+  }
+
+  .fine-tune-label {
+    font-size: 13px;
+    min-width: 32px;
+  }
+
+  .fine-tune-value {
+    font-size: 13px;
+    min-width: 42px;
+  }
+}
