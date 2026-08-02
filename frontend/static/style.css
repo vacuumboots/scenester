@@ -1197,11 +1197,7 @@ main {
   .time-display {
     flex-wrap: wrap;
   }
-}
 
-/* ── Phone (≤ 480px) ──────────────────────────────────────────── */
-
-@media (max-width: 480px) {
   /* Stack fine-tune sliders vertically — easier one-thumb control */
   .fine-tune-row {
     flex-direction: column;
