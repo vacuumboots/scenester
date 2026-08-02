@@ -894,17 +894,14 @@ function initRangeBarHandles() {
 
   var bar = dom.rangeBar;
 
-  bar.addEventListener("mousedown", function(e) {
-    // Ignore right-click and strip drags
-    if (e.button !== 0 || _stripDragActive) return;
-
-    // Cache bar rect at mousedown — never recalculate in onMove
+  // Shared drag-start logic — called by both mousedown and touchstart.
+  // Caches bar rect at drag start so onMove never reflows.
+  function _startBarDrag(clientX, target) {
     var barRect = bar.getBoundingClientRect();
     var barLeft = barRect.left;
     var barWidth = barRect.width;
 
-    var target = e.target;
-    var mousePct = Math.max(0, Math.min(100, ((e.clientX - barLeft) / barWidth) * 100));
+    var mousePct = Math.max(0, Math.min(100, ((clientX - barLeft) / barWidth) * 100));
     var sec = (mousePct / 100) * state.mediaDuration;
 
     if (target === dom.rangeBarMarkerStart || (target.closest && target.closest("#range-bar-marker-start"))) {
@@ -944,14 +941,13 @@ function initRangeBarHandles() {
     dom.rangeBar.classList.add("dragging");
     if (_handleDrag === "start") dom.rangeBarMarkerStart.classList.add("dragging");
     else dom.rangeBarMarkerEnd.classList.add("dragging");
-    e.preventDefault();
-    e.stopPropagation();
 
-    // Dynamic listeners (removed on mouseup — matches strip drag pattern)
+    // Dynamic listeners — touch-aware onMove, cleanup for both families.
+    // Uses cached bar rect for zero-layout-thrash tracking.
     function onMove(ev) {
       if (!_handleDrag) return;
-      // Use cached bar rect for zero-layout-thrash tracking
-      var movePct = Math.max(0, Math.min(100, ((ev.clientX - barLeft) / barWidth) * 100));
+      var cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      var movePct = Math.max(0, Math.min(100, ((cx - barLeft) / barWidth) * 100));
       var delta = movePct - _dragGrabPct;
       var newPct = _dragHandlePct + delta;
       applyDrag(newPct);
@@ -970,11 +966,31 @@ function initRangeBarHandles() {
       }
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onUp);
     }
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchmove", onMove);
+    document.addEventListener("touchend", onUp);
+  }
+
+  bar.addEventListener("mousedown", function(e) {
+    // Ignore right-click and strip drags
+    if (e.button !== 0 || _stripDragActive) return;
+    _startBarDrag(e.clientX, e.target);
+    e.preventDefault();
+    e.stopPropagation();
   });
+
+  bar.addEventListener("touchstart", function(e) {
+    if (_stripDragActive) return;
+    if (!e.cancelable) return;  // passive listener guard
+    _startBarDrag(e.touches[0].clientX, e.target);
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
 }
 
 function applyDrag(pct) {
