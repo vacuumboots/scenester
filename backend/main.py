@@ -342,24 +342,44 @@ async def stream_media(media_id: int):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Plex error: {e}")
 
-    file_path = meta.get("file_path", "")
-    if not file_path or not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Media file not found on disk")
+# ── API: Subtitles ──────────────────────────────────────────────────────
 
-    # Determine MIME type from extension
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if not mime_type:
-        mime_type = "video/mp4"
 
-    return FileResponse(
-        file_path,
-        media_type=mime_type,
-        headers={
-            "Accept-Ranges": "bytes",
-            "Cache-Control": "private, max-age=3600",
-        },
+@app.get("/api/subtitle/{media_id}")
+async def serve_subtitle(media_id: int):
+    """Serve the subtitle file as WebVTT for browser <track> support.
+
+    Reads the .srt file found alongside the media, converts timestamps
+    from SRT (commas) to WebVTT (periods), and returns with
+    Content-Type: text/vtt. Browsers render this natively via <track>.
+    """
+    try:
+        meta = await plex.get_metadata(media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    subtitle_path = meta.get("subtitle_path")
+    if not subtitle_path or not os.path.isfile(subtitle_path):
+        raise HTTPException(status_code=404, detail="No subtitle file found")
+
+    try:
+        with open(subtitle_path, "r", encoding="utf-8", errors="replace") as f:
+            srt_content = f.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Convert SRT to WebVTT: add header, replace comma with period in timestamps
+    import re
+    vtt = "WEBVTT\n\n"
+    vtt += re.sub(
+        r'(\d{2}:\d{2}:\d{2}),(\d{3})',
+        r'\1.\2',
+        srt_content
     )
 
+    return Response(content=vtt, media_type="text/vtt")
 
 # ── API: Clip generation ─────────────────────────────────────────────────
 

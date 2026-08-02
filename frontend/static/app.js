@@ -555,6 +555,24 @@ function loadVideoPreview(mediaId) {
     }
   };
 
+  // Add subtitle track if available
+  // Remove existing tracks first
+  while (vid.firstChild) {
+    if (vid.firstChild.tagName === "TRACK") vid.removeChild(vid.firstChild);
+    else break;
+  }
+  var item = state.currentItem;
+  if (item && item.subtitle_path) {
+    var track = document.createElement("track");
+    track.kind = "subtitles";
+    track.label = "English";
+    track.srclang = "en";
+    track.src = "api/subtitle/" + mediaId;
+    track.default = true;
+    vid.appendChild(track);
+    // Enable native text track display
+    vid.textTracks && vid.textTracks[0] && (vid.textTracks[0].mode = "showing");
+  }
   vid.src = "api/media/" + mediaId + "/stream";
 }
 
