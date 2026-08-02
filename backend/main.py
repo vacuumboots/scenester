@@ -340,7 +340,26 @@ async def stream_media(media_id: int):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+    file_path = meta.get("file_path", "")
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found on disk")
+
+    # Determine MIME type from extension
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        mime_type = "video/mp4"
+
+    return FileResponse(
+        file_path,
+        media_type=mime_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
 
 # ── API: Subtitles ──────────────────────────────────────────────────────
 
