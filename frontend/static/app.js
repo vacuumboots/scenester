@@ -555,25 +555,28 @@ function loadVideoPreview(mediaId) {
     }
   };
 
-  // Add subtitle track if available
-  // Remove existing tracks first
-  while (vid.firstChild) {
-    if (vid.firstChild.tagName === "TRACK") vid.removeChild(vid.firstChild);
-    else break;
-  }
+  vid.src = "api/media/" + mediaId + "/stream";
+
+  // Add subtitle track if available (after src so video loads regardless)
   var item = state.currentItem;
   if (item && item.subtitle_path) {
-    var track = document.createElement("track");
-    track.kind = "subtitles";
-    track.label = "English";
-    track.srclang = "en";
-    track.src = "api/subtitle/" + mediaId;
-    track.default = true;
-    vid.appendChild(track);
-    // Enable native text track display
-    vid.textTracks && vid.textTracks[0] && (vid.textTracks[0].mode = "showing");
+    // Remove existing tracks first
+    while (vid.firstChild) {
+      if (vid.firstChild.tagName === "TRACK") vid.removeChild(vid.firstChild);
+      else break;
+    }
+    try {
+      var track = document.createElement("track");
+      track.kind = "subtitles";
+      track.label = "English";
+      track.srclang = "en";
+      track.src = "api/subtitle/" + mediaId;
+      track.default = true;
+      vid.appendChild(track);
+    } catch(e) {
+      // Track not supported — video still plays fine
+    }
   }
-  vid.src = "api/media/" + mediaId + "/stream";
 }
 
 function onPreviewError() {
