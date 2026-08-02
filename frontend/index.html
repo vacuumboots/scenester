@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=4">
+  <link rel="stylesheet" href="static/style.css?v=5">
 </head>
 <body>
 
@@ -83,6 +83,7 @@
     <div class="results-header">
       Library
       <span class="result-count" id="result-count"></span>
+      <a href="#clip-gallery" class="clip-shortcut" id="clip-shortcut-link" style="display:none">↓ Recent Clips</a>
     </div>
     <div class="grid" id="library-grid"></div>
     <div class="empty-state" id="empty-state" style="display:none">
@@ -131,6 +132,10 @@
         <button class="btn btn-small" id="btn-play-clip" onclick="playClip()">▶ Clip</button>
         <button class="btn btn-small" id="btn-play-full" onclick="playFull()">▶ Full</button>
         <button class="btn btn-small" id="btn-mute-toggle" onclick="toggleMute()" title="Toggle audio">🔊</button>
+        <span class="frame-time-sep">·</span>
+        <button class="btn btn-small video-size-btn" onclick="setVideoSize('small')" title="Small player">S</button>
+        <button class="btn btn-small video-size-btn active" onclick="setVideoSize('medium')" title="Medium player">M</button>
+        <button class="btn btn-small video-size-btn" onclick="setVideoSize('large')" title="Large player">L</button>
         <span class="frame-time-sep">·</span>
         <input id="jump-time" type="text" placeholder="jump to..." size="8" title="Type time like 1:23 or 90s and press Enter">
       </div>

@@ -1487,6 +1487,7 @@ async function loadClipGallery() {
     }
 
     if (dom.clipGallery) dom.clipGallery.style.display = "block";
+    showClipShortcut();
     if (dom.clipCount) dom.clipCount.textContent = "(" + clips.length + ")";
 
     var html = "";
@@ -1534,6 +1535,32 @@ function parseTimeInput(val) {
     return parseInt(parts[0]) || null;
   }
 }
+// ── Video Size Presets ───────────────────────────────
+
+var _videoSize = "medium";  // small, medium, large
+
+function setVideoSize(size) {
+  _videoSize = size;
+  var vid = document.getElementById("preview-video");
+  if (!vid) return;
+  switch (size) {
+    case "small":  vid.style.maxHeight = "160px"; break;
+    case "medium": vid.style.maxHeight = "240px"; break;
+    case "large":  vid.style.maxHeight = "420px"; break;
+  }
+  // Update active button
+  var btns = document.querySelectorAll(".video-size-btn");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle("active", btns[i].textContent.toLowerCase().charAt(0) === size.charAt(0));
+  }
+}
+
+function showClipShortcut() {
+  var link = document.getElementById("clip-shortcut-link");
+  if (link) link.style.display = "inline-block";
+}
+
+
 
 // ── Event Wiring ───────────────────────────────────────────────────────
 

@@ -990,6 +990,41 @@ main {
 }
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
 
+
+/* ── Clip shortcut link ─────────────────────────────────────────── */
+
+.clip-shortcut {
+  font-size: 12px;
+  color: var(--gold);
+  text-decoration: none;
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.clip-shortcut:hover {
+  background: rgba(196,150,59,0.1);
+}
+
+/* ── Video size presets ────────────────────────────────────────── */
+
+.video-size-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.video-size-btn.active {
+  background: var(--gold);
+  color: #0d0d0d;
+  border-color: var(--gold);
+  font-weight: 600;
+}
+
 @media (max-width: 480px) {
 
   /* Header */
