@@ -1178,6 +1178,21 @@ main {
 
 /* ── Responsive ────────────────────────────────────────────────────── */
 
+
+/* ── Long-press animation (frame strip, mobile) ──────────────────── */
+
+@keyframes long-press-pulse {
+  0%   { box-shadow: 0 0 0 rgba(196,150,59,0); transform: scale(1); }
+  50%  { box-shadow: 0 0 14px rgba(196,150,59,0.6); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 rgba(196,150,59,0); transform: scale(1); }
+}
+
+.frame-thumb.long-press-active {
+  animation: long-press-pulse 0.5s ease-in-out;
+  border-color: var(--gold);
+  z-index: 2;
+}
+
 @media (max-width: 768px) {
   .header-inner {
     flex-direction: column;

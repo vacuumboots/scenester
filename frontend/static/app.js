@@ -697,23 +697,23 @@ function buildFrameStrip(mediaId, durationS) {
   }
 }
 
-// Click: set start (normal) or end (shift+click).
-// Drag: slides the entire range, maintaining current clip duration.
+// Click/tap: set start. Long-press (mobile): set end. Drag: slide range.
+// Desktop: shift+click also sets end.
 var _stripDragActive = false;
 var _stripDidMove = false;
 var _stripClickTime = null;
 var _stripDragDuration = 0;   // clip duration when drag started
+var _stripLongPressTimer = null;
+var _stripLongPressFired = false;
 
 function initStripDrag() {
   if (!dom.frameStripInner) return;
 
-  dom.frameStripInner.addEventListener("mousedown", function(e) {
-    var thumb = e.target.closest && e.target.closest(".frame-thumb");
-    if (!thumb) return;
-    e.preventDefault();
-
+  // Shared drag-start logic — called by both mousedown and touchstart.
+  function _startStripDrag(clientX, thumb, isTouch) {
     _stripDragActive = false;
     _stripDidMove = false;
+    _stripLongPressFired = false;
     _stripClickTime = parseInt(thumb.getAttribute("data-time"));
     _stripDragDuration = _rangeLocked ? _lockedDuration : (_sliderEnd - _sliderStart);
 
@@ -722,16 +722,51 @@ function initStripDrag() {
     var stripLeft = stripRect.left;
     var stripWidth = stripRect.width;
 
-    // Immediate seek on mousedown for responsive feel
+    // Immediate seek for responsive feel
     seekVideoTo(_stripClickTime);
+
+    // On touch: start long-press timer for "set end" gesture
+    if (isTouch) {
+      if (_stripLongPressTimer) clearTimeout(_stripLongPressTimer);
+      thumb.classList.add("long-press-active");
+      _stripLongPressTimer = setTimeout(function() {
+        _stripLongPressFired = true;
+        thumb.classList.remove("long-press-active");
+        // Long-press = set end (like shift+click on desktop)
+        if (_rangeLocked) {
+          setSliderEnd(_stripClickTime);
+          setSliderStart(Math.max(0, _stripClickTime - _lockedDuration));
+        } else {
+          setSliderEnd(_stripClickTime);
+        }
+        seekVideoTo(_sliderStart);
+        updateStripRange();
+        if (dom.clipStatus) {
+          var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
+          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
+        }
+      }, 500);
+    }
 
     function onMove(ev) {
       if (_handleDrag) return;
+      var cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+
+      // Cancel long-press if finger moved significantly
+      if (isTouch && _stripLongPressTimer) {
+        var dx = Math.abs(cx - clientX);
+        if (dx > 10) {
+          clearTimeout(_stripLongPressTimer);
+          _stripLongPressTimer = null;
+          thumb.classList.remove("long-press-active");
+        }
+      }
+
       _stripDidMove = true;
       _stripDragActive = true;
 
-      // Continuous time from mouse position (no snapping to thumbs)
-      var pct = Math.max(0, Math.min(1, (ev.clientX - stripLeft) / stripWidth));
+      // Continuous time from cursor position (no snapping to thumbs)
+      var pct = Math.max(0, Math.min(1, (cx - stripLeft) / stripWidth));
       var pos = pct * state.mediaDuration;
 
       // Slide the range so its center follows the cursor
@@ -739,11 +774,9 @@ function initStripDrag() {
       var newStart = Math.max(0, pos - halfDur);
       var newEnd = Math.min(state.mediaDuration, pos + halfDur);
 
-      // If clamped at left edge, pin start to 0
       if (newStart === 0 && pos < halfDur) {
         newEnd = Math.min(state.mediaDuration, _stripDragDuration);
       }
-      // If clamped at right edge, pin end to media duration
       if (newEnd === state.mediaDuration && pos + halfDur > state.mediaDuration) {
         newStart = Math.max(0, state.mediaDuration - _stripDragDuration);
       }
@@ -755,8 +788,17 @@ function initStripDrag() {
     }
 
     function onUp(ev) {
+      // Clean up long-press timer
+      if (_stripLongPressTimer) {
+        clearTimeout(_stripLongPressTimer);
+        _stripLongPressTimer = null;
+        thumb.classList.remove("long-press-active");
+      }
+
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onUp);
 
       if (_stripDragActive) {
         seekVideoTo(_sliderStart);
@@ -764,11 +806,11 @@ function initStripDrag() {
           var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
           dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
         }
-      } else if (!_stripDidMove) {
-        // It was a click, not a drag
+      } else if (!_stripDidMove && !_stripLongPressFired) {
+        // Tap (touch) or click (mouse) — set start
         if (ev && ev.shiftKey) {
+          // Desktop shift+click = set end
           if (_rangeLocked) {
-            // Locked shift+click: set end to thumb time, slide start to maintain duration
             setSliderEnd(_stripClickTime);
             setSliderStart(Math.max(0, _stripClickTime - _lockedDuration));
           } else {
@@ -776,8 +818,8 @@ function initStripDrag() {
           }
           seekVideoTo(_sliderStart);
         } else {
+          // Tap / normal click = set start
           if (_rangeLocked) {
-            // Locked click: slide the entire window to center on thumb time
             var ns = Math.max(0, _stripClickTime);
             if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
             setSliderStart(ns);
@@ -796,11 +838,27 @@ function initStripDrag() {
       _stripDragActive = false;
       _stripDidMove = false;
       _stripClickTime = null;
+      _stripLongPressFired = false;
     }
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchmove", onMove);
+    document.addEventListener("touchend", onUp);
+  }
+
+  dom.frameStripInner.addEventListener("mousedown", function(e) {
+    var thumb = e.target.closest && e.target.closest(".frame-thumb");
+    if (!thumb) return;
+    e.preventDefault();
+    _startStripDrag(e.clientX, thumb, false);
   });
+
+  dom.frameStripInner.addEventListener("touchstart", function(e) {
+    var thumb = e.target.closest && e.target.closest(".frame-thumb");
+    if (!thumb) return;
+    _startStripDrag(e.touches[0].clientX, thumb, true);
+  }, { passive: true });
 }
 
 // Find the thumb nearest to a given clientX coordinate
