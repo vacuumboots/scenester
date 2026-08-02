@@ -162,10 +162,20 @@
         <div class="range-bar-playhead" id="range-bar-playhead" title="Current preview position"></div>
       </div>
 
+      <div class="fine-tune-row">
+        <div class="fine-tune-group">
+          <span class="fine-tune-label">Start</span>
+          <input type="range" class="fine-tune-slider" id="fine-tune-start" min="0" max="100" value="0" step="1" title="Fine-tune clip start time">
+          <span class="fine-tune-value" id="fine-tune-start-val">0:00</span>
+        </div>
+        <div class="fine-tune-group">
+          <input type="range" class="fine-tune-slider" id="fine-tune-end" min="0" max="100" value="0" step="1" title="Fine-tune clip end time">
+          <span class="fine-tune-value" id="fine-tune-end-val">0:00</span>
+          <span class="fine-tune-label">End</span>
+        </div>
+      </div>
+
       <div class="preset-buttons">
-        <button class="btn btn-small" onclick="handlePreset('shift-start',-10)">-10s</button>
-        <button class="btn btn-small" onclick="handlePreset('shift-start',10)">+10s</button>
-        <span class="preset-sep"></span>
         <button class="btn btn-small preset-duration-btn" data-duration="5" onclick="handlePreset('set-duration',5)">5s</button>
         <button class="btn btn-small preset-duration-btn" data-duration="10" onclick="handlePreset('set-duration',10)">10s</button>
         <button class="btn btn-small preset-duration-btn" data-duration="15" onclick="handlePreset('set-duration',15)">15s</button>
@@ -179,6 +189,20 @@
       <button class="btn btn-primary btn-download" id="btn-download-clip" disabled>
         &#11015; Download Clip
       </button>
+      <div class="social-toggles" id="social-toggles" style="display:none">
+        <button class="btn btn-small toggle-btn" id="btn-captions" onclick="toggleCaptions()" title="Burn word-by-word captions from subtitle file">
+          💬 Captions
+        </button>
+        <button class="btn btn-small toggle-btn caption-option" id="btn-caption-color" onclick="toggleCaptionColor()" title="Caption font color: white or yellow" style="display:none">
+          🎨 White
+        </button>
+        <button class="btn btn-small toggle-btn caption-option" id="btn-caption-placement" onclick="toggleCaptionPosition()" title="Caption placement: bottom or middle of frame" style="display:none">
+          📍 Bottom
+        </button>
+        <button class="btn btn-small toggle-btn" id="btn-vertical" onclick="toggleVertical()" title="Crop to vertical 9:16 for TikTok/Reels/Shorts">
+          📱 Vertical
+        </button>
+      </div>
       <div class="clip-progress" id="clip-progress" style="display:none">
         <div class="progress-bar">
           <div class="progress-fill" id="clip-progress-fill"></div>

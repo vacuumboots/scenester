@@ -923,6 +923,72 @@ main {
   font-weight: 600;
 }
 
+/* ── Fine-tune sliders ─────────────────────────────────────────────── */
+
+.fine-tune-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.fine-tune-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fine-tune-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 28px;
+}
+
+.fine-tune-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 140px;
+  height: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.fine-tune-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #0d0d0d;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(196,150,59,0.35);
+}
+
+.fine-tune-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #0d0d0d;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(196,150,59,0.35);
+}
+
+.fine-tune-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  min-width: 36px;
+  text-align: center;
+}
+
 /* ── Progress Bar ──────────────────────────────────────────────────── */
 
 .progress-bar {
@@ -974,6 +1040,46 @@ main {
   color: var(--text-muted);
   max-width: 400px;
   margin: 0 auto;
+}
+
+/* ── Social media toggles ──────────────────────────────────────────── */
+
+.social-toggles {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.toggle-btn {
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  font-size: 13px;
+  padding: 6px 14px;
+}
+
+.toggle-btn.active {
+  background: var(--gold);
+  color: #0d0d0d;
+  border-color: var(--gold);
+  font-weight: 600;
+}
+
+.toggle-btn:not(.active) {
+  opacity: 0.5;
+}
+
+.toggle-btn:not(.active):hover {
+  opacity: 0.8;
+}
+
+.caption-option {
+  font-size: 12px;
+  padding: 5px 10px;
+  opacity: 0.6;
+}
+
+.caption-option.active {
+  opacity: 1;
 }
 
 /* ── Clip Gallery ─────────────────────────────────────────────────── */

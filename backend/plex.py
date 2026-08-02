@@ -190,6 +190,48 @@ async def check_pin(pin_id: int) -> dict:
 
 # ── Path translation ──────────────────────────────────────────────────────
 
+def _find_subtitle_path(file_path: str) -> str | None:
+    """Find an .srt subtitle file alongside the media file.
+
+    Looks for .srt files in the same directory. Prefers English (.en.srt),
+    falls back to any .srt file.
+    """
+    if not file_path or not os.path.exists(file_path):
+        return None
+    media_dir = os.path.dirname(file_path)
+    media_stem = os.path.splitext(os.path.basename(file_path))[0]
+
+    candidates: list[str] = []
+    try:
+        for entry in os.listdir(media_dir):
+            if not entry.lower().endswith(".srt"):
+                continue
+            full = os.path.join(media_dir, entry)
+            if not os.path.isfile(full):
+                continue
+            candidates.append(full)
+    except OSError:
+        return None
+
+    if not candidates:
+        return None
+
+    # Prefer English subtitles
+    for c in candidates:
+        basename = os.path.basename(c).lower()
+        if ".en." in basename or basename.endswith(".en.srt"):
+            return c
+
+    # Prefer file matching the media stem
+    for c in candidates:
+        sub_stem = os.path.splitext(os.path.basename(c))[0]
+        if sub_stem.startswith(media_stem):
+            return c
+
+    # Fall back to first .srt found
+    return candidates[0]
+
+
 def _translate_path(mc: dict) -> str:
     """Convert Plex internal path to container bind-mount path.
 
@@ -295,6 +337,7 @@ async def get_metadata(media_id: int) -> dict:
         "media_id": int(mc.get("ratingKey", 0)),
         "duration": mc.get("duration", 0),       # ms
         "file_path": _translate_path(mc),
+        "subtitle_path": _find_subtitle_path(_translate_path(mc)),
         "thumb": mc.get("thumb"),
         "year": mc.get("year"),
         "summary": mc.get("summary", ""),

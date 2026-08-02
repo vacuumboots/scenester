@@ -77,6 +77,12 @@ function getDom() {
     clipGallery:     qs("#clip-gallery"),
     clipGalleryGrid: qs("#clip-gallery-grid"),
     clipCount:       qs("#clip-count"),
+    // Social toggles
+    socialToggles: qs("#social-toggles"),
+    btnCaptions:   qs("#btn-captions"),
+    btnCaptionColor: qs("#btn-caption-color"),
+    btnCaptionPlacement: qs("#btn-caption-placement"),
+    btnVertical:   qs("#btn-vertical"),
   };
 }
 
@@ -90,6 +96,17 @@ var _sliderEnd = 139;
 // slides the entire range as a unit, maintaining _lockedDuration.
 var _rangeLocked = false;
 var _lockedDuration = 30;
+
+// Social media options
+var _captionsEnabled = false;
+var _verticalEnabled = false;
+var _captionColor = "white";        // "white" or "yellow"
+var _captionPosition = "bottom";    // "bottom" or "middle"
+
+// Fine-tune sliders — ±30s window for precise handle positioning
+var _fineTuneStartActive = false;
+var _fineTuneEndActive = false;
+var _FINE_TUNE_WINDOW = 30;
 
 // ── Formatting ─────────────────────────────────────────────────────────
 
@@ -322,6 +339,7 @@ function showDetailView() {
   updateRangeBar();
   updateDownloadButton();
   updateStripRange();
+  updateSocialToggles();
 
   // Reset lock state for new item
   _rangeLocked = false;
@@ -1017,6 +1035,7 @@ function updateTimeDisplay() {
   }
 
   updateDownloadButton();
+  updateFineTuneSliders();
 }
 
 function setSliderStart(t) {
@@ -1044,8 +1063,95 @@ function updateDownloadButton() {
     dom.btnDownload.textContent = "⚠ Set a clip range";
   } else {
     dom.btnDownload.disabled = false;
-    dom.btnDownload.textContent = "⬇ Download Clip";
+    var label = "⬇ Download Clip";
+    var parts = [];
+    if (_captionsEnabled) {
+      var capDetails = "captions";
+      if (_captionColor !== "white" || _captionPosition !== "bottom") {
+        var opts = [];
+        if (_captionColor !== "white") opts.push(_captionColor);
+        if (_captionPosition !== "bottom") opts.push(_captionPosition);
+        capDetails += " (" + opts.join(", ") + ")";
+      }
+      parts.push(capDetails);
+    }
+    if (_verticalEnabled) parts.push("vertical");
+    if (parts.length) label = "⬇ Download Clip (" + parts.join(" + ") + ")";
+    dom.btnDownload.textContent = label;
   }
+}
+
+// ── Fine-tune sliders ────────────────────────────────────────────────────
+
+function initFineTuneSliders() {
+  var ss = document.getElementById("fine-tune-start");
+  var es = document.getElementById("fine-tune-end");
+  if (!ss || !es) return;
+
+  ss.addEventListener("input", function () {
+    _fineTuneStartActive = true;
+    var v = parseFloat(this.value);
+    setSliderStart(Math.min(_sliderEnd - 1, v));
+    seekVideoTo(_sliderStart);
+    _updateFineTuneStartVal();
+  });
+  ss.addEventListener("change", function () {
+    _fineTuneStartActive = false;
+    _updateFineTuneStartRange();
+  });
+
+  es.addEventListener("input", function () {
+    _fineTuneEndActive = true;
+    var v = parseFloat(this.value);
+    setSliderEnd(Math.max(_sliderStart + 1, v));
+    seekVideoTo(_sliderEnd);
+    _updateFineTuneEndVal();
+  });
+  es.addEventListener("change", function () {
+    _fineTuneEndActive = false;
+    _updateFineTuneEndRange();
+  });
+}
+
+function _updateFineTuneStartRange() {
+  if (_fineTuneStartActive) return;
+  var s = document.getElementById("fine-tune-start");
+  if (!s) return;
+  var dur = state.mediaDuration || 99999;
+  var lo = Math.max(0, _sliderStart - _FINE_TUNE_WINDOW);
+  var hi = Math.min(dur, _sliderStart + _FINE_TUNE_WINDOW);
+  s.min = lo;
+  s.max = hi;
+  s.value = _sliderStart;
+  _updateFineTuneStartVal();
+}
+
+function _updateFineTuneEndRange() {
+  if (_fineTuneEndActive) return;
+  var s = document.getElementById("fine-tune-end");
+  if (!s) return;
+  var dur = state.mediaDuration || 99999;
+  var lo = Math.max(0, _sliderEnd - _FINE_TUNE_WINDOW);
+  var hi = Math.min(dur, _sliderEnd + _FINE_TUNE_WINDOW);
+  s.min = lo;
+  s.max = hi;
+  s.value = _sliderEnd;
+  _updateFineTuneEndVal();
+}
+
+function _updateFineTuneStartVal() {
+  var el = document.getElementById("fine-tune-start-val");
+  if (el) el.textContent = fmtTime(_sliderStart);
+}
+
+function _updateFineTuneEndVal() {
+  var el = document.getElementById("fine-tune-end-val");
+  if (el) el.textContent = fmtTime(_sliderEnd);
+}
+
+function updateFineTuneSliders() {
+  _updateFineTuneStartRange();
+  _updateFineTuneEndRange();
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
@@ -1063,6 +1169,16 @@ function handlePreset(action, value) {
       setSliderEnd(Math.min(state.mediaDuration, ns + Math.max(1, dur)));
     }
     seekVideoTo(_sliderStart);
+  } else if (action === "shift-end") {
+    var ne = Math.min(state.mediaDuration, _sliderEnd + value);
+    if (_rangeLocked) {
+      // Locked: slide the entire window
+      setSliderEnd(ne);
+      setSliderStart(Math.max(0, ne - _lockedDuration));
+    } else {
+      setSliderEnd(Math.max(_sliderStart + 1, ne));
+    }
+    seekVideoTo(_sliderEnd);
   } else if (action === "set-duration") {
     _rangeLocked = true;
     _lockedDuration = value;
@@ -1084,6 +1200,79 @@ function updatePresetButtons() {
   }
   var freeBtn = document.getElementById("btn-preset-free");
   if (freeBtn) freeBtn.classList.toggle("active", !_rangeLocked);
+}
+
+// ── Social media toggles ────────────────────────────────────────────────
+
+function toggleCaptions() {
+  _captionsEnabled = !_captionsEnabled;
+  updateToggleButtons();
+}
+
+function toggleVertical() {
+  _verticalEnabled = !_verticalEnabled;
+  updateToggleButtons();
+}
+
+function toggleCaptionColor() {
+  _captionColor = _captionColor === "white" ? "yellow" : "white";
+  updateToggleButtons();
+}
+
+function toggleCaptionPosition() {
+  _captionPosition = _captionPosition === "bottom" ? "middle" : "bottom";
+  updateToggleButtons();
+}
+
+function updateToggleButtons() {
+  if (dom.btnCaptions) {
+    dom.btnCaptions.classList.toggle("active", _captionsEnabled);
+    dom.btnCaptions.textContent = _captionsEnabled ? "💬 Captions ON" : "💬 Captions";
+  }
+  if (dom.btnCaptionColor) {
+    var showColor = _captionsEnabled;
+    dom.btnCaptionColor.style.display = showColor ? "" : "none";
+    if (showColor) {
+      dom.btnCaptionColor.textContent = _captionColor === "white" ? "🎨 White" : "🎨 Yellow";
+      dom.btnCaptionColor.classList.toggle("active", _captionColor !== "white");
+    }
+  }
+  if (dom.btnCaptionPlacement) {
+    var showPlace = _captionsEnabled;
+    dom.btnCaptionPlacement.style.display = showPlace ? "" : "none";
+    if (showPlace) {
+      dom.btnCaptionPlacement.textContent = _captionPosition === "bottom" ? "📍 Bottom" : "📍 Middle";
+      dom.btnCaptionPlacement.classList.toggle("active", _captionPosition !== "bottom");
+    }
+  }
+  if (dom.btnVertical) {
+    dom.btnVertical.classList.toggle("active", _verticalEnabled);
+    dom.btnVertical.textContent = _verticalEnabled ? "📱 Vertical ON" : "📱 Vertical";
+  }
+  updateDownloadButton();
+  updateFineTuneSliders();
+}
+
+function updateSocialToggles() {
+  if (!dom.socialToggles) return;
+  var item = state.currentItem;
+  // Show toggles when a media item is selected
+  if (item && dom.detailView && dom.detailView.style.display !== "none") {
+    dom.socialToggles.style.display = "flex";
+    // Captions toggle only if subtitle file exists
+    if (dom.btnCaptions) {
+      if (item.subtitle_path) {
+        dom.btnCaptions.style.display = "";
+        dom.btnCaptions.title = "Burn word-by-word captions from subtitle file";
+      } else {
+        dom.btnCaptions.style.display = "none";
+        _captionsEnabled = false;
+      }
+    }
+  } else {
+    dom.socialToggles.style.display = "none";
+  }
+  updateToggleButtons();
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────
@@ -1123,7 +1312,7 @@ async function downloadClip() {
     var startResp = await fetch("api/clip", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ media_id: mediaId, start_sec: startSec, end_sec: endSec }),
+      body: JSON.stringify({ media_id: mediaId, start_sec: startSec, end_sec: endSec, captions: _captionsEnabled, vertical: _verticalEnabled, caption_color: _captionColor, caption_position: _captionPosition }),
     });
 
     if (!startResp.ok) {
@@ -1303,6 +1492,9 @@ function init() {
 
   // Range bar drag handles
   initRangeBarHandles();
+
+  // Fine-tune sliders
+  initFineTuneSliders();
 
   // Play/pause button state tracking
   initPlayStateTracking();

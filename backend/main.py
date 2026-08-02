@@ -50,6 +50,112 @@ def _clip_basename(meta: dict, start_sec: float, end_sec: float) -> str:
     end = int(end_sec)
     return f"{prefix}_{start}-{end}"
 
+# ── Subtitle utilities ────────────────────────────────────────────────────
+
+_SRT_RE = re.compile(
+    r"(\d+)\s*\n"                      # index
+    r"(\d{2}):(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*"   # start timestamp
+    r"(\d{2}):(\d{2}):(\d{2})[.,](\d{3})\s*\n"       # end timestamp
+    r"((?:.+\n?)+?)(?=\n\n|\n*$)",                    # text (one or more lines)
+    re.MULTILINE,
+)
+
+_STRIP_HTML = re.compile(r"<[^>]+>")
+
+
+def _srt_timestamp(h: str, m: str, s: str, ms: str) -> float:
+    """Convert SRT timestamp components to seconds."""
+    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+
+def _fmt_srt_timestamp(total_sec: float) -> str:
+    """Format seconds as an SRT timestamp: HH:MM:SS,mmm."""
+    h = int(total_sec // 3600)
+    m = int((total_sec % 3600) // 60)
+    s = int(total_sec % 60)
+    ms = int((total_sec % 1) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def parse_srt(srt_path: str) -> list[dict]:
+    """Parse an .srt file into a list of {start, end, text} dicts.
+
+    start/end are in seconds. Blank lines and HTML tags are stripped.
+    """
+    try:
+        content = Path(srt_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        try:
+            content = Path(srt_path).read_text(encoding="latin-1")
+        except OSError:
+            return []
+
+    entries: list[dict] = []
+    for match in _SRT_RE.finditer(content):
+        start = _srt_timestamp(match.group(2), match.group(3), match.group(4), match.group(5))
+        end = _srt_timestamp(match.group(6), match.group(7), match.group(8), match.group(9))
+        text = match.group(10).strip()
+        # Strip HTML tags, collapse whitespace
+        text = _STRIP_HTML.sub("", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            entries.append({"start": start, "end": end, "text": text})
+    return entries
+
+
+def chunk_srt_for_social(srt_entries: list[dict], words_per_chunk: int = 3) -> str:
+    """Convert parsed SRT entries into a new SRT with word-chunked timing.
+
+    Each subtitle entry is split into groups of `words_per_chunk` words.
+    The entry's time span is distributed evenly across the word groups,
+    creating a dynamic word-by-word caption effect when burned in.
+    """
+    chunks: list[dict] = []
+    for entry in srt_entries:
+        words = entry["text"].split()
+        if not words:
+            continue
+
+        total_words = len(words)
+        duration = entry["end"] - entry["start"]
+
+        for i in range(0, total_words, words_per_chunk):
+            group = words[i : i + words_per_chunk]
+            # Distribute time proportionally
+            frac_start = i / total_words
+            frac_end = min((i + len(group)) / total_words, 1.0)
+            chunk_start = entry["start"] + frac_start * duration
+            chunk_end = entry["start"] + frac_end * duration
+
+            # Ensure minimum display time of 0.4s per chunk for readability
+            if chunk_end - chunk_start < 0.4:
+                chunk_end = chunk_start + 0.4
+                if chunk_end > entry["end"]:
+                    chunk_end = entry["end"]
+                    chunk_start = max(entry["start"], chunk_end - 0.4)
+
+            chunks.append({
+                "start": chunk_start,
+                "end": chunk_end,
+                "text": " ".join(group).upper(),  # uppercase for impact
+            })
+
+    # Sort by start time (some chunks may overlap slightly)
+    chunks.sort(key=lambda c: c["start"])
+
+    # Build new SRT
+    lines: list[str] = []
+    for idx, c in enumerate(chunks, 1):
+        lines.append(str(idx))
+        lines.append(
+            f"{_fmt_srt_timestamp(c['start'])} --> {_fmt_srt_timestamp(c['end'])}"
+        )
+        lines.append(c["text"])
+        lines.append("")  # blank line separator
+
+    return "\n".join(lines)
+
+
 # ── Paths ────────────────────────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent / "static"
 CLIPS_DIR = Path("/tmp/clips")
@@ -61,6 +167,11 @@ class ClipRequest(BaseModel):
     media_id: int
     start_sec: float
     end_sec: float
+    captions: bool = False
+    vertical: bool = False
+    words_per_chunk: int = 3
+    caption_color: str = "white"   # "white" or "yellow"
+    caption_position: str = "bottom"  # "bottom" or "middle"
 
 
 # ── Static frontend ──────────────────────────────────────────────────────
@@ -255,13 +366,81 @@ async def stream_media(media_id: int):
 clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 
 
-async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, duration: float, meta: dict | None = None):
+async def _run_ffmpeg_clip(
+    filename: str,
+    file_path: str,
+    start_sec: float,
+    duration: float,
+    meta: dict | None = None,
+    subtitle_path: str | None = None,
+    vertical: bool = False,
+    words_per_chunk: int = 3,
+    caption_color: str = "white",
+    caption_position: str = "bottom",
+):
     """Run ffmpeg to generate a clip, updating progress in clip_jobs.
 
-    Optionally embeds metadata (title, show, season, episode) into the output MP4.
+    Optionally embeds metadata, burns in word-chunked captions from an SRT
+    file, and crops to vertical 9:16 for social media.
     """
     output_path = CLIPS_DIR / filename
     clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
+
+    tmp_srt: Path | None = None
+    vf_chain: list[str] = []
+
+    # ── Vertical 9:16 crop ──────────────────────────────────────────
+    if vertical:
+        # Crop center 9:16 portion, then scale to 1080x1920
+        vf_chain.append("crop=ih*9/16:ih:(iw-ow)/2:0,scale=1080:1920")
+    else:
+        # Standard horizontal: scale width to 1920, keep aspect ratio
+        vf_chain.append("scale=1920:-2")
+
+    # ── Caption burning from SRT ────────────────────────────────────
+    if subtitle_path and os.path.isfile(subtitle_path):
+        entries = parse_srt(subtitle_path)
+        if entries:
+            # Filter to entries overlapping the clip range, offset to clip time
+            clip_start = start_sec
+            clip_end = start_sec + duration
+            relevant: list[dict] = []
+            for e in entries:
+                if e["end"] <= clip_start or e["start"] >= clip_end:
+                    continue
+                # Clip and offset
+                s = max(e["start"], clip_start) - clip_start
+                e_end = min(e["end"], clip_end) - clip_start
+                if e_end - s >= 0.1:
+                    relevant.append({"start": s, "end": e_end, "text": e["text"]})
+
+            if relevant:
+                chunked = chunk_srt_for_social(relevant, words_per_chunk=words_per_chunk)
+                tmp_srt = CLIPS_DIR / f".caption_{filename}.srt"
+                tmp_srt.write_text(chunked, encoding="utf-8")
+
+                # Bold, high-contrast style for social media
+                primary = "&H00FFFFFF" if caption_color == "white" else "&H0000FFFF"
+                if caption_position == "middle":
+                    alignment = "5"       # middle-center
+                    margin = ""
+                else:
+                    alignment = "2"       # bottom-center (default)
+                    margin = "MarginV=60,"
+                style = (
+                    "FontName=Arial Bold,"
+                    "FontSize=28,"
+                    f"PrimaryColour={primary},"
+                    "OutlineColour=&H00000000,"
+                    "Outline=3,"
+                    "Shadow=1,"
+                    "BorderStyle=1,"
+                    f"{margin}"
+                    f"Alignment={alignment}"
+                )
+                vf_chain.append(f"subtitles={tmp_srt}:force_style='{style}'")
+
+    vf = ",".join(vf_chain) if vf_chain else "scale=1920:-2"
 
     # Build metadata for MP4 embedding
     meta_args = []
@@ -283,7 +462,7 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
         .input(file_path, ss=start_sec, t=duration)
         .output(
             str(output_path),
-            vf="scale=1920:-2",
+            vf=vf,
             vcodec="libx264",
             preset="fast",
             crf=20,
@@ -294,14 +473,13 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
         .compile()
     )
     # -metadata must be placed BEFORE the output file path.
-    # Find the output path and insert meta_args right before it.
     cmd = list(stream)
     if meta_args:
         try:
             out_idx = cmd.index(str(output_path))
-            cmd[out_idx:out_idx] = meta_args  # insert before output
+            cmd[out_idx:out_idx] = meta_args
         except ValueError:
-            cmd.extend(meta_args)  # fallback
+            cmd.extend(meta_args)
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -330,6 +508,13 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
 
     await proc.wait()
 
+    # Clean up temp SRT
+    if tmp_srt and tmp_srt.exists():
+        try:
+            tmp_srt.unlink()
+        except OSError:
+            pass
+
     if proc.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
         clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
     else:
@@ -338,7 +523,10 @@ async def _run_ffmpeg_clip(filename: str, file_path: str, start_sec: float, dura
 
 @app.post("/api/clip")
 async def create_clip(req: ClipRequest):
-    """Start generating a frame-accurate clip via ffmpeg re-encode (async, poll status)."""
+    """Start generating a frame-accurate clip via ffmpeg re-encode (async, poll status).
+
+    Optional: captions (burn in word-chunked subtitles), vertical (9:16 crop).
+    """
     duration = req.end_sec - req.start_sec
     if duration <= 0:
         raise HTTPException(status_code=400, detail="End must be after start")
@@ -354,6 +542,12 @@ async def create_clip(req: ClipRequest):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Media file not found on disk")
 
+    subtitle_path = None
+    if req.captions:
+        subtitle_path = meta.get("subtitle_path")
+        if not subtitle_path or not os.path.isfile(subtitle_path):
+            raise HTTPException(status_code=400, detail="No subtitle file found for this media")
+
     filename = f"{_clip_basename(meta, req.start_sec, req.end_sec)}.mp4"
 
     # Check if already running
@@ -367,7 +561,14 @@ async def create_clip(req: ClipRequest):
         return {"status": "ready", "filename": filename}
 
     # Start generation in background
-    asyncio.create_task(_run_ffmpeg_clip(filename, file_path, req.start_sec, duration, meta))
+    asyncio.create_task(_run_ffmpeg_clip(
+        filename, file_path, req.start_sec, duration, meta,
+        subtitle_path=subtitle_path,
+        vertical=req.vertical,
+        words_per_chunk=req.words_per_chunk,
+        caption_color=req.caption_color,
+        caption_position=req.caption_position,
+    ))
     return {"status": "started", "filename": filename, "duration": duration}
 
 
