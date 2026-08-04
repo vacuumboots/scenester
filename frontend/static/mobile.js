@@ -1,15 +1,15 @@
 /**
  * Cliparr — Mobile Interaction Module
  *
- * Two-thumb timeline scrubber, transport controls, fine-tune nudge,
- * preset chips, download flow, social toggle sync, and lifecycle hooks.
+ * Two-thumb timeline scrubber, fine-tune nudge, preset chips,
+ * download flow, social toggle sync, and lifecycle hooks.
  *
  * All functions use 'mob' or '_mob' prefix to avoid collisions with
  * app.js globals. References shared globals: _sliderStart, _sliderEnd,
  * state, dom, seekVideoTo, fmtTime, downloadClip, toggleCaptions,
  * toggleVertical, updateToggleButtons, updateSocialToggles.
  *
- * Loaded after app.js via <script src="static/mobile.js?v=15"></script>.
+ * Loaded after app.js via <script src="static/mobile.js?v=17"></script>.
  */
 
 // ── Module State ───────────────────────────────────────────────────────
@@ -37,12 +37,10 @@ var _mobTouchRect = null;
 
 // ── DOM helpers ────────────────────────────────────────────────────────
 
-/** Get the mobile video element (the second #preview-video in the DOM,
- *  inside .mob-video-container). Two elements share the same id in this
- *  codebase — the first (desktop) lives in #frame-preview, the second
- *  (mobile) in .mob-video-container. */
+/** Get the shared video element (single #preview-video used by both
+ *  desktop and mobile — CSS media queries position it differently). */
 function _mobVideo() {
-  return document.querySelector('.mob-video-container video[id="preview-video"]');
+  return document.getElementById('preview-video');
 }
 
 // ── Initialisation / Teardown ──────────────────────────────────────────
@@ -105,16 +103,6 @@ function initMobileDetail(item) {
   var capOpt = document.getElementById('mob-opt-captions');
   if (capOpt && item.subtitle_path) capOpt.style.display = '';
   else if (capOpt) capOpt.style.display = 'none';
-
-  // Wire video tap-to-play/pause overlay
-  var overlay = document.getElementById('mob-video-overlay');
-  if (overlay) {
-    overlay.addEventListener('click', mobTogglePlay);
-    overlay.addEventListener('touchend', function(e) {
-      e.preventDefault();
-      mobTogglePlay();
-    });
-  }
 
   // Wire social checkbox sync initial state
   _mobSyncSocialFromDesktop();
@@ -654,9 +642,9 @@ function _mobOnTimeUpdate() {
 // via function declarations above and are already globally available:
 //   initMobileDetail(item)    — called from app.js showDetailView()
 //   destroyMobileDetail()     — called from app.js goBack()/goHome()
-//   mobTogglePlay()           — onclick for play/pause button
 //   mobSkip(delta)            — onclick for ⏪ / ⏩ buttons
-//   mobNudgeActive(delta)     — onclick for fine-tune buttons
+//   mobNudgeStart(delta)      — onclick for Start fine-tune buttons
+//   mobNudgeEnd(delta)        — onclick for End fine-tune buttons
 //   mobPreset(duration)       — onclick for preset chips
 //   mobDownload()             — onclick for download button
 //   mobSyncSocialState()      — explicit sync hook

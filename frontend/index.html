@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=17">
+  <link rel="stylesheet" href="static/style.css?v=18">
 </head>
 <body>
 
@@ -119,10 +119,12 @@
       <span id="error-message"></span>
     </div>
 
+    <!-- Shared video player — positioned by CSS for desktop vs mobile -->
+    <video id="preview-video" preload="metadata" playsinline controls
+           class="preview-video-shared"></video>
+
     <!-- Preview -->
     <div id="frame-preview" style="display:none">
-      <video id="preview-video" preload="metadata" playsinline
-             style="width:100%; max-height:480px; background:#000; border-radius:10px;" controls></video>
 
       <!-- Mark Mode (desktop) — compact version -->
       <div class="mark-mode desktop-only" id="mark-mode">
@@ -244,11 +246,6 @@
 
     <!-- ── MOBILE bottom-sheet editor ────────────────────────────────── -->
     <div class="mobile-clip-editor mobile-only">
-      <!-- Video player — 60vh, native controls -->
-      <div class="mob-video-container">
-        <video id="preview-video" preload="metadata" playsinline controls
-               style="width:100%; display:block; background:#000; height:auto; max-height:60vh; object-fit:contain;"></video>
-      </div>
 
       <!-- Bottom sheet — slides up with all controls -->
       <div class="mob-sheet">
@@ -328,8 +325,8 @@
 
 </main>
 
-<script src="static/app.js?v=17"></script>
-<script src="static/mobile.js?v=17"></script>
+<script src="static/app.js?v=18"></script>
+<script src="static/mobile.js?v=18"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
