@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=13">
+  <link rel="stylesheet" href="static/style.css?v=14">
 </head>
 <body>
 
@@ -124,8 +124,8 @@
       <video id="preview-video" preload="metadata" playsinline
              style="width:100%; max-height:480px; background:#000; border-radius:10px;" controls></video>
 
-      <!-- Mark Mode — the video is the scrubber. No aiming, no dragging. -->
-      <div class="mark-mode" id="mark-mode">
+      <!-- Mark Mode (desktop) — compact version -->
+      <div class="mark-mode desktop-only" id="mark-mode">
         <div class="mark-buttons">
           <button class="btn btn-mark" id="btn-mark-start" onclick="markStart()">▶ Mark Start</button>
           <button class="btn btn-mark btn-mark-end" id="btn-mark-end" onclick="markEnd()">■ Mark End</button>
@@ -141,7 +141,7 @@
       <div id="preview-loading" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
         Loading preview...
       </div>
-      <div class="frame-time">
+      <div class="frame-time desktop-only">
         <span class="frame-time-label">Frame at</span>
         <span class="frame-time-value" id="frame-time-value">0:00</span>
         <span class="frame-time-sep">·</span>
@@ -157,14 +157,14 @@
       </div>
     </div>
 
-    <!-- Frame strip — the primary scrubber. Click=set start, Shift+click=set end, drag=select range -->
-    <div class="frame-strip" id="frame-strip" style="display:none">
+    <!-- Frame strip — desktop only -->
+    <div class="frame-strip desktop-only" id="frame-strip" style="display:none">
       <div class="strip-hint">Optional: tap a frame to move, drag to slide range</div>
       <div class="frame-strip-inner" id="frame-strip-inner"></div>
     </div>
 
-    <!-- Range bar — shows selected clip range on a timeline -->
-    <div class="scrubber-section">
+    <!-- DESKTOP scrubber section -->
+    <div class="scrubber-section desktop-only">
       <div class="scrubber-header">Clip Range</div>
 
       <div class="time-display">
@@ -175,7 +175,6 @@
         <span class="clip-duration" id="clip-duration">30s</span>
       </div>
 
-      <!-- Visual range bar (read-only, shows selected region) -->
       <div class="range-bar" id="range-bar">
         <div class="range-bar-fill" id="range-bar-fill"></div>
         <div class="range-bar-marker range-bar-marker-start" id="range-bar-marker-start" title="Drag to set clip start"></div>
@@ -242,11 +241,109 @@
       </div>
       <div class="clip-status" id="clip-status"></div>
     </div>
+
+    <!-- ── MOBILE clip editor ─────────────────────────────────────────── -->
+    <div class="mobile-clip-editor mobile-only">
+      <!-- Mark buttons — big, always visible -->
+      <div class="mobile-mark-buttons">
+        <button class="mobile-btn-mark" id="btn-mark-start-mob" onclick="markStart()">
+          <span class="mobile-mark-icon">▶</span>
+          <span class="mobile-mark-label">Set Start</span>
+        </button>
+        <button class="mobile-btn-mark mobile-btn-mark-end" id="btn-mark-end-mob" onclick="markEnd()">
+          <span class="mobile-mark-icon">■</span>
+          <span class="mobile-mark-label">Set End</span>
+        </button>
+      </div>
+
+      <!-- Time display -->
+      <div class="mobile-times">
+        <div class="mobile-time-box">
+          <span class="mobile-time-label">Start</span>
+          <span class="mobile-time-value" id="mobile-time-start">0:00</span>
+        </div>
+        <span class="mobile-time-arrow">→</span>
+        <div class="mobile-time-box">
+          <span class="mobile-time-label">End</span>
+          <span class="mobile-time-value" id="mobile-time-end">2:19</span>
+        </div>
+        <span class="mobile-clip-duration" id="mobile-clip-duration">139s</span>
+      </div>
+
+      <!-- Visual range indicator (non-interactive) -->
+      <div class="mobile-range-bar">
+        <div class="mobile-range-fill" id="mobile-range-fill"></div>
+        <div class="mobile-range-marker mobile-range-marker-start" id="mobile-range-marker-start"></div>
+        <div class="mobile-range-marker mobile-range-marker-end" id="mobile-range-marker-end"></div>
+      </div>
+
+      <!-- Frame-level precision nudge -->
+      <div class="mobile-nudge">
+        <div class="mobile-nudge-row">
+          <span class="mobile-nudge-label">Start</span>
+          <div class="mobile-nudge-btns">
+            <button class="mobile-btn-nudge" onclick="nudgeFrame(-0.04, true)">−1f</button>
+            <button class="mobile-btn-nudge" onclick="nudgeStart(-5)">−5s</button>
+            <button class="mobile-btn-nudge" onclick="nudgeStart(5)">+5s</button>
+            <button class="mobile-btn-nudge" onclick="nudgeFrame(0.04, true)">+1f</button>
+          </div>
+        </div>
+        <div class="mobile-nudge-row">
+          <span class="mobile-nudge-label">End</span>
+          <div class="mobile-nudge-btns">
+            <button class="mobile-btn-nudge" onclick="nudgeFrame(-0.04, false)">−1f</button>
+            <button class="mobile-btn-nudge" onclick="nudgeEnd(-5)">−5s</button>
+            <button class="mobile-btn-nudge" onclick="nudgeEnd(5)">+5s</button>
+            <button class="mobile-btn-nudge" onclick="nudgeFrame(0.04, false)">+1f</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Duration presets -->
+      <div class="mobile-presets">
+        <button class="mobile-preset-btn" data-dur="5" onclick="mobilePreset(5)">5s</button>
+        <button class="mobile-preset-btn" data-dur="10" onclick="mobilePreset(10)">10s</button>
+        <button class="mobile-preset-btn" data-dur="15" onclick="mobilePreset(15)">15s</button>
+        <button class="mobile-preset-btn" data-dur="30" onclick="mobilePreset(30)">30s</button>
+        <button class="mobile-preset-btn" data-dur="45" onclick="mobilePreset(45)">45s</button>
+        <button class="mobile-preset-btn" data-dur="60" onclick="mobilePreset(60)">60s</button>
+        <button class="mobile-preset-btn" data-dur="139" onclick="mobilePreset(139)" style="font-weight:700">139s</button>
+      </div>
+
+      <!-- Download button -->
+      <button class="mobile-download-btn" id="btn-download-mob" onclick="downloadClip()" disabled>
+        ⬇ Download Clip
+      </button>
+
+      <!-- Social toggles (collapsible) -->
+      <details class="mobile-options" id="mobile-options" style="display:none">
+        <summary class="mobile-options-summary">⚙ Options</summary>
+        <div class="mobile-options-body">
+          <label class="mobile-option" id="mob-opt-captions" style="display:none">
+            <input type="checkbox" onchange="toggleCaptions()" id="mob-chk-captions">
+            <span>💬 Burn captions</span>
+          </label>
+          <label class="mobile-option">
+            <input type="checkbox" onchange="toggleVertical()" id="mob-chk-vertical">
+            <span>📱 Vertical 9:16</span>
+          </label>
+        </div>
+      </details>
+
+      <!-- Progress + status (shared elements, moved here for mobile) -->
+      <div class="clip-progress" id="clip-progress-mob" style="display:none">
+        <div class="progress-bar">
+          <div class="progress-fill" id="clip-progress-fill-mob"></div>
+        </div>
+        <div class="progress-text" id="clip-progress-text-mob">Encoding clip...</div>
+      </div>
+      <div class="clip-status-mob" id="clip-status-mob"></div>
+    </div>
   </div>
 
 </main>
 
-<script src="static/app.js?v=13"></script>
+<script src="static/app.js?v=14"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");

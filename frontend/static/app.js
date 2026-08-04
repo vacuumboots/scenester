@@ -88,7 +88,7 @@ function getDom() {
 
 let dom;
 
-// Clip range state
+// Clip range state — float precision for frame-accurate seeking
 var _sliderStart = 0;
 var _sliderEnd = 139;
 
@@ -108,14 +108,21 @@ var _fineTuneStartActive = false;
 var _fineTuneEndActive = false;
 var _FINE_TUNE_WINDOW = 30;
 
+// Mobile detection
+var _isMobile = false;
+function isMobile() { return _isMobile; }
+
 // ── Formatting ─────────────────────────────────────────────────────────
 
-function fmtTime(seconds) {
+function fmtTime(seconds, precise) {
   if (seconds == null || isNaN(seconds)) return "0:00";
-  const s = Math.max(0, Math.floor(seconds));
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, "0")}`;
+  var s = Math.max(0, seconds);
+  var m = Math.floor(s / 60);
+  var sec = s % 60;
+  if (precise) {
+    return m + ":" + sec.toFixed(2).padStart(5, "0");
+  }
+  return m + ":" + String(Math.floor(sec)).padStart(2, "0");
 }
 
 function fmtDuration(ms) {
@@ -350,6 +357,10 @@ function showDetailView() {
   if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
 
   if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(durationS);
+  _setMobileStatus("Ready — tap Set Start when the moment begins");
+  // Clear mobile preset highlights
+  var mpb = document.querySelectorAll(".mobile-preset-btn");
+  for (var i = 0; i < mpb.length; i++) mpb[i].classList.remove("active");
 }
 
 function goBack() {
@@ -913,6 +924,7 @@ function updateRangeBar() {
   }
   if (dom.rangeBarMarkerStart) dom.rangeBarMarkerStart.style.left = pctStart + "%";
   if (dom.rangeBarMarkerEnd) dom.rangeBarMarkerEnd.style.left = pctEnd + "%";
+  _updateMobileRangeBar();
 }
 
 // ── Range bar drag handles ──────────────────────────────────────────
@@ -1084,18 +1096,19 @@ function updateTimeDisplay() {
 
   updateDownloadButton();
   updateFineTuneSliders();
+  _updateMobileTimes();
 }
 
 function setSliderStart(t) {
-  _sliderStart = Math.max(0, Math.min(state.mediaDuration, Math.floor(t)));
+  _sliderStart = Math.max(0, Math.min(state.mediaDuration, Math.round(t * 100) / 100));
   updateTimeDisplay();
   updateRangeBar();
   updateStripRange();
 }
 
 function setSliderEnd(t) {
-  _sliderEnd = Math.max(1, Math.min(state.mediaDuration, Math.floor(t)));
-  if (_sliderEnd <= _sliderStart) _sliderStart = Math.max(0, _sliderEnd - 1);
+  _sliderEnd = Math.max(0.01, Math.min(state.mediaDuration, Math.round(t * 100) / 100));
+  if (_sliderEnd <= _sliderStart) _sliderStart = Math.max(0, _sliderEnd - 0.01);
   updateTimeDisplay();
   updateRangeBar();
   updateStripRange();
@@ -1127,6 +1140,7 @@ function updateDownloadButton() {
     if (parts.length) label = "⬇ Download Clip (" + parts.join(" + ") + ")";
     dom.btnDownload.textContent = label;
   }
+  _updateMobileDownloadBtn();
 }
 
 // ── Fine-tune sliders ────────────────────────────────────────────────────
@@ -1213,27 +1227,37 @@ function updateFineTuneSliders() {
 function markStart() {
   var vid = dom.previewVideo;
   if (!vid || !isFinite(vid.currentTime)) return;
-  setSliderStart(Math.floor(vid.currentTime));
+  setSliderStart(vid.currentTime);
   // Keep playing — user will tap MARK END when the moment finishes.
-  if (dom.clipStatus) dom.clipStatus.textContent = "Start marked at " + fmtTime(_sliderStart) + " — keep playing, tap Mark End when it's over.";
-  // Visual feedback: highlight the start button briefly
+  var msg = "Start marked at " + fmtTime(_sliderStart, true) + " — keep playing, tap Mark End when it's over.";
+  if (dom.clipStatus) dom.clipStatus.textContent = msg;
+  _setMobileStatus(msg);
+  // Visual feedback: highlight the start button briefly (desktop + mobile)
   var b = document.getElementById("btn-mark-start");
   if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
+  var bm = document.getElementById("btn-mark-start-mob");
+  if (bm) { bm.classList.add("just-marked"); setTimeout(function(){ bm.classList.remove("just-marked"); }, 600); }
 }
 
 function markEnd() {
   var vid = dom.previewVideo;
   if (!vid || !isFinite(vid.currentTime)) return;
-  var t = Math.floor(vid.currentTime);
+  var t = vid.currentTime;
   if (t <= _sliderStart) {
-    if (dom.clipStatus) dom.clipStatus.textContent = "Mark End is before Start — let the video play a bit longer.";
+    var msg = "Mark End is before Start — let the video play a bit longer.";
+    if (dom.clipStatus) dom.clipStatus.textContent = msg;
+    _setMobileStatus(msg);
     return;
   }
   setSliderEnd(t);
   vid.pause();
-  if (dom.clipStatus) dom.clipStatus.textContent = "Clip ready: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + (_sliderEnd - _sliderStart) + "s).";
+  var msg = "Clip ready: " + fmtTime(_sliderStart, true) + " – " + fmtTime(_sliderEnd, true) + " (" + (_sliderEnd - _sliderStart).toFixed(1) + "s).";
+  if (dom.clipStatus) dom.clipStatus.textContent = msg;
+  _setMobileStatus(msg);
   var b = document.getElementById("btn-mark-end");
   if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
+  var bm = document.getElementById("btn-mark-end-mob");
+  if (bm) { bm.classList.add("just-marked"); setTimeout(function(){ bm.classList.remove("just-marked"); }, 600); }
   // No auto-loop — the video stays paused where the user ended it.
   // The ▶ Clip button previews the selection when the user asks for it.
 }
@@ -1246,6 +1270,93 @@ function nudgeStart(delta) {
 function nudgeEnd(delta) {
   setSliderEnd(_sliderEnd + delta);
   seekVideoTo(_sliderEnd);
+}
+
+// ── Frame-level nudge (mobile) ────────────────────────────────────────
+// delta is in seconds — ±0.04s ≈ 1 frame at 25fps
+
+function nudgeFrame(delta, isStart) {
+  if (isStart) {
+    setSliderStart(_sliderStart + delta);
+    seekVideoTo(_sliderStart);
+  } else {
+    setSliderEnd(_sliderEnd + delta);
+    seekVideoTo(_sliderEnd);
+  }
+}
+
+// ── Mobile preset: sets duration from current start ──────────────────
+
+function mobilePreset(duration) {
+  var ns = _sliderStart;
+  var ne = Math.min(state.mediaDuration, ns + duration);
+  setSliderStart(ns);
+  setSliderEnd(ne);
+  seekVideoTo(_sliderStart);
+  // Highlight the active preset
+  var btns = document.querySelectorAll(".mobile-preset-btn");
+  for (var i = 0; i < btns.length; i++) {
+    var d = parseInt(btns[i].getAttribute("data-dur"));
+    btns[i].classList.toggle("active", d === duration);
+  }
+}
+
+// ── Mobile DOM helpers ────────────────────────────────────────────────
+
+function _setMobileStatus(msg) {
+  var el = document.getElementById("clip-status-mob");
+  if (el) el.textContent = msg;
+}
+
+function _updateMobileTimes() {
+  var s = document.getElementById("mobile-time-start");
+  var e = document.getElementById("mobile-time-end");
+  var d = document.getElementById("mobile-clip-duration");
+  if (s) s.textContent = fmtTime(_sliderStart, _isMobile);
+  if (e) e.textContent = fmtTime(_sliderEnd, _isMobile);
+  if (d) {
+    var dur = _sliderEnd - _sliderStart;
+    d.textContent = dur >= 1 ? Math.round(dur) + "s" : dur.toFixed(1) + "s";
+  }
+}
+
+function _updateMobileRangeBar() {
+  var fill = document.getElementById("mobile-range-fill");
+  var ms = document.getElementById("mobile-range-marker-start");
+  var me = document.getElementById("mobile-range-marker-end");
+  if (!fill && !ms && !me) return;
+  var pctStart = sliderGetPct(_sliderStart);
+  var pctEnd = sliderGetPct(_sliderEnd);
+  if (fill) { fill.style.left = pctStart + "%"; fill.style.width = (pctEnd - pctStart) + "%"; }
+  if (ms) ms.style.left = pctStart + "%";
+  if (me) me.style.left = pctEnd + "%";
+}
+
+function _updateMobileDownloadBtn() {
+  var btn = document.getElementById("btn-download-mob");
+  if (!btn) return;
+  var dur = _sliderEnd - _sliderStart;
+  if (dur <= 0) {
+    btn.disabled = true;
+    btn.textContent = "Set clip range";
+  } else {
+    btn.disabled = false;
+    var label = "⬇ Download Clip";
+    var parts = [];
+    if (_captionsEnabled) {
+      var capDetails = "captions";
+      if (_captionColor !== "white" || _captionPosition !== "bottom") {
+        var opts = [];
+        if (_captionColor !== "white") opts.push(_captionColor);
+        if (_captionPosition !== "bottom") opts.push(_captionPosition);
+        capDetails += " (" + opts.join(", ") + ")";
+      }
+      parts.push(capDetails);
+    }
+    if (_verticalEnabled) parts.push("vertical");
+    if (parts.length) label = "⬇ Download Clip (" + parts.join(" + ") + ")";
+    btn.textContent = label;
+  }
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
@@ -1349,6 +1460,11 @@ function updateToggleButtons() {
   }
   updateDownloadButton();
   updateFineTuneSliders();
+  // Sync mobile checkboxes
+  var mcc = document.getElementById("mob-chk-captions");
+  if (mcc) mcc.checked = _captionsEnabled;
+  var mcv = document.getElementById("mob-chk-vertical");
+  if (mcv) mcv.checked = _verticalEnabled;
 }
 
 function updateSocialToggles() {
@@ -1371,6 +1487,11 @@ function updateSocialToggles() {
     dom.socialToggles.style.display = "none";
   }
   updateToggleButtons();
+  // Sync mobile options visibility
+  var mobOpts = document.getElementById("mobile-options");
+  if (mobOpts) mobOpts.style.display = (item && dom.detailView && dom.detailView.style.display !== "none") ? "" : "none";
+  var mobCaptions = document.getElementById("mob-opt-captions");
+  if (mobCaptions) mobCaptions.style.display = (item && item.subtitle_path) ? "" : "none";
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────
@@ -1401,9 +1522,18 @@ async function downloadClip() {
 
   if (dom.btnDownload) { dom.btnDownload.disabled = true; dom.btnDownload.textContent = "Clipping..."; }
   if (dom.clipStatus) dom.clipStatus.textContent = "";
+  // Desktop progress
   if (dom.clipProgress) dom.clipProgress.style.display = "block";
   if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
   if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip " + fmtTime(startSec) + "-" + fmtTime(endSec) + "...";
+  // Mobile progress
+  _setMobileStatus("Starting clip...");
+  var mobProgress = document.getElementById("clip-progress-mob");
+  var mobProgressFill = document.getElementById("clip-progress-fill-mob");
+  var mobProgressText = document.getElementById("clip-progress-text-mob");
+  if (mobProgress) mobProgress.style.display = "block";
+  if (mobProgressFill) mobProgressFill.style.width = "0%";
+  if (mobProgressText) mobProgressText.textContent = "Starting clip...";
 
   try {
     // 1) Start clip generation (returns immediately)
@@ -1434,15 +1564,20 @@ async function downloadClip() {
       document.body.removeChild(a);
 
       if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + filename + " (" + Math.round(result.duration || (endSec - startSec)) + "s)";
+      _setMobileStatus("Downloaded " + filename);
       loadClipGallery();
     } else {
       throw new Error(result.error || "Unknown error");
     }
   } catch (err) {
     if (dom.clipStatus) dom.clipStatus.textContent = "Error: " + err.message;
+    _setMobileStatus("Error: " + err.message);
   } finally {
     if (dom.clipProgress) dom.clipProgress.style.display = "none";
     if (dom.btnDownload) { dom.btnDownload.disabled = false; dom.btnDownload.textContent = "\u{1F4E5} Download Clip"; }
+    if (mobProgress) mobProgress.style.display = "none";
+    var dm = document.getElementById("btn-download-mob");
+    if (dm) { dm.disabled = false; _updateMobileDownloadBtn(); }
   }
 }
 
@@ -1478,6 +1613,11 @@ function pollClipStatus(filename) {
           }
           if (dom.clipProgressFill) dom.clipProgressFill.style.width = pct + "%";
           if (dom.clipProgressText) dom.clipProgressText.textContent = text;
+          // Mobile progress
+          var mpf = document.getElementById("clip-progress-fill-mob");
+          var mpt = document.getElementById("clip-progress-text-mob");
+          if (mpf) mpf.style.width = pct + "%";
+          if (mpt) mpt.textContent = text;
 
           // Poll again
           setTimeout(poll, 2000);
@@ -1583,6 +1723,12 @@ function showClipShortcut() {
 
 function init() {
   dom = getDom();
+
+  // Detect mobile at init
+  _isMobile = window.innerWidth <= 768;
+  window.addEventListener("resize", function() {
+    _isMobile = window.innerWidth <= 768;
+  });
 
   // Home link on title
   var titleEl = qs("header h1");
