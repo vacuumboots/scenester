@@ -19,6 +19,7 @@ var _mobEnd = 139;            // float, clip end in seconds
 var _mobDuration = 0;         // total media duration in seconds
 var _mobActiveHandle = 'start';  // which handle was last touched ('start' | 'end')
 var _mobDragging = null;      // null | 'start' | 'end' | 'window'
+var _mobWindowOffset = 0;     // offset from touch to window center during window drag
 var _mobVideoReady = false;
 
 // Progress mirroring
@@ -196,8 +197,13 @@ function _mobTimelineTouchStart(e) {
     _mobDragging = 'end';
     _mobActiveHandle = 'end';
   } else if (x > startX && x < endX) {
-    // Dragging the fill area → slide entire clip window, preserve duration
+    // Dragging the fill area → slide entire clip window, preserve duration.
+    // Record the offset between the touch point and the window center so
+    // the window doesn't jump on first touch (relative tracking).
     _mobDragging = 'window';
+    var touchT = _mobTimeFromPosition(x);
+    var windowCenter = _mobStart + (_mobEnd - _mobStart) / 2;
+    _mobWindowOffset = touchT - windowCenter;
   } else {
     // Tap on empty area — snap the nearest handle to this position
     var toStart = Math.abs(x - startX);
@@ -228,19 +234,19 @@ function _mobTimelineTouchMove(e) {
   var t = _mobTimeFromPosition(x);
 
   if (_mobDragging === 'window') {
-    // Slide the entire clip window — preserve duration
+    // Slide the entire clip window — preserve duration.
+    // Use relative tracking: window center = touch time - stored offset.
     var dur = _mobEnd - _mobStart;
+    var newCenter = t - _mobWindowOffset;
     var halfDur = dur / 2;
-    var newCenter = t;
 
     // Clamp so the window doesn't go past 0 or _mobDuration
     var newStart = Math.max(0, Math.min(_mobDuration - dur, newCenter - halfDur));
     _mobStart = newStart;
     _mobEnd = newStart + dur;
 
-    // Seek to the center of the new window position for visual feedback
-    var seekT = newStart + halfDur / 2;
-    seekVideoTo(Math.max(0, Math.min(_mobDuration, seekT)));
+    // Seek to where the user's finger is — they see the frame they're touching
+    seekVideoTo(Math.max(0, Math.min(_mobDuration, t)));
   } else {
     _mobSetHandle(_mobDragging, t);
   }
