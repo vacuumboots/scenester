@@ -24,6 +24,10 @@ var _mobVideoReady = false;
 var _mobMode = 'follow';   // 'follow' | 'manual'
 var _mobArmed = null;      // null | 'start' | 'end'
 var _mobTapInfo = null;    // {x, y, t, zone} for tap-vs-drag detection
+var _mobZoomed = false;      // true = timeline shows the 10-min neighborhood
+var _mobZoomSpan = 600;      // seconds — 10 minutes (fixed zoom level)
+var _mobViewMin = 0;         // view range (seconds) — recomputed on every render
+var _mobViewMax = 0;
 
 // Progress mirroring
 var _mobProgressTimer = null;
@@ -41,6 +45,7 @@ function _mobCacheDom() {
   _mobEls.fill       = document.getElementById('mob-timeline-fill');
   _mobEls.thumbStart = document.getElementById('mob-thumb-start');
   _mobEls.thumbEnd   = document.getElementById('mob-thumb-end');
+  _mobEls.playhead   = document.getElementById('mob-playhead');
   _mobEls.timeStart  = document.getElementById('mob-time-start');
   _mobEls.timeEnd    = document.getElementById('mob-time-end');
   _mobEls.timeDur    = document.getElementById('mob-time-dur');
@@ -73,6 +78,7 @@ function initMobileDetail(item) {
   _mobMode = 'follow';
   _mobArmed = null;
   _mobTapInfo = null;
+  _mobZoomed = false;
   _mobVideoReady = false;
 
   _mobDuration = (item.duration || 0) / 1000;
@@ -95,6 +101,7 @@ function initMobileDetail(item) {
   initMobileTimeline();
 
   // Initial paint
+  _mobUpdateZoomBtn();
   _mobUpdateTimeline();
   _mobUpdateTimes();
   _mobUpdateDownloadBtn();
@@ -193,14 +200,17 @@ function _mobTimelineTouchStart(e) {
   var x = touch.clientX - rect.left;
   var pct = Math.max(0, Math.min(1, x / rect.width));
 
-  var startPct = _mobDuration > 0 ? _mobStart / _mobDuration : 0;
-  var endPct = _mobDuration > 0 ? _mobEnd / _mobDuration : 1;
+  // Hit-test positions are view-relative — same mapping as _mobUpdateTimeline
+  _mobViewRange();
+  var span = _mobViewMax - _mobViewMin;
+  var startPct = span > 0 ? Math.max(0, Math.min(1, (_mobStart - _mobViewMin) / span)) : 0;
+  var endPct = span > 0 ? Math.max(0, Math.min(1, (_mobEnd - _mobViewMin) / span)) : 1;
   var startX = startPct * rect.width;
   var endX = endPct * rect.width;
 
   var HIT_RADIUS = 30; // px — generous for thumb-sized fingers
 
-  var ZONE; // 'thumb-start' | 'thumb-end' | 'window' | 'empty'
+  var ZONE; // 'thumb-start' | 'thumb-end' | 'window' | 'zoom' | 'scrub'
 
   if (Math.abs(x - startX) < HIT_RADIUS) {
     _mobDragging = 'start';
@@ -223,17 +233,25 @@ function _mobTimelineTouchStart(e) {
     _mobWindowOffset = touchT - windowCenter;
     ZONE = 'window';
   } else {
-    // Tap on empty area — snap the nearest handle to this position
-    var toStart = Math.abs(x - startX);
-    var toEnd = Math.abs(x - endX);
-    _mobDragging = toStart < toEnd ? 'start' : 'end';
-    _mobActiveHandle = _mobDragging;
-    _mobMode = 'manual';   // snap applies immediately — manual placement
-
-    // Apply snap immediately
-    var t = _mobTimeFromPosition(x);
-    _mobSetHandle(_mobDragging, t);
-    ZONE = 'empty';
+    // Empty area. Full view: zoom into this neighborhood (Stage 1 → 2).
+    // Zoomed view: scrub — seek the playhead to the tap position.
+    if (!_mobZoomed) {
+      _mobZoomed = true;
+      _mobMode = 'manual';
+      _mobArmed = null;
+      _mobUpdateZoomBtn();
+      // Center the 10-min view on the tapped position. The view range is
+      // derived from the window center (_mobViewRange), so the parked
+      // window comes along to anchor the zoom on the tap.
+      var tapT = (x / rect.width) * _mobDuration;   // full-movie mapping
+      _mobCenterWindowOn(tapT);
+    } else {
+      // Zoomed: scrub to tap position immediately
+      var t = _mobTimeFromPosition(x);
+      _mobDragging = 'scrub';
+      seekVideoTo(Math.max(0, Math.min(_mobDuration, t)));
+    }
+    ZONE = _mobZoomed ? 'scrub' : 'zoom';
   }
 
   _mobTapInfo = { x: touch.clientX, y: touch.clientY, t: Date.now(), zone: ZONE };
@@ -255,6 +273,14 @@ function _mobTimelineTouchMove(e) {
   var x = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
   var t = _mobTimeFromPosition(x);
 
+  if (_mobDragging === 'scrub') {
+    // Zoomed scrub: seek continuously, playhead line follows the finger
+    seekVideoTo(Math.max(0, Math.min(_mobDuration, t)));
+    _mobUpdateTimeline();            // moves playhead line
+    _mobUpdateTimes();
+    e.preventDefault();
+    return;
+  }
   if (_mobDragging === 'window') {
     // Slide the entire clip window — preserve duration.
     // Use relative tracking: window center = touch time - stored offset.
@@ -316,12 +342,27 @@ function _mobTimelineTouchEnd(e) {
 
 // ── Handle & Time Helpers ─────────────────────────────────────────────
 
+/** Compute the visible time range. Zoomed: 10-min span centered on the clip
+ *  window, clamped to the movie. Full: the whole movie. */
+function _mobViewRange() {
+  var span = _mobZoomed ? Math.min(_mobZoomSpan, _mobDuration) : _mobDuration;
+  if (!_mobZoomed || span >= _mobDuration) { _mobViewMin = 0; _mobViewMax = _mobDuration; return; }
+  var center = (_mobStart + _mobEnd) / 2;
+  var vmin = Math.max(0, Math.min(_mobDuration - span, center - span / 2));
+  _mobViewMin = vmin;
+  _mobViewMax = vmin + span;
+}
+
 /**
- * Convert an x-pixel position within the timeline rect to a time in seconds.
+ * Convert an x-pixel position within the timeline rect to a time in seconds,
+ * relative to the current view (full movie or zoomed 10-min neighborhood).
  */
 function _mobTimeFromPosition(x) {
   if (_mobDuration <= 0) return 0;
-  return (x / (_mobTouchRect ? _mobTouchRect.width : 1)) * _mobDuration;
+  _mobViewRange();   // ensure view is fresh (cheap, no DOM)
+  var w = _mobTouchRect ? _mobTouchRect.width : 1;
+  var span = _mobViewMax - _mobViewMin;
+  return _mobViewMin + (x / w) * span;
 }
 
 /**
@@ -340,32 +381,47 @@ function _mobSetHandle(which, t) {
 }
 
 /**
- * Reposition the timeline fill bar and thumb handles as CSS percentages.
+ * Reposition the timeline fill bar, thumb handles, and playhead line as
+ * CSS percentages, relative to the current view (full movie or zoomed
+ * 10-min neighborhood).
  */
 function _mobUpdateTimeline() {
   if (_mobDuration <= 0) return;
-
-  var startPct = (_mobStart / _mobDuration) * 100;
-  var endPct = (_mobEnd / _mobDuration) * 100;
+  _mobViewRange();
+  var span = _mobViewMax - _mobViewMin;
+  if (span <= 0) return;
+  var pct = function(t) {
+    return Math.max(0, Math.min(100, ((t - _mobViewMin) / span) * 100));
+  };
+  var startPct = pct(_mobStart);
+  var endPct = pct(_mobEnd);
 
   var fill = _mobEls.fill;
   var thumbS = _mobEls.thumbStart;
   var thumbE = _mobEls.thumbEnd;
-
-  if (fill) {
-    fill.style.left = startPct + '%';
-    fill.style.width = (endPct - startPct) + '%';
-  }
+  if (fill) { fill.style.left = startPct + '%'; fill.style.width = (endPct - startPct) + '%'; }
   if (thumbS) thumbS.style.left = startPct + '%';
   if (thumbE) thumbE.style.left = endPct + '%';
 
-  // Highlight active thumb
+  // Playhead line: show where the video is within the current view
+  var ph = _mobEls.playhead;
+  if (ph) {
+    var vid = _mobVideo();
+    if (vid && isFinite(vid.currentTime)) {
+      ph.style.left = pct(vid.currentTime) + '%';
+      ph.style.display = 'block';
+    } else {
+      ph.style.display = 'none';
+    }
+  }
+
   if (thumbS) thumbS.classList.toggle('active', _mobActiveHandle === 'start');
   if (thumbE) thumbE.classList.toggle('active', _mobActiveHandle === 'end');
 }
 
 /** Write current times to the three mobile time displays. */
 function _mobUpdateTimes() {
+  _mobViewRange();   // keep the view fresh (cheap, no DOM)
   var s = _mobEls.timeStart;
   var e = _mobEls.timeEnd;
   var d = _mobEls.timeDur;
@@ -602,6 +658,34 @@ function _mobUpdateLoopBtn() {
   b.classList.toggle('active', active);
 }
 
+// ── Zoom (Two-Stage Selection) ────────────────────────────────────────
+
+/** Toggle Stage 2 (10-min neighborhood view). */
+function mobToggleZoom() {
+  if (_mobDuration <= 0) return;
+  _mobZoomed = !_mobZoomed;
+  if (_mobZoomed) {
+    // Entering Stage 2: park the window, disarm, center view on clip window.
+    _mobMode = 'manual';
+    _mobArmed = null;
+    _mobViewRange();
+  } else {
+    _mobViewMin = 0;
+    _mobViewMax = _mobDuration;
+  }
+  _mobUpdateZoomBtn();
+  _mobUpdateTimeline();
+  _mobUpdateTimes();
+}
+
+function _mobUpdateZoomBtn() {
+  var b = document.getElementById('mob-btn-zoom');
+  if (!b) return;
+  b.textContent = _mobZoomed ? '\u293A Full' : '\uD83D\uDD0D';  // ⤺ / 🔍
+  b.classList.toggle('active', _mobZoomed);
+  b.title = _mobZoomed ? 'Back to full movie' : 'Zoom to 10-minute view';
+}
+
 // ── Social Toggle Sync ─────────────────────────────────────────────────
 
 // ── Video Time Update ──────────────────────────────────────────────────
@@ -624,6 +708,9 @@ function _mobOnTimeUpdate() {
     _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, ct));
   } else if (_mobArmed === 'end') {
     _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, ct));
+  } else if (_mobZoomed) {
+    // Zoomed = tuning, not browsing: window stays parked, playhead line
+    // updates via _mobUpdateTimeline() below.
   } else if (_mobMode === 'follow') {
     _mobCenterWindowOn(ct);
   } else if (ct < _mobStart || ct > _mobEnd) {
@@ -683,3 +770,4 @@ function _mobToggleArmed(which) {
 //   mobPreset(duration)       — onclick for preset chips
 //   mobDownload()             — onclick for download button
 //   mobLoop()                 — onclick for loop preview button
+//   mobToggleZoom()           — onclick for zoom toggle button
