@@ -303,6 +303,16 @@ function _mobTimelineTouchMove(e) {
   var x = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
   var t = _mobTimeFromPosition(x);
 
+  // Tap-vs-drag gate: finger wobble under 10px must stay a tap (arm / seek
+  // at the tap point), not a drag. Micro-movement on a phone is normal —
+  // without this gate a jittery tap moves the handle several seconds.
+  var tapInfo = _mobTapInfo;
+  if (tapInfo) {
+    var dx = touch.clientX - tapInfo.x;
+    var dy = touch.clientY - tapInfo.y;
+    if (dx * dx + dy * dy < 100) return;   // within 10px — still a tap
+  }
+
   if (_mobDragging === 'scrub') {
     // Stage 2 scrub: debounced seek, playhead line follows as seeks land
     _mobSeekTo(Math.max(0, Math.min(_mobDuration, t)));
@@ -361,12 +371,16 @@ function _mobTimelineTouchEnd(e) {
       } else if (info.zone === 'thumb-end') {
         _mobToggleArmed('end');
       } else if (info.zone === 'window') {
-        // Tap the fill: stage 1 → re-center the bracket; stage 2 → center clip window
+        // Tap the fill: stage 1 → re-center the bracket; stage 2 → seek the
+        // playhead there (the range itself only changes via the thumbs).
         var rect = _mobTouchRect;
         if (rect) {
           var t = _mobTimeFromPosition(ct.clientX - rect.left);
-          if (!_mobZoomed) _mobCenterBracketOn(t);
-          else _mobCenterWindowOn(t);
+          if (!_mobZoomed) {
+            _mobCenterBracketOn(t);
+          } else {
+            _mobSeekTo(Math.max(0, Math.min(_mobDuration, t)), true);
+          }
           _mobUpdateTimeline();
           _mobUpdateTimes();
         }
