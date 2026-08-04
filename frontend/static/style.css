@@ -1483,99 +1483,67 @@ main {
   .mobile-only  { display: block; }
 }
 
-/* ── Mobile Clip Editor (two-thumb timeline system) ──────────────────── */
+/* ── Mobile Clip Editor (bottom-sheet layout) ────────────────────────── */
 
 .mobile-clip-editor {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-/* ── Video ───────────────────────────────────────────────────────────── */
+/* ── Video — 60vh, native controls ──────────────────────────────────── */
 
 .mob-video-container {
-  position: relative;
   background: #000;
-  width: 100%;
+  flex: 0 0 auto;
 }
 
-#preview-video {
+.mob-video-container video {
   width: 100%;
   display: block;
   background: #000;
 }
 
-.mob-video-overlay {
-  position: absolute;
-  inset: 0;
-  background: transparent;
-  z-index: 1;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
+/* ── Bottom sheet ───────────────────────────────────────────────────── */
 
-/* ── Transport ───────────────────────────────────────────────────────── */
-
-.mob-transport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 12px 0;
-}
-
-.mob-transport-btn {
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
-  min-height: 48px;
-  border-radius: 50%;
+.mob-sheet {
+  flex: 1;
   background: var(--panel);
-  border: 2px solid var(--gold);
-  color: var(--gold);
-  font-size: 20px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  transition: background 0.15s, transform 0.1s;
-  font-family: var(--font-sans);
-  padding: 0;
+  border-radius: 16px 16px 0 0;
+  margin-top: -8px;
+  position: relative;
+  z-index: 2;
+  padding: 16px 16px 24px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.mob-transport-btn:active {
-  background: var(--gold);
-  color: var(--bg);
-  transform: scale(0.95);
+/* Sheet handle (visual indicator at top) */
+.mob-sheet::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  background: #3a3a3a;
+  border-radius: 2px;
+  margin: 0 auto 14px;
 }
 
-.mob-transport-play {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
-  min-height: 56px;
-  background: var(--gold);
-  color: var(--bg);
-  font-size: 22px;
-}
-
-.mob-transport-play:active {
-  background: var(--gold-dim);
-  color: var(--bg);
-}
-
-/* ── Two-Thumb Timeline ──────────────────────────────────────────────── */
+/* ── Two-Thumb Timeline — 64px tall ──────────────────────────────────── */
 
 .mob-timeline-container {
-  padding: 0 16px;
+  /* padding handled by sheet */
 }
 
 .mob-timeline {
   position: relative;
-  height: 48px;
+  height: 64px;
   background: #1a1a1a;
-  border-radius: 8px;
-  margin: 8px 0;
+  border-radius: 10px;
+  margin: 0 0 4px;
   overflow: hidden;
   touch-action: none;
   border: 1px solid #252525;
@@ -1611,7 +1579,7 @@ main {
 .mob-timeline-thumb {
   position: absolute;
   top: 0;
-  width: 20px;
+  width: 28px;
   height: 100%;
   z-index: 2;
   cursor: grab;
@@ -1626,31 +1594,31 @@ main {
 
 .mob-timeline-thumb.dragging {
   background: rgba(196, 150, 59, 0.35);
-  transform: scaleX(1.15);
+  transform: scaleX(1.12);
 }
 
 .mob-thumb-start {
   border-left: 3px solid var(--gold);
-  border-radius: 4px 0 0 4px;
+  border-radius: 6px 0 0 6px;
   background-image: repeating-linear-gradient(
     90deg,
     var(--gold-dim) 0px,
-    var(--gold-dim) 1px,
-    transparent 1px,
-    transparent 3px
+    var(--gold-dim) 2px,
+    transparent 2px,
+    transparent 5px
   );
 }
 
 .mob-thumb-end {
   border-right: 3px solid var(--gold);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 6px 6px 0;
   background-image: repeating-linear-gradient(
     90deg,
     transparent,
-    transparent calc(100% - 3px),
-    var(--gold-dim) calc(100% - 3px),
-    var(--gold-dim) calc(100% - 1px),
-    transparent calc(100% - 1px)
+    transparent calc(100% - 5px),
+    var(--gold-dim) calc(100% - 5px),
+    var(--gold-dim) calc(100% - 2px),
+    transparent calc(100% - 2px)
   );
 }
 
@@ -1664,6 +1632,7 @@ main {
   font-size: 12px;
   color: var(--text-dim);
   padding: 2px 2px 0;
+  margin-bottom: 12px;
 }
 
 .mob-timeline-dur {
@@ -1682,13 +1651,8 @@ main {
   min-width: 52px;
 }
 
-#mob-time-start {
-  text-align: left;
-}
-
-#mob-time-end {
-  text-align: right;
-}
+#mob-time-start { text-align: left; }
+#mob-time-end { text-align: right; }
 
 /* ── Fine-tune ───────────────────────────────────────────────────────── */
 
@@ -1697,7 +1661,7 @@ main {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 4px 0 8px;
 }
 
 .mob-ft-btn {

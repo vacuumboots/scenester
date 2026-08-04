@@ -81,7 +81,6 @@ function initMobileDetail(item) {
   _mobUpdateTimeline();
   _mobUpdateTimes();
   _mobUpdateDownloadBtn();
-  _mobUpdatePlayBtn();
   _mobUpdateActiveLabel();
 
   // Clear preset highlights
@@ -92,8 +91,6 @@ function initMobileDetail(item) {
   var vid = _mobVideo();
   if (vid) {
     vid.addEventListener('timeupdate', _mobOnTimeUpdate);
-    vid.addEventListener('play', _mobUpdatePlayBtn);
-    vid.addEventListener('pause', _mobUpdatePlayBtn);
     vid.addEventListener('loadedmetadata', function() {
       _mobVideoReady = true;
     });
@@ -134,12 +131,6 @@ function destroyMobileDetail() {
   var vid = _mobVideo();
   if (vid) {
     vid.removeEventListener('timeupdate', _mobOnTimeUpdate);
-    vid.removeEventListener('play', _mobUpdatePlayBtn);
-    vid.removeEventListener('pause', _mobUpdatePlayBtn);
-  }
-  var overlay = document.getElementById('mob-video-overlay');
-  if (overlay) {
-    overlay.removeEventListener('click', mobTogglePlay);
   }
   _mobDragging = null;
   _mobPinchActive = false;
@@ -431,53 +422,6 @@ function _mobUpdateActiveLabel() {
 }
 
 // ── Transport Controls ─────────────────────────────────────────────────
-
-/**
- * Toggle video play/pause. Also updates the play button icon.
- */
-function mobTogglePlay() {
-  var vid = _mobVideo();
-  if (!vid) return;
-  if (vid.paused) {
-    vid.play().catch(function() { /* autoplay policy — ignore */ });
-  } else {
-    vid.pause();
-  }
-  _mobUpdatePlayBtn();
-}
-
-/**
- * Skip the video forward or backward by delta seconds (typically ±10).
- * Also slides the clip window to follow the new playback position.
- */
-function mobSkip(delta) {
-  var vid = _mobVideo();
-  if (!vid || !isFinite(vid.currentTime) || _mobDuration <= 0) return;
-
-  var newTime = Math.max(0, Math.min(_mobDuration, vid.currentTime + delta));
-  vid.currentTime = newTime;
-
-  // Slide the clip window to follow the playback position
-  var dur = _mobEnd - _mobStart;
-  _mobStart = Math.max(0, newTime - dur / 2);
-  _mobEnd = Math.min(_mobDuration, _mobStart + dur);
-  // If the window was clamped at the end, push start back to preserve duration
-  if (_mobEnd - _mobStart < dur) {
-    _mobStart = Math.max(0, _mobEnd - dur);
-  }
-
-  _mobUpdateTimeline();
-  _mobUpdateTimes();
-  _mobUpdateDownloadBtn();
-}
-
-/** Sync the play/pause button icon with the video state. */
-function _mobUpdatePlayBtn() {
-  var vid = _mobVideo();
-  var btn = document.getElementById('mob-btn-play');
-  if (!vid || !btn) return;
-  btn.textContent = vid.paused ? '\u25B6' : '\u23F8';  // ▶ or ⏸
-}
 
 // ── Fine-Tune (Nudge Bar) ──────────────────────────────────────────────
 

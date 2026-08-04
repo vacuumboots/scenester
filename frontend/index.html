@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=15">
+  <link rel="stylesheet" href="static/style.css?v=16">
 </head>
 <body>
 
@@ -242,89 +242,83 @@
       <div class="clip-status" id="clip-status"></div>
     </div>
 
-    <!-- ── MOBILE two-thumb timeline editor ──────────────────────────── -->
+    <!-- ── MOBILE bottom-sheet editor ────────────────────────────────── -->
     <div class="mobile-clip-editor mobile-only">
-      <!-- Video player — full width, no native controls (we provide our own) -->
+      <!-- Video player — 60vh, native controls -->
       <div class="mob-video-container">
-        <video id="preview-video" preload="metadata" playsinline
-               style="width:100%; display:block; background:#000;"></video>
-        <!-- Tap overlay for play/pause -->
-        <div class="mob-video-overlay" id="mob-video-overlay"></div>
+        <video id="preview-video" preload="metadata" playsinline controls
+               style="width:100%; display:block; background:#000; height:60vh; object-fit:contain;"></video>
       </div>
 
-      <!-- Transport -->
-      <div class="mob-transport">
-        <button class="mob-transport-btn" onclick="mobSkip(-10)">⏪</button>
-        <button class="mob-transport-btn mob-transport-play" id="mob-btn-play" onclick="mobTogglePlay()">▶</button>
-        <button class="mob-transport-btn" onclick="mobSkip(10)">⏩</button>
-      </div>
-
-      <!-- Two-thumb timeline -->
-      <div class="mob-timeline-container">
-        <div class="mob-timeline" id="mob-timeline">
-          <div class="mob-timeline-track"></div>
-          <div class="mob-timeline-fill" id="mob-timeline-fill"></div>
-          <div class="mob-timeline-thumb mob-thumb-start" id="mob-thumb-start"></div>
-          <div class="mob-timeline-thumb mob-thumb-end" id="mob-thumb-end"></div>
+      <!-- Bottom sheet — slides up with all controls -->
+      <div class="mob-sheet">
+        <!-- Two-thumb timeline — 64px tall -->
+        <div class="mob-timeline-container">
+          <div class="mob-timeline" id="mob-timeline">
+            <div class="mob-timeline-track"></div>
+            <div class="mob-timeline-fill" id="mob-timeline-fill"></div>
+            <div class="mob-timeline-thumb mob-thumb-start" id="mob-thumb-start"></div>
+            <div class="mob-timeline-thumb mob-thumb-end" id="mob-thumb-end"></div>
+          </div>
+          <div class="mob-timeline-times">
+            <span id="mob-time-start">0:00.00</span>
+            <span class="mob-timeline-dur" id="mob-time-dur">30.0s</span>
+            <span id="mob-time-end">0:30.00</span>
+          </div>
         </div>
-        <div class="mob-timeline-times">
-          <span id="mob-time-start">0:00.00</span>
-          <span class="mob-timeline-dur" id="mob-time-dur">30.0s</span>
-          <span id="mob-time-end">0:30.00</span>
+
+        <!-- Fine-tune -->
+        <div class="mob-finetune">
+          <button class="mob-ft-btn" onclick="mobNudgeActive(-0.04)">−1f</button>
+          <button class="mob-ft-btn" onclick="mobNudgeActive(-5)">−5s</button>
+          <span class="mob-ft-active" id="mob-ft-active-label">Start</span>
+          <button class="mob-ft-btn" onclick="mobNudgeActive(5)">+5s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeActive(0.04)">+1f</button>
         </div>
+
+        <!-- Presets -->
+        <div class="mob-presets">
+          <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
+          <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
+          <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
+          <button class="mob-preset-btn" data-dur="30" onclick="mobPreset(30)">30s</button>
+          <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
+          <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
+          <button class="mob-preset-btn" data-dur="139" onclick="mobPreset(139)">139s</button>
+        </div>
+
+        <!-- Download -->
+        <button class="mob-download-btn" id="mob-btn-download" onclick="mobDownload()" disabled>
+          ⬇ Download Clip
+        </button>
+
+        <!-- Options -->
+        <details class="mob-options" id="mob-options" style="display:none">
+          <summary>Options</summary>
+          <label class="mob-option" id="mob-opt-captions" style="display:none">
+            <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
+            💬 Burn captions
+          </label>
+          <label class="mob-option">
+            <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
+            📱 Vertical 9:16
+          </label>
+        </details>
+
+        <!-- Progress -->
+        <div class="clip-progress" id="mob-clip-progress" style="display:none">
+          <div class="progress-bar"><div class="progress-fill" id="mob-clip-progress-fill"></div></div>
+          <div class="progress-text" id="mob-clip-progress-text">Encoding...</div>
+        </div>
+        <div class="clip-status-mob" id="mob-clip-status"></div>
       </div>
-
-      <!-- Fine-tune (applied to last-touched handle, indicated by highlight) -->
-      <div class="mob-finetune">
-        <button class="mob-ft-btn" onclick="mobNudgeActive(-0.04)">−1f</button>
-        <button class="mob-ft-btn" onclick="mobNudgeActive(-5)">−5s</button>
-        <span class="mob-ft-active" id="mob-ft-active-label">Start</span>
-        <button class="mob-ft-btn" onclick="mobNudgeActive(5)">+5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeActive(0.04)">+1f</button>
-      </div>
-
-      <!-- Presets -->
-      <div class="mob-presets">
-        <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
-        <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
-        <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
-        <button class="mob-preset-btn" data-dur="30" onclick="mobPreset(30)">30s</button>
-        <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
-        <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
-        <button class="mob-preset-btn" data-dur="139" onclick="mobPreset(139)">139s</button>
-      </div>
-
-      <!-- Download -->
-      <button class="mob-download-btn" id="mob-btn-download" onclick="mobDownload()" disabled>
-        ⬇ Download Clip
-      </button>
-
-      <!-- Options -->
-      <details class="mob-options" id="mob-options" style="display:none">
-        <summary>Options</summary>
-        <label class="mob-option" id="mob-opt-captions" style="display:none">
-          <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
-          💬 Burn captions
-        </label>
-        <label class="mob-option">
-          <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
-          📱 Vertical 9:16
-        </label>
-      </details>
-
-      <!-- Progress -->
-      <div class="clip-progress" id="mob-clip-progress" style="display:none">
-        <div class="progress-bar"><div class="progress-fill" id="mob-clip-progress-fill"></div></div>
-        <div class="progress-text" id="mob-clip-progress-text">Encoding...</div>
-      </div>
-      <div class="clip-status-mob" id="mob-clip-status"></div>
     </div>
   </div>
 
 </main>
 
-<script src="static/app.js?v=15"></script>
-<script src="static/mobile.js?v=15"></script>
+<script src="static/app.js?v=16"></script>
+<script src="static/mobile.js?v=16"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
