@@ -524,27 +524,15 @@ function _mobUpdateDownloadBtn() {
 // ── Video Time Update ──────────────────────────────────────────────────
 
 /**
- * Called on the mobile video's timeupdate event. Updates the timeline
- * to reflect the current playback position (playhead tracking).
+ * Called on the mobile video's timeupdate event.
+ * No DOM updates needed during playback — the timeline fill, thumbs,
+ * and time displays only change via user interaction (drag, nudge,
+ * preset, skip). All those paths call _mobUpdateTimeline/_mobUpdateTimes
+ * directly. This handler exists as a hook for future playhead tracking
+ * but is intentionally a no-op to avoid redundant layout work.
  */
 function _mobOnTimeUpdate() {
-  var vid = _mobVideo();
-  if (!vid || !isFinite(vid.currentTime)) return;
-
-  // Only update timeline visuals — don't change handle positions.
-  // The fill and thumbs remain where the user set them; the playhead
-  // is visually indicated by the active handle highlight.
-  // We still call _mobUpdateTimeline() so the fill reflects current
-  // state, and _mobUpdateTimes() for the time displays.
-  _mobUpdateTimes();
-
-  // Highlight the handle closest to the playback position so the user
-  // sees the playhead relative to their clip range.
-  var toStart = Math.abs(vid.currentTime - _mobStart);
-  var toEnd = Math.abs(vid.currentTime - _mobEnd);
-  // Don't change _mobActiveHandle during playback — that's user-controlled.
-  // But we do provide a visual cue via the range bar if it exists.
-  _mobUpdateTimeline();
+  // Timeline state doesn't change during playback — no-op.
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
