@@ -21,6 +21,9 @@ var _mobActiveHandle = 'start';  // which handle was last touched ('start' | 'en
 var _mobDragging = null;      // null | 'start' | 'end' | 'window'
 var _mobWindowOffset = 0;     // offset from touch to window center during window drag
 var _mobVideoReady = false;
+var _mobMode = 'follow';   // 'follow' | 'manual'
+var _mobArmed = null;      // null | 'start' | 'end'
+var _mobTapInfo = null;    // {x, y, t, zone} for tap-vs-drag detection
 
 // Progress mirroring
 var _mobProgressTimer = null;
@@ -67,6 +70,9 @@ function initMobileDetail(item) {
   _mobCacheDom();
 
   _mobDragging = null;
+  _mobMode = 'follow';
+  _mobArmed = null;
+  _mobTapInfo = null;
   _mobVideoReady = false;
 
   _mobDuration = (item.duration || 0) / 1000;
@@ -101,6 +107,8 @@ function initMobileDetail(item) {
   var vid = _mobVideo();
   if (vid) {
     vid.addEventListener('timeupdate', _mobOnTimeUpdate);
+    vid.addEventListener('seeked', _mobOnTimeUpdate);
+    vid.addEventListener('pause', _mobUpdateLoopBtn);
     vid.addEventListener('loadedmetadata', function() {
       _mobVideoReady = true;
     });
@@ -131,6 +139,8 @@ function destroyMobileDetail() {
   var vid = _mobVideo();
   if (vid) {
     vid.removeEventListener('timeupdate', _mobOnTimeUpdate);
+    vid.removeEventListener('seeked', _mobOnTimeUpdate);
+    vid.removeEventListener('pause', _mobUpdateLoopBtn);
   }
   _mobDragging = null;
   _mobStopProgressPolling();
@@ -190,31 +200,43 @@ function _mobTimelineTouchStart(e) {
 
   var HIT_RADIUS = 30; // px — generous for thumb-sized fingers
 
+  var ZONE; // 'thumb-start' | 'thumb-end' | 'window' | 'empty'
+
   if (Math.abs(x - startX) < HIT_RADIUS) {
     _mobDragging = 'start';
     _mobActiveHandle = 'start';
+    _mobMode = 'manual';   // direct manipulation parks the window
+    ZONE = 'thumb-start';
   } else if (Math.abs(x - endX) < HIT_RADIUS) {
     _mobDragging = 'end';
     _mobActiveHandle = 'end';
+    _mobMode = 'manual';
+    ZONE = 'thumb-end';
   } else if (x > startX && x < endX) {
     // Dragging the fill area → slide entire clip window, preserve duration.
     // Record the offset between the touch point and the window center so
     // the window doesn't jump on first touch (relative tracking).
     _mobDragging = 'window';
+    _mobMode = 'manual';
     var touchT = _mobTimeFromPosition(x);
     var windowCenter = _mobStart + (_mobEnd - _mobStart) / 2;
     _mobWindowOffset = touchT - windowCenter;
+    ZONE = 'window';
   } else {
     // Tap on empty area — snap the nearest handle to this position
     var toStart = Math.abs(x - startX);
     var toEnd = Math.abs(x - endX);
     _mobDragging = toStart < toEnd ? 'start' : 'end';
     _mobActiveHandle = _mobDragging;
+    _mobMode = 'manual';   // snap applies immediately — manual placement
 
     // Apply snap immediately
     var t = _mobTimeFromPosition(x);
     _mobSetHandle(_mobDragging, t);
+    ZONE = 'empty';
   }
+
+  _mobTapInfo = { x: touch.clientX, y: touch.clientY, t: Date.now(), zone: ZONE };
 
   _mobUpdateTimeline();
   _mobUpdateTimes();
@@ -257,13 +279,39 @@ function _mobTimelineTouchMove(e) {
   e.preventDefault();
 }
 
-/** touchend / touchcancel: stop dragging, update button states. */
+/** touchend / touchcancel: stop dragging, detect tap, update button states. */
 function _mobTimelineTouchEnd(e) {
   if (_mobDragging) {
     _mobUpdateDownloadBtn();
   }
+
+  // Tap-vs-drag detection: a quick touch with <10px movement is a tap.
+  var ct = e.changedTouches && e.changedTouches[0];
+  var info = _mobTapInfo;
+  if (info && ct) {
+    var moved = Math.hypot(ct.clientX - info.x, ct.clientY - info.y) > 10;
+    var quick = (Date.now() - info.t) < 400;
+    if (!moved && quick) {
+      if (info.zone === 'thumb-start') {
+        _mobToggleArmed('start');
+      } else if (info.zone === 'thumb-end') {
+        _mobToggleArmed('end');
+      } else if (info.zone === 'window') {
+        // Tap the fill → center the window on the tap position
+        var rect = _mobTouchRect;
+        if (rect) {
+          var t = _mobTimeFromPosition(ct.clientX - rect.left);
+          _mobCenterWindowOn(t);
+          _mobUpdateTimeline();
+          _mobUpdateTimes();
+        }
+      }
+    }
+  }
+
   _mobDragging = null;
   _mobTouchRect = null;
+  _mobTapInfo = null;
 }
 
 // ── Handle & Time Helpers ─────────────────────────────────────────────
@@ -356,6 +404,8 @@ function mobSkip(delta) {
     _mobStart = Math.max(0, _mobEnd - dur);
   }
 
+  _mobMode = 'follow';   // skip re-engages follow (it already re-centers)
+
   _mobUpdateTimeline();
   _mobUpdateTimes();
   _mobUpdateDownloadBtn();
@@ -368,6 +418,7 @@ function mobSkip(delta) {
  * Typical values: ±0.04 (one frame at 25 fps) or ±5 (coarse jump).
  */
 function mobNudgeStart(delta) {
+  _mobMode = 'manual';   // nudge parks the window
   _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, _mobStart + delta));
   _mobActiveHandle = 'start';
   seekVideoTo(_mobStart);
@@ -380,6 +431,7 @@ function mobNudgeStart(delta) {
  * Nudge the END handle by delta seconds.
  */
 function mobNudgeEnd(delta) {
+  _mobMode = 'manual';   // nudge parks the window
   _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, _mobEnd + delta));
   _mobActiveHandle = 'end';
   seekVideoTo(_mobEnd);
@@ -519,20 +571,104 @@ function _mobUpdateDownloadBtn() {
   }
 }
 
+// ── Loop Preview ──────────────────────────────────────────────────────
+
+/**
+ * Play the current mobile clip range on a loop. Syncs the desktop
+ * _sliderStart/_sliderEnd globals so the existing app.js loop machinery
+ * (playClip → _loopPlayback → vid.ontimeupdate) uses the mobile range.
+ */
+function mobLoop() {
+  var vid = _mobVideo();
+  if (!vid) return;
+  // Park the window: looped playback must not re-center a follow-mode window
+  // or ride an armed edge — the user is auditioning their pinned range.
+  _mobArmed = null;
+  _mobMode = 'manual';
+  // Sync desktop globals so the existing loop machinery uses the mobile range
+  _sliderStart = _mobStart;
+  _sliderEnd = _mobEnd;
+  playClip();                 // app.js: toggles _loopPlayback, loops via vid.ontimeupdate
+  _mobUpdateLoopBtn();
+}
+
+/** Reflect the loop state on the loop button label/class. */
+function _mobUpdateLoopBtn() {
+  var b = document.getElementById('mob-btn-loop');
+  var vid = _mobVideo();
+  if (!b) return;
+  var active = _loopPlayback && vid && !vid.paused;
+  b.textContent = active ? '\u23F9 Loop' : '\uD83D\uDD01 Loop';  // ⏹ / 🔁
+  b.classList.toggle('active', active);
+}
+
 // ── Social Toggle Sync ─────────────────────────────────────────────────
 
 // ── Video Time Update ──────────────────────────────────────────────────
 
 /**
- * Called on the mobile video's timeupdate event.
- * No DOM updates needed during playback — the timeline fill, thumbs,
- * and time displays only change via user interaction (drag, nudge,
- * preset, skip). All those paths call _mobUpdateTimeline/_mobUpdateTimes
- * directly. This handler exists as a hook for future playhead tracking
- * but is intentionally a no-op to avoid redundant layout work.
+ * Called on the mobile video's timeupdate AND seeked events.
+ * Follow/ride driver: keeps the clip window centered on the playhead
+ * (follow mode), rides an armed edge on the playhead, or leaves a
+ * parked (manual) window alone until the playhead leaves its bounds.
+ * CRITICAL: never seeks the video — only moves window/edge markers.
  */
 function _mobOnTimeUpdate() {
-  // Timeline state doesn't change during playback — no-op.
+  if (_mobDragging) return;                 // never fight the finger
+  var vid = _mobVideo();
+  if (!vid || !isFinite(vid.currentTime)) return;
+  var ct = vid.currentTime;
+  if (ct < 0 || ct > _mobDuration + 0.5) return;  // +0.5: stream duration may exceed Plex metadata slightly
+
+  if (_mobArmed === 'start') {
+    _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, ct));
+  } else if (_mobArmed === 'end') {
+    _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, ct));
+  } else if (_mobMode === 'follow') {
+    _mobCenterWindowOn(ct);
+  } else if (ct < _mobStart || ct > _mobEnd) {
+    // browsed outside the parked window → re-enter follow
+    _mobMode = 'follow';
+    _mobCenterWindowOn(ct);
+  }
+
+  _mobUpdateTimeline();
+  _mobUpdateTimes();
+}
+
+/** Center the clip window on time ct, preserving its duration. */
+function _mobCenterWindowOn(ct) {
+  var dur = _mobEnd - _mobStart;
+  if (dur <= 0 || dur >= _mobDuration) return;  // whole movie — nothing to slide
+  var half = dur / 2;
+  var s = Math.max(0, Math.min(_mobDuration - dur, ct - half));
+  _mobStart = s;
+  _mobEnd = s + dur;
+}
+
+/**
+ * Toggle arm/pin for an edge: armed → lock (edge stays put); locked → arm
+ * (edge rides the playhead on the next timeupdate/seeked).
+ */
+function _mobToggleArmed(which) {
+  // Toggle: armed → lock (edge stays at current position). Locked → arm (edge rides playhead).
+  if (_mobArmed === which) {
+    _mobArmed = null;                       // lock
+    _mobMode = 'manual';                    // window is now parked where user pinned it
+  } else {
+    _mobArmed = which;                      // arm: next timeupdate rides this edge to the playhead
+    _mobMode = 'manual';
+    // If the playhead is outside the parked window, bring the window to it
+    // first — otherwise the armed edge clamps against a far-away edge and
+    // the window collapses to a sliver.
+    var vid = _mobVideo();
+    if (vid && isFinite(vid.currentTime)) {
+      var ct = vid.currentTime;
+      if (ct < _mobStart || ct > _mobEnd) _mobCenterWindowOn(ct);
+    }
+  }
+  _mobUpdateTimeline();
+  _mobUpdateTimes();
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
@@ -546,3 +682,4 @@ function _mobOnTimeUpdate() {
 //   mobNudgeEnd(delta)        — onclick for End fine-tune buttons
 //   mobPreset(duration)       — onclick for preset chips
 //   mobDownload()             — onclick for download button
+//   mobLoop()                 — onclick for loop preview button

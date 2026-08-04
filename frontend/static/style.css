@@ -1599,6 +1599,11 @@ main {
   transform: scaleX(1.12);
 }
 
+.mob-timeline-thumb.armed {
+  animation: long-press-pulse 0.8s ease-in-out infinite;
+  border-color: var(--gold);
+}
+
 .mob-thumb-start {
   border-left: 3px solid var(--gold);
   border-radius: 6px 0 0 6px;
@@ -1682,6 +1687,19 @@ main {
   background: #1e1e1e;
   color: var(--text);
   border-color: var(--border-hover);
+}
+
+.mob-skip-btn.active {
+  background: var(--gold);
+  color: #141414;
+}
+
+/* Loop preview button — wider than skip buttons to fit its label */
+.mob-loop-btn {
+  width: auto;
+  min-width: 56px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 /* ── Fine-tune — two explicit rows ──────────────────────────────────── */

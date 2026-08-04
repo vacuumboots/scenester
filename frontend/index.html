@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=18">
+  <link rel="stylesheet" href="static/style.css?v=19">
 </head>
 <body>
 
@@ -263,6 +263,7 @@
             <span class="mob-timeline-dur" id="mob-time-dur">30.0s</span>
             <span id="mob-time-end">0:30.00</span>
             <button class="mob-skip-btn" onclick="mobSkip(10)" title="Forward 10s">⏩</button>
+            <button class="mob-skip-btn mob-loop-btn" id="mob-btn-loop" onclick="mobLoop()" title="Play clip (looped)">🔁 Loop</button>
           </div>
         </div>
 
@@ -325,8 +326,8 @@
 
 </main>
 
-<script src="static/app.js?v=18"></script>
-<script src="static/mobile.js?v=18"></script>
+<script src="static/app.js?v=19"></script>
+<script src="static/mobile.js?v=19"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
