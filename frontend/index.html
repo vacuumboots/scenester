@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=14">
+  <link rel="stylesheet" href="static/style.css?v=15">
 </head>
 <body>
 
@@ -242,108 +242,89 @@
       <div class="clip-status" id="clip-status"></div>
     </div>
 
-    <!-- ── MOBILE clip editor ─────────────────────────────────────────── -->
+    <!-- ── MOBILE two-thumb timeline editor ──────────────────────────── -->
     <div class="mobile-clip-editor mobile-only">
-      <!-- Mark buttons — big, always visible -->
-      <div class="mobile-mark-buttons">
-        <button class="mobile-btn-mark" id="btn-mark-start-mob" onclick="markStart()">
-          <span class="mobile-mark-icon">▶</span>
-          <span class="mobile-mark-label">Set Start</span>
-        </button>
-        <button class="mobile-btn-mark mobile-btn-mark-end" id="btn-mark-end-mob" onclick="markEnd()">
-          <span class="mobile-mark-icon">■</span>
-          <span class="mobile-mark-label">Set End</span>
-        </button>
+      <!-- Video player — full width, no native controls (we provide our own) -->
+      <div class="mob-video-container">
+        <video id="preview-video" preload="metadata" playsinline
+               style="width:100%; display:block; background:#000;"></video>
+        <!-- Tap overlay for play/pause -->
+        <div class="mob-video-overlay" id="mob-video-overlay"></div>
       </div>
 
-      <!-- Time display -->
-      <div class="mobile-times">
-        <div class="mobile-time-box">
-          <span class="mobile-time-label">Start</span>
-          <span class="mobile-time-value" id="mobile-time-start">0:00</span>
-        </div>
-        <span class="mobile-time-arrow">→</span>
-        <div class="mobile-time-box">
-          <span class="mobile-time-label">End</span>
-          <span class="mobile-time-value" id="mobile-time-end">2:19</span>
-        </div>
-        <span class="mobile-clip-duration" id="mobile-clip-duration">139s</span>
+      <!-- Transport -->
+      <div class="mob-transport">
+        <button class="mob-transport-btn" onclick="mobSkip(-10)">⏪</button>
+        <button class="mob-transport-btn mob-transport-play" id="mob-btn-play" onclick="mobTogglePlay()">▶</button>
+        <button class="mob-transport-btn" onclick="mobSkip(10)">⏩</button>
       </div>
 
-      <!-- Visual range indicator (non-interactive) -->
-      <div class="mobile-range-bar">
-        <div class="mobile-range-fill" id="mobile-range-fill"></div>
-        <div class="mobile-range-marker mobile-range-marker-start" id="mobile-range-marker-start"></div>
-        <div class="mobile-range-marker mobile-range-marker-end" id="mobile-range-marker-end"></div>
-      </div>
-
-      <!-- Frame-level precision nudge -->
-      <div class="mobile-nudge">
-        <div class="mobile-nudge-row">
-          <span class="mobile-nudge-label">Start</span>
-          <div class="mobile-nudge-btns">
-            <button class="mobile-btn-nudge" onclick="nudgeFrame(-0.04, true)">−1f</button>
-            <button class="mobile-btn-nudge" onclick="nudgeStart(-5)">−5s</button>
-            <button class="mobile-btn-nudge" onclick="nudgeStart(5)">+5s</button>
-            <button class="mobile-btn-nudge" onclick="nudgeFrame(0.04, true)">+1f</button>
-          </div>
+      <!-- Two-thumb timeline -->
+      <div class="mob-timeline-container">
+        <div class="mob-timeline" id="mob-timeline">
+          <div class="mob-timeline-track"></div>
+          <div class="mob-timeline-fill" id="mob-timeline-fill"></div>
+          <div class="mob-timeline-thumb mob-thumb-start" id="mob-thumb-start"></div>
+          <div class="mob-timeline-thumb mob-thumb-end" id="mob-thumb-end"></div>
         </div>
-        <div class="mobile-nudge-row">
-          <span class="mobile-nudge-label">End</span>
-          <div class="mobile-nudge-btns">
-            <button class="mobile-btn-nudge" onclick="nudgeFrame(-0.04, false)">−1f</button>
-            <button class="mobile-btn-nudge" onclick="nudgeEnd(-5)">−5s</button>
-            <button class="mobile-btn-nudge" onclick="nudgeEnd(5)">+5s</button>
-            <button class="mobile-btn-nudge" onclick="nudgeFrame(0.04, false)">+1f</button>
-          </div>
+        <div class="mob-timeline-times">
+          <span id="mob-time-start">0:00.00</span>
+          <span class="mob-timeline-dur" id="mob-time-dur">30.0s</span>
+          <span id="mob-time-end">0:30.00</span>
         </div>
       </div>
 
-      <!-- Duration presets -->
-      <div class="mobile-presets">
-        <button class="mobile-preset-btn" data-dur="5" onclick="mobilePreset(5)">5s</button>
-        <button class="mobile-preset-btn" data-dur="10" onclick="mobilePreset(10)">10s</button>
-        <button class="mobile-preset-btn" data-dur="15" onclick="mobilePreset(15)">15s</button>
-        <button class="mobile-preset-btn" data-dur="30" onclick="mobilePreset(30)">30s</button>
-        <button class="mobile-preset-btn" data-dur="45" onclick="mobilePreset(45)">45s</button>
-        <button class="mobile-preset-btn" data-dur="60" onclick="mobilePreset(60)">60s</button>
-        <button class="mobile-preset-btn" data-dur="139" onclick="mobilePreset(139)" style="font-weight:700">139s</button>
+      <!-- Fine-tune (applied to last-touched handle, indicated by highlight) -->
+      <div class="mob-finetune">
+        <button class="mob-ft-btn" onclick="mobNudgeActive(-0.04)">−1f</button>
+        <button class="mob-ft-btn" onclick="mobNudgeActive(-5)">−5s</button>
+        <span class="mob-ft-active" id="mob-ft-active-label">Start</span>
+        <button class="mob-ft-btn" onclick="mobNudgeActive(5)">+5s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeActive(0.04)">+1f</button>
       </div>
 
-      <!-- Download button -->
-      <button class="mobile-download-btn" id="btn-download-mob" onclick="downloadClip()" disabled>
+      <!-- Presets -->
+      <div class="mob-presets">
+        <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
+        <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
+        <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
+        <button class="mob-preset-btn" data-dur="30" onclick="mobPreset(30)">30s</button>
+        <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
+        <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
+        <button class="mob-preset-btn" data-dur="139" onclick="mobPreset(139)">139s</button>
+      </div>
+
+      <!-- Download -->
+      <button class="mob-download-btn" id="mob-btn-download" onclick="mobDownload()" disabled>
         ⬇ Download Clip
       </button>
 
-      <!-- Social toggles (collapsible) -->
-      <details class="mobile-options" id="mobile-options" style="display:none">
-        <summary class="mobile-options-summary">⚙ Options</summary>
-        <div class="mobile-options-body">
-          <label class="mobile-option" id="mob-opt-captions" style="display:none">
-            <input type="checkbox" onchange="toggleCaptions()" id="mob-chk-captions">
-            <span>💬 Burn captions</span>
-          </label>
-          <label class="mobile-option">
-            <input type="checkbox" onchange="toggleVertical()" id="mob-chk-vertical">
-            <span>📱 Vertical 9:16</span>
-          </label>
-        </div>
+      <!-- Options -->
+      <details class="mob-options" id="mob-options" style="display:none">
+        <summary>Options</summary>
+        <label class="mob-option" id="mob-opt-captions" style="display:none">
+          <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
+          💬 Burn captions
+        </label>
+        <label class="mob-option">
+          <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
+          📱 Vertical 9:16
+        </label>
       </details>
 
-      <!-- Progress + status (shared elements, moved here for mobile) -->
-      <div class="clip-progress" id="clip-progress-mob" style="display:none">
-        <div class="progress-bar">
-          <div class="progress-fill" id="clip-progress-fill-mob"></div>
-        </div>
-        <div class="progress-text" id="clip-progress-text-mob">Encoding clip...</div>
+      <!-- Progress -->
+      <div class="clip-progress" id="mob-clip-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="mob-clip-progress-fill"></div></div>
+        <div class="progress-text" id="mob-clip-progress-text">Encoding...</div>
       </div>
-      <div class="clip-status-mob" id="clip-status-mob"></div>
+      <div class="clip-status-mob" id="mob-clip-status"></div>
     </div>
   </div>
 
 </main>
 
-<script src="static/app.js?v=14"></script>
+<script src="static/app.js?v=15"></script>
+<script src="static/mobile.js?v=15"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");

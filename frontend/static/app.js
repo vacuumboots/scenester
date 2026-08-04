@@ -279,6 +279,7 @@ function goHome() {
   if (dom.previewLoading) dom.previewLoading.style.display = "none";
   if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
   renderLibrary();
+  if (typeof destroyMobileDetail === 'function') destroyMobileDetail();
 }
 
 // ── Detail View ────────────────────────────────────────────────────────
@@ -361,6 +362,11 @@ function showDetailView() {
   // Clear mobile preset highlights
   var mpb = document.querySelectorAll(".mobile-preset-btn");
   for (var i = 0; i < mpb.length; i++) mpb[i].classList.remove("active");
+
+  // Init radical mobile timeline (two-thumb scrubber)
+  if (window.innerWidth <= 768 && typeof initMobileDetail === 'function') {
+    initMobileDetail(item);
+  }
 }
 
 function goBack() {
@@ -379,6 +385,7 @@ function goBack() {
   if (dom.previewLoading) dom.previewLoading.style.display = "none";
   if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
   renderLibrary(dom.search ? dom.search.value : "");
+  if (typeof destroyMobileDetail === 'function') destroyMobileDetail();
 }
 
 // ── Now Playing Banner ─────────────────────────────────────────────────
