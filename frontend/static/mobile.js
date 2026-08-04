@@ -81,7 +81,6 @@ function initMobileDetail(item) {
   _mobUpdateTimeline();
   _mobUpdateTimes();
   _mobUpdateDownloadBtn();
-  _mobUpdateActiveLabel();
 
   // Clear preset highlights
   var btns = document.querySelectorAll('.mob-preset-btn');
@@ -216,7 +215,6 @@ function _mobTimelineTouchStart(e) {
 
   _mobUpdateTimeline();
   _mobUpdateTimes();
-  _mobUpdateActiveLabel();
 
   e.preventDefault();
 }
@@ -413,30 +411,54 @@ function _mobUpdateTimes() {
   }
 }
 
-/** Update the fine-tune active label to show "Start" or "End". */
-function _mobUpdateActiveLabel() {
-  var lbl = document.getElementById('mob-ft-active-label');
-  if (!lbl) return;
-  lbl.textContent = _mobActiveHandle === 'start' ? 'Start' : 'End';
-  lbl.className = 'mob-ft-active ' + _mobActiveHandle;
-}
-
-// ── Transport Controls ─────────────────────────────────────────────────
-
-// ── Fine-Tune (Nudge Bar) ──────────────────────────────────────────────
+// ── Skip ──────────────────────────────────────────────────────────────
 
 /**
- * Nudge the active handle by delta seconds.
+ * Skip the video forward or backward by delta seconds (typically ±10).
+ * Also slides the clip window to follow the new playback position.
+ */
+function mobSkip(delta) {
+  var vid = _mobVideo();
+  if (!vid || !isFinite(vid.currentTime) || _mobDuration <= 0) return;
+
+  var newTime = Math.max(0, Math.min(_mobDuration, vid.currentTime + delta));
+  vid.currentTime = newTime;
+
+  // Slide the clip window to follow the playback position
+  var dur = _mobEnd - _mobStart;
+  _mobStart = Math.max(0, newTime - dur / 2);
+  _mobEnd = Math.min(_mobDuration, _mobStart + dur);
+  if (_mobEnd - _mobStart < dur) {
+    _mobStart = Math.max(0, _mobEnd - dur);
+  }
+
+  _mobUpdateTimeline();
+  _mobUpdateTimes();
+  _mobUpdateDownloadBtn();
+}
+
+// ── Fine-Tune (explicit Start / End rows) ─────────────────────────────
+
+/**
+ * Nudge the START handle by delta seconds.
  * Typical values: ±0.04 (one frame at 25 fps) or ±5 (coarse jump).
  */
-function mobNudgeActive(delta) {
-  if (_mobActiveHandle === 'start') {
-    _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, _mobStart + delta));
-    seekVideoTo(_mobStart);
-  } else {
-    _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, _mobEnd + delta));
-    seekVideoTo(_mobEnd);
-  }
+function mobNudgeStart(delta) {
+  _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, _mobStart + delta));
+  _mobActiveHandle = 'start';
+  seekVideoTo(_mobStart);
+  _mobUpdateTimeline();
+  _mobUpdateTimes();
+  _mobUpdateDownloadBtn();
+}
+
+/**
+ * Nudge the END handle by delta seconds.
+ */
+function mobNudgeEnd(delta) {
+  _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, _mobEnd + delta));
+  _mobActiveHandle = 'end';
+  seekVideoTo(_mobEnd);
   _mobUpdateTimeline();
   _mobUpdateTimes();
   _mobUpdateDownloadBtn();

@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=16">
+  <link rel="stylesheet" href="static/style.css?v=17">
 </head>
 <body>
 
@@ -247,7 +247,7 @@
       <!-- Video player — 60vh, native controls -->
       <div class="mob-video-container">
         <video id="preview-video" preload="metadata" playsinline controls
-               style="width:100%; display:block; background:#000; height:60vh; object-fit:contain;"></video>
+               style="width:100%; display:block; background:#000; height:auto; max-height:60vh; object-fit:contain;"></video>
       </div>
 
       <!-- Bottom sheet — slides up with all controls -->
@@ -261,19 +261,30 @@
             <div class="mob-timeline-thumb mob-thumb-end" id="mob-thumb-end"></div>
           </div>
           <div class="mob-timeline-times">
+            <button class="mob-skip-btn" onclick="mobSkip(-10)" title="Back 10s">⏪</button>
             <span id="mob-time-start">0:00.00</span>
             <span class="mob-timeline-dur" id="mob-time-dur">30.0s</span>
             <span id="mob-time-end">0:30.00</span>
+            <button class="mob-skip-btn" onclick="mobSkip(10)" title="Forward 10s">⏩</button>
           </div>
         </div>
 
-        <!-- Fine-tune -->
+        <!-- Fine-tune — explicit Start and End rows -->
         <div class="mob-finetune">
-          <button class="mob-ft-btn" onclick="mobNudgeActive(-0.04)">−1f</button>
-          <button class="mob-ft-btn" onclick="mobNudgeActive(-5)">−5s</button>
-          <span class="mob-ft-active" id="mob-ft-active-label">Start</span>
-          <button class="mob-ft-btn" onclick="mobNudgeActive(5)">+5s</button>
-          <button class="mob-ft-btn" onclick="mobNudgeActive(0.04)">+1f</button>
+          <div class="mob-ft-row">
+            <span class="mob-ft-label">Start</span>
+            <button class="mob-ft-btn" onclick="mobNudgeStart(-0.04)">−1f</button>
+            <button class="mob-ft-btn" onclick="mobNudgeStart(-5)">−5s</button>
+            <button class="mob-ft-btn" onclick="mobNudgeStart(5)">+5s</button>
+            <button class="mob-ft-btn" onclick="mobNudgeStart(0.04)">+1f</button>
+          </div>
+          <div class="mob-ft-row">
+            <span class="mob-ft-label">End</span>
+            <button class="mob-ft-btn" onclick="mobNudgeEnd(-0.04)">−1f</button>
+            <button class="mob-ft-btn" onclick="mobNudgeEnd(-5)">−5s</button>
+            <button class="mob-ft-btn" onclick="mobNudgeEnd(5)">+5s</button>
+            <button class="mob-ft-btn" onclick="mobNudgeEnd(0.04)">+1f</button>
+          </div>
         </div>
 
         <!-- Presets -->
@@ -317,8 +328,8 @@
 
 </main>
 
-<script src="static/app.js?v=16"></script>
-<script src="static/mobile.js?v=16"></script>
+<script src="static/app.js?v=17"></script>
+<script src="static/mobile.js?v=17"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
