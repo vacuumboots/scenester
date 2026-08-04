@@ -755,9 +755,11 @@ function initStripDrag() {
         setSliderEnd(ns + _lockedDuration);
       } else {
         var dur = _sliderEnd - _sliderStart;
-        setSliderStart(t);
+        // Clamp so a click near the very end can't collapse the range to 0s
+        var ns = Math.max(0, Math.min(t, state.mediaDuration - 1));
+        setSliderStart(ns);
         if (dur > 0) {
-          setSliderEnd(Math.min(state.mediaDuration, t + dur));
+          setSliderEnd(Math.min(state.mediaDuration, ns + dur));
         }
       }
     }
@@ -791,7 +793,8 @@ function initStripDrag() {
     var thumb = e.target.closest && e.target.closest(".frame-thumb");
     if (!thumb) return;
     _stripClickTime = parseInt(thumb.getAttribute("data-time"));
-    seekVideoTo(_stripClickTime);
+    // NOTE: no seek here — starting a pan/scroll is browsing, not scrubbing.
+    // The preview only seeks on an actual tap (touchend) or long-press.
     if (_stripLongPressTimer) clearTimeout(_stripLongPressTimer);
     _stripLongPressFired = false;
     thumb.classList.add("long-press-active");
