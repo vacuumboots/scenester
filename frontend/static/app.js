@@ -1234,8 +1234,8 @@ function markEnd() {
   if (dom.clipStatus) dom.clipStatus.textContent = "Clip ready: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + (_sliderEnd - _sliderStart) + "s).";
   var b = document.getElementById("btn-mark-end");
   if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
-  // Show the user what they got — loop the selection once
-  playClip();
+  // No auto-loop — the video stays paused where the user ended it.
+  // The ▶ Clip button previews the selection when the user asks for it.
 }
 
 function nudgeStart(delta) {

@@ -992,44 +992,43 @@ main {
 .mark-mode {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 14px 0 4px;
+  gap: 8px;
+  margin: 12px 0 4px;
 }
 
 .mark-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .btn-mark {
-  padding: 20px 12px;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  border-radius: var(--radius);
-  min-height: 76px;
+  padding: 14px 10px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border-radius: var(--radius-sm);
+  min-height: 54px;
   background: var(--panel);
-  border: 2px solid var(--border);
+  border: 1.5px solid var(--border);
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .btn-mark:active {
-  transform: scale(0.97);
+  background: #1e1e1e;
 }
 
 .btn-mark-end {
-  border-color: var(--gold);
-  color: var(--gold);
+  border-color: var(--border-hover);
+  color: var(--text-dim);
 }
 
 .btn-mark.just-marked {
-  background: var(--gold);
-  color: #0d0d0d;
-  border-color: var(--gold);
-  box-shadow: 0 0 18px rgba(196,150,59,0.45);
+  background: #242013;
+  border-color: var(--gold-dim);
+  color: var(--gold);
 }
 
 .mark-hint {
@@ -1071,21 +1070,20 @@ main {
 }
 
 .btn-nudge {
-  padding: 14px 8px;
-  font-size: 16px;
+  padding: 12px 8px;
+  font-size: 15px;
   font-weight: 600;
-  border-radius: 10px;
-  min-height: 52px;
+  border-radius: 8px;
+  min-height: 46px;
   background: var(--panel);
-  border: 1.5px solid var(--border);
-  color: var(--text);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .btn-nudge:active {
-  background: #222;
-  transform: scale(0.96);
+  background: #1e1e1e;
 }
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
 
@@ -1512,24 +1510,24 @@ main {
     flex-wrap: wrap;
   }
 
-  /* Mark Mode — full-width tap zones on touch devices */
+  /* Mark Mode — comfortable tap zones, not shouty */
   .mark-buttons {
     gap: 10px;
   }
   .btn-mark {
-    min-height: 84px;
-    font-size: 22px;
-    padding: 24px 12px;
+    min-height: 58px;
+    font-size: 17px;
+    padding: 16px 10px;
   }
 
-  /* Nudge buttons — bigger, full-width rows */
+  /* Nudge buttons — comfortable, quiet */
   .nudge-row {
-    gap: 14px;
+    gap: 12px;
   }
   .btn-nudge {
-    min-height: 60px;
-    font-size: 18px;
-    padding: 16px 8px;
+    min-height: 50px;
+    font-size: 16px;
+    padding: 14px 8px;
   }
   .nudge-label {
     font-size: 13px;
@@ -1537,14 +1535,14 @@ main {
   }
 
   .preset-duration-btn {
-    padding: 12px 14px;
-    font-size: 15px;
-    min-height: 48px;
+    padding: 10px 12px;
+    font-size: 14px;
+    min-height: 44px;
   }
 
   .btn-download {
-    padding: 16px;
-    font-size: 17px;
-    min-height: 56px;
+    padding: 14px;
+    font-size: 16px;
+    min-height: 52px;
   }
 }
