@@ -1540,6 +1540,16 @@ main {
   /* padding handled by sheet */
 }
 
+.mob-stage-label {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  min-height: 14px;
+}
+
 .mob-timeline {
   position: relative;
   height: 64px;
@@ -1602,6 +1612,10 @@ main {
 .mob-timeline-thumb.armed {
   animation: long-press-pulse 0.8s ease-in-out infinite;
   border-color: var(--gold);
+}
+
+.mob-timeline-thumb.armed-dim {
+  opacity: 0.25;
 }
 
 .mob-timeline-playhead {
