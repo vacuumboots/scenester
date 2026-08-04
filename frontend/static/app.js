@@ -723,167 +723,112 @@ function buildFrameStrip(mediaId, durationS) {
   }
 }
 
-// Click/tap: set start. Long-press (mobile): set end. Drag: slide range.
-// Desktop: shift+click also sets end.
-var _stripDragActive = false;
-var _stripDidMove = false;
+// The film strip is a click/tap surface ONLY — it is NOT a scrubber.
+// The preview video + range bar are the scrubber. Click/tap a thumbnail =
+// set clip start. Shift+click (desktop) or long-press (mobile) = set clip
+// end. Dragging/panning never seeks the video or moves the range.
+var _stripDragActive = false;  // kept false — range bar mutual-exclusion check
 var _stripClickTime = null;
-var _stripDragDuration = 0;   // clip duration when drag started
 var _stripLongPressTimer = null;
 var _stripLongPressFired = false;
+var _lastTouchEndTime = 0;  // suppresses compatibility mouse events after touch
 
 function initStripDrag() {
   if (!dom.frameStripInner) return;
 
-  // Shared drag-start logic — called by both mousedown and touchstart.
-  function _startStripDrag(clientX, thumb, isTouch) {
-    _stripDragActive = false;
-    _stripDidMove = false;
-    _stripLongPressFired = false;
-    _stripClickTime = parseInt(thumb.getAttribute("data-time"));
-    _stripDragDuration = _rangeLocked ? _lockedDuration : (_sliderEnd - _sliderStart);
-
-    // Cache strip rect for smooth continuous tracking
-    var stripRect = dom.frameStripInner.getBoundingClientRect();
-    var stripLeft = stripRect.left;
-    var stripWidth = stripRect.width;
-
-    // Immediate seek for responsive feel
-    seekVideoTo(_stripClickTime);
-
-    // On touch: start long-press timer for "set end" gesture
-    if (isTouch) {
-      if (_stripLongPressTimer) clearTimeout(_stripLongPressTimer);
-      thumb.classList.add("long-press-active");
-      _stripLongPressTimer = setTimeout(function() {
-        _stripLongPressFired = true;
-        thumb.classList.remove("long-press-active");
-        // Long-press = set end (like shift+click on desktop)
-        if (_rangeLocked) {
-          setSliderEnd(_stripClickTime);
-          setSliderStart(Math.max(0, _stripClickTime - _lockedDuration));
-        } else {
-          setSliderEnd(_stripClickTime);
+  function applyStripSelection(t, isEnd) {
+    if (t == null) return;
+    if (isEnd) {
+      // Set end (desktop shift+click, mobile long-press)
+      if (_rangeLocked) {
+        setSliderEnd(t);
+        setSliderStart(Math.max(0, t - _lockedDuration));
+      } else {
+        setSliderEnd(t);
+      }
+    } else {
+      // Set start (desktop click, mobile tap)
+      if (_rangeLocked) {
+        var ns = Math.max(0, t);
+        if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
+        setSliderStart(ns);
+        setSliderEnd(ns + _lockedDuration);
+      } else {
+        var dur = _sliderEnd - _sliderStart;
+        setSliderStart(t);
+        if (dur > 0) {
+          setSliderEnd(Math.min(state.mediaDuration, t + dur));
         }
-        seekVideoTo(_sliderStart);
-        updateStripRange();
-        if (dom.clipStatus) {
-          var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
-          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
-        }
-      }, 500);
+      }
     }
-
-    function onMove(ev) {
-      if (_handleDrag) return;
-      var cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-
-      // Cancel long-press if finger moved significantly
-      if (isTouch && _stripLongPressTimer) {
-        var dx = Math.abs(cx - clientX);
-        if (dx > 10) {
-          clearTimeout(_stripLongPressTimer);
-          _stripLongPressTimer = null;
-          thumb.classList.remove("long-press-active");
-        }
-      }
-
-      _stripDidMove = true;
-      _stripDragActive = true;
-
-      // Continuous time from cursor position (no snapping to thumbs)
-      var pct = Math.max(0, Math.min(1, (cx - stripLeft) / stripWidth));
-      var pos = pct * state.mediaDuration;
-
-      // Slide the range so its center follows the cursor
-      var halfDur = _stripDragDuration / 2;
-      var newStart = Math.max(0, pos - halfDur);
-      var newEnd = Math.min(state.mediaDuration, pos + halfDur);
-
-      if (newStart === 0 && pos < halfDur) {
-        newEnd = Math.min(state.mediaDuration, _stripDragDuration);
-      }
-      if (newEnd === state.mediaDuration && pos + halfDur > state.mediaDuration) {
-        newStart = Math.max(0, state.mediaDuration - _stripDragDuration);
-      }
-
-      setSliderStart(Math.floor(newStart));
-      setSliderEnd(Math.floor(newEnd));
-      seekVideoTo(_sliderStart);
-      if (dom.clipStatus) dom.clipStatus.textContent = "Range: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + _stripDragDuration + "s)";
+    seekVideoTo(_sliderStart);
+    updateStripRange();
+    if (dom.clipStatus) {
+      var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
+      dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
     }
-
-    function onUp(ev) {
-      // Clean up long-press timer
-      if (_stripLongPressTimer) {
-        clearTimeout(_stripLongPressTimer);
-        _stripLongPressTimer = null;
-        thumb.classList.remove("long-press-active");
-      }
-
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.removeEventListener("touchmove", onMove);
-      document.removeEventListener("touchend", onUp);
-
-      if (_stripDragActive) {
-        seekVideoTo(_sliderStart);
-        if (dom.clipStatus) {
-          var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
-          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
-        }
-      } else if (!_stripDidMove && !_stripLongPressFired) {
-        // Tap (touch) or click (mouse) — set start
-        if (ev && ev.shiftKey) {
-          // Desktop shift+click = set end
-          if (_rangeLocked) {
-            setSliderEnd(_stripClickTime);
-            setSliderStart(Math.max(0, _stripClickTime - _lockedDuration));
-          } else {
-            setSliderEnd(_stripClickTime);
-          }
-          seekVideoTo(_sliderStart);
-        } else {
-          // Tap / normal click = set start
-          if (_rangeLocked) {
-            var ns = Math.max(0, _stripClickTime);
-            if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
-            setSliderStart(ns);
-            setSliderEnd(ns + _lockedDuration);
-          } else {
-            var dur = _sliderEnd - _sliderStart;
-            setSliderStart(_stripClickTime);
-            if (dur > 0) {
-              setSliderEnd(Math.min(state.mediaDuration, _stripClickTime + dur));
-            }
-          }
-          seekVideoTo(_sliderStart);
-        }
-        updateStripRange();
-      }
-      _stripDragActive = false;
-      _stripDidMove = false;
-      _stripClickTime = null;
-      _stripLongPressFired = false;
-    }
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    document.addEventListener("touchmove", onMove);
-    document.addEventListener("touchend", onUp);
   }
 
   dom.frameStripInner.addEventListener("mousedown", function(e) {
+    if (e.button !== 0) return;
+    if (Date.now() - _lastTouchEndTime < 600) return;  // ghost mousedown after touch
     var thumb = e.target.closest && e.target.closest(".frame-thumb");
     if (!thumb) return;
     e.preventDefault();
-    _startStripDrag(e.clientX, thumb, false);
+    _stripClickTime = parseInt(thumb.getAttribute("data-time"));
+    seekVideoTo(_stripClickTime);  // preview follows the thumb being clicked
+  });
+
+  document.addEventListener("mouseup", function(e) {
+    if (Date.now() - _lastTouchEndTime < 600) return;  // ghost mouseup after touch
+    if (_stripClickTime == null) return;
+    var t = _stripClickTime;
+    _stripClickTime = null;
+    applyStripSelection(t, !!(e.shiftKey));
   });
 
   dom.frameStripInner.addEventListener("touchstart", function(e) {
     var thumb = e.target.closest && e.target.closest(".frame-thumb");
     if (!thumb) return;
-    _startStripDrag(e.touches[0].clientX, thumb, true);
+    _stripClickTime = parseInt(thumb.getAttribute("data-time"));
+    seekVideoTo(_stripClickTime);
+    if (_stripLongPressTimer) clearTimeout(_stripLongPressTimer);
+    _stripLongPressFired = false;
+    thumb.classList.add("long-press-active");
+    _stripLongPressTimer = setTimeout(function() {
+      _stripLongPressFired = true;
+      thumb.classList.remove("long-press-active");
+      var t = _stripClickTime;
+      _stripClickTime = null;
+      applyStripSelection(t, true);  // long-press = set end
+    }, 500);
+  }, { passive: true });
+
+  dom.frameStripInner.addEventListener("touchend", function() {
+    _lastTouchEndTime = Date.now();
+    if (_stripLongPressTimer) {
+      clearTimeout(_stripLongPressTimer);
+      _stripLongPressTimer = null;
+      var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
+      for (var i = 0; i < thumbs.length; i++) thumbs[i].classList.remove("long-press-active");
+    }
+    if (_stripLongPressFired || _stripClickTime == null) {
+      _stripLongPressFired = false;
+      _stripClickTime = null;
+      return;
+    }
+    var t = _stripClickTime;
+    _stripClickTime = null;
+    applyStripSelection(t, false);  // tap = set start
+  }, { passive: true });
+
+  // The browser claimed the gesture (pan/scroll) — cancel any pending tap/long-press.
+  dom.frameStripInner.addEventListener("touchcancel", function() {
+    if (_stripLongPressTimer) { clearTimeout(_stripLongPressTimer); _stripLongPressTimer = null; }
+    _stripLongPressFired = false;
+    _stripClickTime = null;
+    var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
+    for (var i = 0; i < thumbs.length; i++) thumbs[i].classList.remove("long-press-active");
   }, { passive: true });
 }
 
