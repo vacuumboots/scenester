@@ -1132,6 +1132,10 @@ function updateDownloadButton() {
 // ── Fine-tune sliders ────────────────────────────────────────────────────
 
 function initFineTuneSliders() {
+  // Fine-tune sliders were replaced by nudge buttons (2026-08-03, mobile
+  // accessibility pass). Kept as a no-op guard — the nudge buttons call
+  // nudgeStart/nudgeEnd directly.
+  return;
   var ss = document.getElementById("fine-tune-start");
   var es = document.getElementById("fine-tune-end");
   if (!ss || !es) return;
@@ -1200,6 +1204,48 @@ function _updateFineTuneEndVal() {
 function updateFineTuneSliders() {
   _updateFineTuneStartRange();
   _updateFineTuneEndRange();
+}
+
+// ── Mark Mode — the video is the scrubber ────────────────────────────────
+// No aiming, no dragging: play the video, tap MARK START when the moment
+// arrives, tap MARK END when it's over. Times come from the video player.
+
+function markStart() {
+  var vid = dom.previewVideo;
+  if (!vid || !isFinite(vid.currentTime)) return;
+  setSliderStart(Math.floor(vid.currentTime));
+  // Keep playing — user will tap MARK END when the moment finishes.
+  if (dom.clipStatus) dom.clipStatus.textContent = "Start marked at " + fmtTime(_sliderStart) + " — keep playing, tap Mark End when it's over.";
+  // Visual feedback: highlight the start button briefly
+  var b = document.getElementById("btn-mark-start");
+  if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
+}
+
+function markEnd() {
+  var vid = dom.previewVideo;
+  if (!vid || !isFinite(vid.currentTime)) return;
+  var t = Math.floor(vid.currentTime);
+  if (t <= _sliderStart) {
+    if (dom.clipStatus) dom.clipStatus.textContent = "Mark End is before Start — let the video play a bit longer.";
+    return;
+  }
+  setSliderEnd(t);
+  vid.pause();
+  if (dom.clipStatus) dom.clipStatus.textContent = "Clip ready: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + (_sliderEnd - _sliderStart) + "s).";
+  var b = document.getElementById("btn-mark-end");
+  if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
+  // Show the user what they got — loop the selection once
+  playClip();
+}
+
+function nudgeStart(delta) {
+  setSliderStart(_sliderStart + delta);
+  seekVideoTo(_sliderStart);
+}
+
+function nudgeEnd(delta) {
+  setSliderEnd(_sliderEnd + delta);
+  seekVideoTo(_sliderEnd);
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────

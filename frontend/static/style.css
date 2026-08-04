@@ -988,6 +988,105 @@ main {
   min-width: 36px;
   text-align: center;
 }
+/* ── Mark Mode — the video is the scrubber (2026-08-03) ────────────── */
+.mark-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+.mark-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.btn-mark {
+  padding: 20px 12px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-radius: var(--radius);
+  min-height: 76px;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-mark:active {
+  transform: scale(0.97);
+}
+
+.btn-mark-end {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.btn-mark.just-marked {
+  background: var(--gold);
+  color: #0d0d0d;
+  border-color: var(--gold);
+  box-shadow: 0 0 18px rgba(196,150,59,0.45);
+}
+
+.mark-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Nudge buttons (replaced fine-tune sliders) ────────────────────── */
+.nudge-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.nudge-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nudge-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 34px;
+}
+
+.nudge-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  flex: 1;
+}
+
+.btn-nudge {
+  padding: 14px 8px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+  min-height: 52px;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-nudge:active {
+  background: #222;
+  transform: scale(0.96);
+}
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
 
 
@@ -1096,8 +1195,8 @@ main {
 
   /* Frame strip — smaller thumbs, hide desktop hint */
   .frame-thumb {
-    width: 70px;
-    height: 44px;
+    width: 84px;
+    height: 52px;
   }
   .strip-hint {
     display: none;
@@ -1413,28 +1512,39 @@ main {
     flex-wrap: wrap;
   }
 
-  /* Stack fine-tune sliders vertically — easier one-thumb control */
-  .fine-tune-row {
-    flex-direction: column;
-    gap: 12px;
+  /* Mark Mode — full-width tap zones on touch devices */
+  .mark-buttons {
+    gap: 10px;
+  }
+  .btn-mark {
+    min-height: 84px;
+    font-size: 22px;
+    padding: 24px 12px;
   }
 
-  .fine-tune-group {
-    width: 100%;
-    justify-content: space-between;
+  /* Nudge buttons — bigger, full-width rows */
+  .nudge-row {
+    gap: 14px;
   }
-
-  .fine-tune-slider {
-    width: 100%;
+  .btn-nudge {
+    min-height: 60px;
+    font-size: 18px;
+    padding: 16px 8px;
   }
-
-  .fine-tune-label {
+  .nudge-label {
     font-size: 13px;
-    min-width: 32px;
+    min-width: 36px;
   }
 
-  .fine-tune-value {
-    font-size: 13px;
-    min-width: 42px;
+  .preset-duration-btn {
+    padding: 12px 14px;
+    font-size: 15px;
+    min-height: 48px;
+  }
+
+  .btn-download {
+    padding: 16px;
+    font-size: 17px;
+    min-height: 56px;
   }
 }

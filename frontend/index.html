@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=11">
+  <link rel="stylesheet" href="static/style.css?v=12">
 </head>
 <body>
 
@@ -123,6 +123,16 @@
     <div id="frame-preview" style="display:none">
       <video id="preview-video" preload="metadata" playsinline
              style="width:100%; max-height:480px; background:#000; border-radius:10px;" controls></video>
+
+      <!-- Mark Mode — the video is the scrubber. No aiming, no dragging. -->
+      <div class="mark-mode" id="mark-mode">
+        <div class="mark-buttons">
+          <button class="btn btn-mark" id="btn-mark-start" onclick="markStart()">▶ Mark Start</button>
+          <button class="btn btn-mark btn-mark-end" id="btn-mark-end" onclick="markEnd()">■ Mark End</button>
+        </div>
+        <div class="mark-hint">Press play — tap <b>Mark Start</b> when the moment begins, tap <b>Mark End</b> when it's over.</div>
+      </div>
+
       <div id="preview-error" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
         <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
         <div>Video preview not available for this format.</div>
@@ -149,7 +159,7 @@
 
     <!-- Frame strip — the primary scrubber. Click=set start, Shift+click=set end, drag=select range -->
     <div class="frame-strip" id="frame-strip" style="display:none">
-      <div class="strip-hint">Click to set start · Shift+click to set end · Drag to slide range · ←→ nudge start · Alt+←→ nudge end · Shift speeds up 10×</div>
+      <div class="strip-hint">Optional: tap a frame to move, drag to slide range</div>
       <div class="frame-strip-inner" id="frame-strip-inner"></div>
     </div>
 
@@ -173,16 +183,24 @@
         <div class="range-bar-playhead" id="range-bar-playhead" title="Current preview position"></div>
       </div>
 
-      <div class="fine-tune-row">
-        <div class="fine-tune-group">
-          <span class="fine-tune-label">Start</span>
-          <input type="range" class="fine-tune-slider" id="fine-tune-start" min="0" max="100" value="0" step="1" title="Fine-tune clip start time">
-          <span class="fine-tune-value" id="fine-tune-start-val">0:00</span>
+      <div class="nudge-row">
+        <div class="nudge-group">
+          <span class="nudge-label">Start</span>
+          <div class="nudge-buttons">
+            <button class="btn btn-nudge" onclick="nudgeStart(-5)">-5s</button>
+            <button class="btn btn-nudge" onclick="nudgeStart(-1)">-1s</button>
+            <button class="btn btn-nudge" onclick="nudgeStart(1)">+1s</button>
+            <button class="btn btn-nudge" onclick="nudgeStart(5)">+5s</button>
+          </div>
         </div>
-        <div class="fine-tune-group">
-          <input type="range" class="fine-tune-slider" id="fine-tune-end" min="0" max="100" value="0" step="1" title="Fine-tune clip end time">
-          <span class="fine-tune-value" id="fine-tune-end-val">0:00</span>
-          <span class="fine-tune-label">End</span>
+        <div class="nudge-group">
+          <span class="nudge-label">End</span>
+          <div class="nudge-buttons">
+            <button class="btn btn-nudge" onclick="nudgeEnd(-5)">-5s</button>
+            <button class="btn btn-nudge" onclick="nudgeEnd(-1)">-1s</button>
+            <button class="btn btn-nudge" onclick="nudgeEnd(1)">+1s</button>
+            <button class="btn btn-nudge" onclick="nudgeEnd(5)">+5s</button>
+          </div>
         </div>
       </div>
 
