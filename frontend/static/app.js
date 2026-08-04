@@ -358,10 +358,6 @@ function showDetailView() {
   if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
 
   if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(durationS);
-  _setMobileStatus("Ready — tap Set Start when the moment begins");
-  // Clear mobile preset highlights
-  var mpb = document.querySelectorAll(".mobile-preset-btn");
-  for (var i = 0; i < mpb.length; i++) mpb[i].classList.remove("active");
 
   // Init radical mobile timeline (two-thumb scrubber)
   if (window.innerWidth <= 768 && typeof initMobileDetail === 'function') {

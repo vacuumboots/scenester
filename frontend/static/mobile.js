@@ -19,14 +19,7 @@ var _mobEnd = 139;            // float, clip end in seconds
 var _mobDuration = 0;         // total media duration in seconds
 var _mobActiveHandle = 'start';  // which handle was last touched ('start' | 'end')
 var _mobDragging = null;      // null | 'start' | 'end' | 'window'
-var _mobZoom = 1;             // timeline zoom level (1 = full movie)
-var _mobZoomCenter = 0;       // center point of zoom in seconds
 var _mobVideoReady = false;
-
-// Pinch-to-zoom tracking
-var _mobPinchActive = false;
-var _mobPinchBaseDist = 0;
-var _mobPinchBaseZoom = 1;
 
 // Progress mirroring
 var _mobProgressTimer = null;
@@ -34,6 +27,25 @@ var _mobProgressTimer = null;
 // Touch position cache (filled at touchstart, reused in touchmove to avoid
 // getBoundingClientRect layout thrash on every move event)
 var _mobTouchRect = null;
+
+// ── Cached DOM references (filled at init, avoids getElementById jank) ─
+
+var _mobEls = {};
+
+function _mobCacheDom() {
+  _mobEls.timeline   = document.getElementById('mob-timeline');
+  _mobEls.fill       = document.getElementById('mob-timeline-fill');
+  _mobEls.thumbStart = document.getElementById('mob-thumb-start');
+  _mobEls.thumbEnd   = document.getElementById('mob-thumb-end');
+  _mobEls.timeStart  = document.getElementById('mob-time-start');
+  _mobEls.timeEnd    = document.getElementById('mob-time-end');
+  _mobEls.timeDur    = document.getElementById('mob-time-dur');
+  _mobEls.btnDownload = document.getElementById('mob-btn-download');
+  _mobEls.progress   = document.getElementById('mob-clip-progress');
+  _mobEls.progressFill = document.getElementById('mob-clip-progress-fill');
+  _mobEls.progressText = document.getElementById('mob-clip-progress-text');
+  _mobEls.status     = document.getElementById('mob-clip-status');
+}
 
 // ── DOM helpers ────────────────────────────────────────────────────────
 
@@ -50,9 +62,9 @@ function _mobVideo() {
  * Initialises the mobile clip detail view with the given Plex item.
  */
 function initMobileDetail(item) {
-  // Reset zoom to full-movie
-  _mobZoom = 1;
-  _mobZoomCenter = 0;
+  // Cache DOM references (avoids getElementById jank during drag)
+  _mobCacheDom();
+
   _mobDragging = null;
   _mobVideoReady = false;
 
@@ -120,7 +132,6 @@ function destroyMobileDetail() {
     vid.removeEventListener('timeupdate', _mobOnTimeUpdate);
   }
   _mobDragging = null;
-  _mobPinchActive = false;
   _mobStopProgressPolling();
   _mobHideProgress();
 }
@@ -143,17 +154,15 @@ function _mobSyncSocialFromDesktop() {
  *   - touchend    on document
  */
 function initMobileTimeline() {
-  var tl = document.getElementById('mob-timeline');
+  var tl = _mobEls.timeline || document.getElementById('mob-timeline');
   if (!tl) return;
 
   // Remove old listeners (idempotent re-init)
   tl.removeEventListener('touchstart', _mobTimelineTouchStart);
   document.removeEventListener('touchmove', _mobTimelineTouchMove);
   document.removeEventListener('touchend', _mobTimelineTouchEnd);
-  tl.removeEventListener('touchstart', _mobTimelinePinchStart);
 
   tl.addEventListener('touchstart', _mobTimelineTouchStart, { passive: false });
-  tl.addEventListener('touchstart', _mobTimelinePinchStart, { passive: false });
   document.addEventListener('touchmove', _mobTimelineTouchMove, { passive: false });
   document.addEventListener('touchend', _mobTimelineTouchEnd);
   document.addEventListener('touchcancel', _mobTimelineTouchEnd);
@@ -161,9 +170,9 @@ function initMobileTimeline() {
 
 /** touchstart: identify target (handle, fill window, empty area). */
 function _mobTimelineTouchStart(e) {
-  if (e.touches.length !== 1) return; // single-finger only; pinch handled separately
+  if (e.touches.length !== 1) return; // single-finger only
 
-  var tl = document.getElementById('mob-timeline');
+  var tl = _mobEls.timeline;
   if (!tl) return;
 
   var touch = e.touches[0];
@@ -212,10 +221,8 @@ function _mobTimelineTouchMove(e) {
   if (!_mobDragging) return;
   if (e.touches.length !== 1) return;
 
-  var tl = document.getElementById('mob-timeline');
-  if (!tl) return;
-
-  var rect = _mobTouchRect || tl.getBoundingClientRect();
+  var rect = _mobTouchRect || (_mobEls.timeline ? _mobEls.timeline.getBoundingClientRect() : null);
+  if (!rect) return;
   var touch = e.touches[0];
   var x = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
   var t = _mobTimeFromPosition(x);
@@ -253,91 +260,14 @@ function _mobTimelineTouchEnd(e) {
   _mobTouchRect = null;
 }
 
-// ── Pinch-to-Zoom ─────────────────────────────────────────────────────
-
-/** Detect two-finger touch on the timeline — begin pinch tracking. */
-function _mobTimelinePinchStart(e) {
-  if (e.touches.length !== 2) return;
-
-  var tl = document.getElementById('mob-timeline');
-  if (!tl) return;
-
-  var t0 = e.touches[0];
-  var t1 = e.touches[1];
-  var dx = t1.clientX - t0.clientX;
-  var dy = t1.clientY - t0.clientY;
-  _mobPinchBaseDist = Math.sqrt(dx * dx + dy * dy);
-  _mobPinchBaseZoom = _mobZoom;
-  _mobPinchActive = true;
-
-  // Record the zoom center in timeline-pixel space
-  var rect = tl.getBoundingClientRect();
-  var cx = (t0.clientX + t1.clientX) / 2 - rect.left;
-  var pct = Math.max(0, Math.min(1, cx / rect.width));
-  _mobZoomCenter = _mobTimeFromPosition((t0.clientX + t1.clientX) / 2 - rect.left);
-
-  // Switch to pinch tracking on move
-  document.addEventListener('touchmove', _mobTimelinePinchMove, { passive: false });
-  document.addEventListener('touchend', _mobTimelinePinchEnd);
-  document.addEventListener('touchcancel', _mobTimelinePinchEnd);
-
-  e.preventDefault();
-}
-
-function _mobTimelinePinchMove(e) {
-  if (!_mobPinchActive || e.touches.length !== 2) return;
-
-  var t0 = e.touches[0];
-  var t1 = e.touches[1];
-  var dx = t1.clientX - t0.clientX;
-  var dy = t1.clientY - t0.clientY;
-  var dist = Math.sqrt(dx * dx + dy * dy);
-
-  if (_mobPinchBaseDist <= 0) return;
-
-  var scale = dist / _mobPinchBaseDist;
-  var newZoom = Math.max(1, Math.min(20, _mobPinchBaseZoom * scale));
-  _mobZoom = newZoom;
-
-  // Apply CSS transform to the timeline for visual feedback
-  var tl = document.getElementById('mob-timeline');
-  if (tl) {
-    tl.style.transform = 'scaleX(' + _mobZoom + ')';
-    tl.style.transformOrigin = 'center center';
-  }
-
-  _mobUpdateTimeline();
-
-  e.preventDefault();
-}
-
-function _mobTimelinePinchEnd(e) {
-  _mobPinchActive = false;
-  document.removeEventListener('touchmove', _mobTimelinePinchMove);
-  document.removeEventListener('touchend', _mobTimelinePinchEnd);
-  document.removeEventListener('touchcancel', _mobTimelinePinchEnd);
-}
-
 // ── Handle & Time Helpers ─────────────────────────────────────────────
 
 /**
- * Convert an x-pixel position within the timeline rect to a time in
- * seconds, respecting the current zoom level.
+ * Convert an x-pixel position within the timeline rect to a time in seconds.
  */
 function _mobTimeFromPosition(x) {
   if (_mobDuration <= 0) return 0;
-  if (_mobZoom <= 1) {
-    // Full-movie mode
-    return (x / (_mobTouchRect ? _mobTouchRect.width : 1)) * _mobDuration;
-  }
-  // Zoomed mode: the visible window is _mobDuration / _mobZoom wide,
-  // centered on _mobZoomCenter.
-  var visibleWidth = _mobDuration / _mobZoom;
-  var halfVis = visibleWidth / 2;
-  var rectW = _mobTouchRect ? _mobTouchRect.width : 1;
-  var pct = Math.max(0, Math.min(1, x / rectW));
-  var t = (_mobZoomCenter - halfVis) + pct * visibleWidth;
-  return Math.max(0, Math.min(_mobDuration, t));
+  return (x / (_mobTouchRect ? _mobTouchRect.width : 1)) * _mobDuration;
 }
 
 /**
@@ -364,9 +294,9 @@ function _mobUpdateTimeline() {
   var startPct = (_mobStart / _mobDuration) * 100;
   var endPct = (_mobEnd / _mobDuration) * 100;
 
-  var fill = document.getElementById('mob-timeline-fill');
-  var thumbS = document.getElementById('mob-thumb-start');
-  var thumbE = document.getElementById('mob-thumb-end');
+  var fill = _mobEls.fill;
+  var thumbS = _mobEls.thumbStart;
+  var thumbE = _mobEls.thumbEnd;
 
   if (fill) {
     fill.style.left = startPct + '%';
@@ -382,9 +312,9 @@ function _mobUpdateTimeline() {
 
 /** Write current times to the three mobile time displays. */
 function _mobUpdateTimes() {
-  var s = document.getElementById('mob-time-start');
-  var e = document.getElementById('mob-time-end');
-  var d = document.getElementById('mob-time-dur');
+  var s = _mobEls.timeStart;
+  var e = _mobEls.timeEnd;
+  var d = _mobEls.timeDur;
 
   if (s) s.textContent = fmtTime(_mobStart, true);
   if (e) e.textContent = fmtTime(_mobEnd, true);
@@ -496,22 +426,16 @@ function mobDownload() {
 
 /** Show the mobile progress bar. */
 function _mobShowProgress() {
-  var bar = document.getElementById('mob-clip-progress');
-  var fill = document.getElementById('mob-clip-progress-fill');
-  var text = document.getElementById('mob-clip-progress-text');
-  var status = document.getElementById('mob-clip-status');
-
-  if (bar) bar.style.display = 'block';
-  if (fill) fill.style.width = '0%';
-  if (text) text.textContent = 'Starting clip...';
-  if (status) status.textContent = '';
+  if (_mobEls.progress) _mobEls.progress.style.display = 'block';
+  if (_mobEls.progressFill) _mobEls.progressFill.style.width = '0%';
+  if (_mobEls.progressText) _mobEls.progressText.textContent = 'Starting clip...';
+  if (_mobEls.status) _mobEls.status.textContent = '';
 }
 
 /** Hide the mobile progress bar and stop mirroring. */
 function _mobHideProgress() {
   _mobStopProgressPolling();
-  var bar = document.getElementById('mob-clip-progress');
-  if (bar) bar.style.display = 'none';
+  if (_mobEls.progress) _mobEls.progress.style.display = 'none';
 }
 
 /**
@@ -524,8 +448,6 @@ function _mobStartProgressPolling() {
 
   _mobProgressTimer = setInterval(function() {
     var desktopBar = document.getElementById('clip-progress');
-    var desktopFill = document.getElementById('clip-progress-fill');
-    var desktopText = document.getElementById('clip-progress-text');
 
     // Desktop progress hidden → download finished, stop mirroring
     if (desktopBar && desktopBar.style.display === 'none') {
@@ -533,21 +455,20 @@ function _mobStartProgressPolling() {
       return;
     }
 
-    var mobFill = document.getElementById('mob-clip-progress-fill');
-    var mobText = document.getElementById('mob-clip-progress-text');
+    var desktopFill = document.getElementById('clip-progress-fill');
+    var desktopText = document.getElementById('clip-progress-text');
 
-    if (desktopFill && mobFill) {
-      mobFill.style.width = desktopFill.style.width || '0%';
+    if (desktopFill && _mobEls.progressFill) {
+      _mobEls.progressFill.style.width = desktopFill.style.width || '0%';
     }
-    if (desktopText && mobText) {
-      mobText.textContent = desktopText.textContent || 'Encoding...';
+    if (desktopText && _mobEls.progressText) {
+      _mobEls.progressText.textContent = desktopText.textContent || 'Encoding...';
     }
 
     // Also mirror the desktop status text to mobile status
     var desktopStatus = document.getElementById('clip-status');
-    var mobStatus = document.getElementById('mob-clip-status');
-    if (desktopStatus && mobStatus && desktopStatus.textContent) {
-      mobStatus.textContent = desktopStatus.textContent;
+    if (desktopStatus && _mobEls.status && desktopStatus.textContent) {
+      _mobEls.status.textContent = desktopStatus.textContent;
     }
   }, 500);
 }
@@ -567,7 +488,7 @@ function _mobStopProgressPolling() {
  * range is valid and update its label.
  */
 function _mobUpdateDownloadBtn() {
-  var btn = document.getElementById('mob-btn-download');
+  var btn = _mobEls.btnDownload;
   if (!btn) return;
 
   var dur = _mobEnd - _mobStart;
@@ -593,22 +514,6 @@ function _mobUpdateDownloadBtn() {
 }
 
 // ── Social Toggle Sync ─────────────────────────────────────────────────
-
-/**
- * Exported hook called by updateToggleButtons() / updateSocialToggles()
- * from app.js to keep the mobile checkboxes in sync with desktop state.
- * Called automatically after desktop toggle state changes.
- *
- * Since updateToggleButtons() already sets mob-chk-captions/.checked and
- * mob-chk-vertical/.checked (L1463-1467 in app.js), this is a no-op by
- * default. But it's available as an explicit sync point if needed.
- */
-function mobSyncSocialState() {
-  var cc = document.getElementById('mob-chk-captions');
-  var cv = document.getElementById('mob-chk-vertical');
-  if (cc && typeof _captionsEnabled !== 'undefined') cc.checked = _captionsEnabled;
-  if (cv && typeof _verticalEnabled !== 'undefined') cv.checked = _verticalEnabled;
-}
 
 // ── Video Time Update ──────────────────────────────────────────────────
 
@@ -647,4 +552,3 @@ function _mobOnTimeUpdate() {
 //   mobNudgeEnd(delta)        — onclick for End fine-tune buttons
 //   mobPreset(duration)       — onclick for preset chips
 //   mobDownload()             — onclick for download button
-//   mobSyncSocialState()      — explicit sync hook
