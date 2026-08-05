@@ -31,6 +31,7 @@ var _mobViewMin = 0;         // view range (seconds) — STORED at zoom-in, neve
 var _mobViewMax = 0;
 var _mobSeekTimer = null;    // 40ms debounce timer for live drag seeks
 var _mobPendingSeekT = 0;    // last position requested by a debounced seek (flushed on touchend)
+var _mobPrevCt = -1;          // previous currentTime for loop-reset detection
 
 // Progress mirroring
 var _mobProgressTimer = null;
@@ -504,8 +505,10 @@ function _mobUpdateTimeline() {
     if (vid && isFinite(vid.currentTime)) {
       ph.style.left = pct(vid.currentTime) + '%';
       ph.style.display = 'block';
+      ph.classList.toggle('looping', _loopPlayback && !vid.paused);
     } else {
       ph.style.display = 'none';
+      ph.classList.remove('looping');
     }
   }
 
@@ -1010,8 +1013,43 @@ function _mobOnTimeUpdate() {
   }
   // Phase null: no playhead-ride
 
+  // Loop reset detection: if currentTime jumped backwards by more than 5s
+  // while the desktop loop is active, the loop just restarted → flash fill.
+  if (_loopPlayback && _mobPrevCt >= 0 && (_mobPrevCt - ct) > 5) {
+    _mobFlashLoopFill();
+  }
+  _mobPrevCt = ct;
+
+  // Update loop state in the stage label during passive loop playback
+  _mobUpdateLoopLabel();
+
   _mobUpdateTimeline();
   _mobUpdateTimes();
+}
+
+/** Brief gold flash on the timeline fill to signal a loop restart. */
+function _mobFlashLoopFill() {
+  var fill = _mobEls.fill;
+  if (!fill) return;
+  fill.classList.add('loop-flash');
+  setTimeout(function() { fill.classList.remove('loop-flash'); }, 200);
+}
+
+/** Update the stage label to reflect loop playback state. */
+function _mobUpdateLoopLabel() {
+  var el = document.getElementById('mob-stage-label');
+  if (!el || _mobPhase !== null || !_mobZoomed) return;  // only in Phase null (done)
+  var vid = _mobVideo();
+  if (_loopPlayback && vid && !vid.paused) {
+    var remaining = _mobEnd - vid.currentTime;
+    if (remaining >= 60) {
+      el.textContent = '\uD83D\uDD01 Looping \u2014 ' + Math.round(remaining / 60) + 'min left';
+    } else if (remaining >= 1) {
+      el.textContent = '\uD83D\uDD01 Looping \u2014 ' + remaining.toFixed(1) + 's left';
+    } else {
+      el.textContent = '\uD83D\uDD01 Looping';
+    }
+  }
 }
 
 /** Center the clip window on time ct, preserving its duration. */
