@@ -21,13 +21,11 @@ var _mobActiveHandle = 'start';  // which handle was last touched ('start' | 'en
 var _mobDragging = null;      // null | 'start' | 'end' | 'window'
 var _mobWindowOffset = 0;     // offset from touch to window center during window drag
 var _mobVideoReady = false;
-var _mobMode = 'follow';   // 'follow' | 'manual'
-var _mobArmed = null;      // null | 'start' | 'end'
 var _mobTapInfo = null;    // {x, y, t, zone} for tap-vs-drag detection
 var _mobZoomed = false;      // true = stage 2 active: frozen 10-min neighborhood view
 var _mobZoomSpan = 600;      // seconds — 10 minutes (fixed zoom level)
-var _mobBracketStart = 0;    // stage-1 neighborhood window (seconds)
-var _mobBracketEnd = 600;
+var _mobPhase = null;        // null | 'start' | 'end' — which edge is being phased in
+var _mobPhaseManual = false; // true after user drags the active thumb (stops playhead-ride)
 var _mobViewMin = 0;         // view range (seconds) — STORED at zoom-in, never re-derived
 var _mobViewMax = 0;
 var _mobSeekTimer = null;    // 40ms debounce timer for live drag seeks
@@ -79,10 +77,10 @@ function initMobileDetail(item) {
   _mobCacheDom();
 
   _mobDragging = null;
-  _mobMode = 'follow';
-  _mobArmed = null;
   _mobTapInfo = null;
   _mobZoomed = false;
+  _mobPhase = null;
+  _mobPhaseManual = false;
   _mobVideoReady = false;
 
   _mobDuration = (item.duration || 0) / 1000;
@@ -100,12 +98,6 @@ function initMobileDetail(item) {
     _mobStart = 0;
     _mobEnd = Math.min(139, _mobDuration);
   }
-
-  // Stage-1 bracket: fixed 600s neighborhood on the full-movie timeline,
-  // starting at 0 (or centered on the jump offset if we jumped in).
-  _mobBracketStart = 0;
-  _mobBracketEnd = Math.min(_mobZoomSpan, _mobDuration);
-  if (jumpOff != null) _mobCenterBracketOn(jumpOff);
 
   // View: full movie in stage 1; frozen range in stage 2 (set at zoom-in only).
   _mobSetViewFull();
@@ -166,6 +158,8 @@ function destroyMobileDetail() {
     vid.removeEventListener('pause', _mobUpdateLoopBtn);
   }
   _mobDragging = null;
+  _mobPhase = null;
+  _mobPhaseManual = false;
   if (_mobSeekTimer) { clearTimeout(_mobSeekTimer); _mobSeekTimer = null; }
   _mobStopProgressPolling();
   _mobHideProgress();
@@ -232,19 +226,16 @@ function _mobTimelineTouchStart(e) {
     if (Math.abs(x - startX) < HIT_RADIUS) {
       _mobDragging = 'start';
       _mobActiveHandle = 'start';
-      _mobMode = 'manual';   // direct manipulation parks the window
       ZONE = 'thumb-start';
     } else if (Math.abs(x - endX) < HIT_RADIUS) {
       _mobDragging = 'end';
       _mobActiveHandle = 'end';
-      _mobMode = 'manual';
       ZONE = 'thumb-end';
     } else if (x > startX && x < endX) {
       // Dragging the fill area → slide entire clip window, preserve duration.
       // Record the offset between the touch point and the window center so
       // the window doesn't jump on first touch (relative tracking).
       _mobDragging = 'window';
-      _mobMode = 'manual';
       var touchT = _mobTimeFromPosition(x);
       var windowCenter = _mobStart + (_mobEnd - _mobStart) / 2;
       _mobWindowOffset = touchT - windowCenter;
@@ -257,31 +248,10 @@ function _mobTimelineTouchStart(e) {
       ZONE = 'scrub';
     }
   } else {
-    // Stage 1: bracket = gold window; thumbs hidden, no thumb zones.
-    var bStartPct = span > 0 ? Math.max(0, Math.min(1, (_mobBracketStart - _mobViewMin) / span)) : 0;
-    var bEndPct = span > 0 ? Math.max(0, Math.min(1, (_mobBracketEnd - _mobViewMin) / span)) : 1;
-    var bStartX = bStartPct * rect.width;
-    var bEndX = bEndPct * rect.width;
-
-    if (x > bStartX && x < bEndX) {
-      // Fill = bracket: drag slides the fixed 600s neighborhood.
-      _mobDragging = 'window';
-      _mobMode = 'manual';
-      var bTouchT = _mobTimeFromPosition(x);
-      var bCenter = (_mobBracketStart + _mobBracketEnd) / 2;
-      _mobWindowOffset = bTouchT - bCenter;
-      ZONE = 'window';
-    } else {
-      // Stage 1 empty: zoom into this neighborhood (centered on tap).
-      var tapT = (x / rect.width) * _mobDuration;   // full-movie mapping
-      var half = _mobZoomSpan / 2;
-      var bs = Math.max(0, Math.min(_mobDuration - Math.min(_mobZoomSpan, _mobDuration), tapT - half));
-      _mobBracketStart = bs;
-      _mobBracketEnd = Math.min(_mobDuration, bs + _mobZoomSpan);
-      if (_mobBracketEnd - _mobBracketStart < _mobZoomSpan) _mobBracketStart = Math.max(0, _mobBracketEnd - _mobZoomSpan);
-      mobToggleZoom();   // freeze view on bracket, park, center clip
-      ZONE = 'zoom';
-    }
+    // Stage 1: bracket is DERIVED from playhead (no stored state).
+    // Tap zones are: click empty bar → zoom-in (handled in touchend).
+    // No bracket drag — bracket moves via playhead only.
+    ZONE = 'zoom';   // empty bar tap → zoom-in, handled in touchend
   }
 
   _mobTapInfo = { x: touch.clientX, y: touch.clientY, t: Date.now(), zone: ZONE };
@@ -323,28 +293,20 @@ function _mobTimelineTouchMove(e) {
   }
   if (_mobDragging === 'window') {
     // Use relative tracking: window center = touch time - stored offset.
-    var newStart;
-    if (!_mobZoomed) {
-      // Stage 1: slide the BRACKET (fixed 600s neighborhood).
-      var bDur = _mobBracketEnd - _mobBracketStart;
-      var bHalf = bDur / 2;
-      newStart = Math.max(0, Math.min(_mobDuration - bDur, (t - _mobWindowOffset) - bHalf));
-      _mobBracketStart = newStart;
-      _mobBracketEnd = newStart + bDur;
-    } else {
-      // Stage 2: slide the clip window WITHIN the frozen view (view untouched).
-      var dur = _mobEnd - _mobStart;
-      var halfDur = dur / 2;
-      var vSpan = _mobViewMax - _mobViewMin;
-      newStart = Math.max(_mobViewMin, Math.min(_mobViewMin + Math.max(0, vSpan - dur), (t - _mobWindowOffset) - halfDur));
-      _mobStart = newStart;
-      _mobEnd = newStart + dur;
-    }
+    // In Stage 1: no window drag (bracket derived from playhead).
+    var dur = _mobEnd - _mobStart;
+    var halfDur = dur / 2;
+    var vSpan = _mobViewMax - _mobViewMin;
+    var newStart = Math.max(_mobViewMin, Math.min(_mobViewMin + Math.max(0, vSpan - dur), (t - _mobWindowOffset) - halfDur));
+    _mobStart = newStart;
+    _mobEnd = newStart + dur;
 
     // Debounced seek to where the user's finger is — flushed on touchend
     _mobSeekTo(Math.max(0, Math.min(_mobDuration, t)));
   } else {
     _mobSetHandle(_mobDragging, t, true);   // handle position live, seek debounced
+    // If the user is dragging the active-phase thumb, mark manual so playhead-ride stops
+    if (_mobDragging === _mobPhase) _mobPhaseManual = true;
   }
 
   _mobUpdateTimeline();
@@ -367,24 +329,45 @@ function _mobTimelineTouchEnd(e) {
     var quick = (Date.now() - info.t) < 400;
     if (!moved && quick) {
       if (info.zone === 'thumb-start') {
-        _mobToggleArmed('start');
+        if (_mobPhase === 'start') {
+          // Commit start at current playhead position, advance to 'end'
+          var vid = _mobVideo();
+          if (vid && isFinite(vid.currentTime)) {
+            _mobStart = Math.max(_mobViewMin, Math.min(_mobEnd - 0.04, vid.currentTime));
+          }
+          _mobPhase = 'end';
+          _mobPhaseManual = false;
+          _mobActiveHandle = 'end';
+        } else if (_mobPhase === 'end') {
+          // Tapping dimmed start thumb in Phase 'end' → return to Phase 'start'
+          _mobPhase = 'start';
+          _mobPhaseManual = false;
+          _mobActiveHandle = 'start';
+        }
       } else if (info.zone === 'thumb-end') {
-        _mobToggleArmed('end');
+        if (_mobPhase === 'end') {
+          // Commit end at current playhead position, done
+          var vid2 = _mobVideo();
+          if (vid2 && isFinite(vid2.currentTime)) {
+            _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobViewMax, vid2.currentTime));
+          }
+          _mobPhase = null;
+          _mobPhaseManual = false;
+        }
       } else if (info.zone === 'window') {
-        // Tap the fill: stage 1 → re-center the bracket; stage 2 → seek the
-        // playhead there (the range itself only changes via the thumbs).
+        // Tap the fill: Stage 2 → seek playhead (start/end follow if not manual).
         var rect = _mobTouchRect;
         if (rect) {
           var t = _mobTimeFromPosition(ct.clientX - rect.left);
-          if (!_mobZoomed) {
-            _mobCenterBracketOn(t);
-          } else {
-            _mobSeekTo(Math.max(0, Math.min(_mobDuration, t)), true);
-          }
+          _mobSeekTo(Math.max(0, Math.min(_mobDuration, t)), true);
           _mobUpdateTimeline();
           _mobUpdateTimes();
         }
+      } else if (info.zone === 'zoom') {
+        // Stage 1 tap → zoom in around playhead
+        mobToggleZoom();
       }
+      _mobUpdateStageLabel();
     }
   }
 
@@ -489,10 +472,15 @@ function _mobUpdateTimeline() {
   var thumbE = _mobEls.thumbEnd;
 
   if (!_mobZoomed) {
-    // Stage 1: the gold window IS the 10-min bracket. Thumbs hidden.
+    // Stage 1: bracket is DERIVED from playhead (±300s), clamped to [0, _mobDuration].
+    var vid = _mobVideo();
+    var center = (vid && isFinite(vid.currentTime)) ? vid.currentTime : (_mobViewMin + _mobViewMax) / 2;
+    var halfWin = _mobZoomSpan / 2;
+    var bStart = Math.max(0, Math.min(_mobDuration - _mobZoomSpan, center - halfWin));
+    var bEnd = Math.min(_mobDuration, bStart + _mobZoomSpan);
     if (fill) {
-      fill.style.left = pct(_mobBracketStart) + '%';
-      fill.style.width = (pct(_mobBracketEnd) - pct(_mobBracketStart)) + '%';
+      fill.style.left = pct(bStart) + '%';
+      fill.style.width = (pct(bEnd) - pct(bStart)) + '%';
     }
     if (thumbS) thumbS.style.display = 'none';
     if (thumbE) thumbE.style.display = 'none';
@@ -504,9 +492,15 @@ function _mobUpdateTimeline() {
     }
     if (thumbS) { thumbS.style.display = ''; thumbS.style.left = pct(_mobStart) + '%'; }
     if (thumbE) { thumbE.style.display = ''; thumbE.style.left = pct(_mobEnd) + '%'; }
-    // Armed phase dimming: the non-active thumb fades while the other is set
-    if (thumbS) thumbS.classList.toggle('armed-dim', _mobArmed === 'end');
-    if (thumbE) thumbE.classList.toggle('armed-dim', _mobArmed === 'start');
+    // Phase-based thumb styling: active thumb gets gold pulse, inactive in a phase gets dimmed
+    if (thumbS) {
+      thumbS.classList.toggle('active', _mobPhase === 'start');
+      thumbS.classList.toggle('armed-dim', _mobZoomed && _mobPhase !== 'start' && _mobPhase !== null);
+    }
+    if (thumbE) {
+      thumbE.classList.toggle('active', _mobPhase === 'end');
+      thumbE.classList.toggle('armed-dim', _mobZoomed && _mobPhase !== 'end' && _mobPhase !== null);
+    }
   }
 
   // Playhead line (both stages): show where the video is within the current view
@@ -521,8 +515,6 @@ function _mobUpdateTimeline() {
     }
   }
 
-  if (thumbS) thumbS.classList.toggle('active', _mobActiveHandle === 'start');
-  if (thumbE) thumbE.classList.toggle('active', _mobActiveHandle === 'end');
 }
 
 /** Write current times to the three mobile time displays. */
@@ -531,11 +523,21 @@ function _mobUpdateTimes() {
   var e = _mobEls.timeEnd;
   var d = _mobEls.timeDur;
 
-  // Stage 1 shows the bracket; stage 2 shows the clip.
-  if (s) s.textContent = fmtTime(_mobZoomed ? _mobStart : _mobBracketStart, true);
-  if (e) e.textContent = fmtTime(_mobZoomed ? _mobEnd : _mobBracketEnd, true);
+  // Stage 1 shows derived bracket (±300s from playhead); stage 2 shows the clip.
+  if (_mobZoomed) {
+    if (s) s.textContent = fmtTime(_mobStart, true);
+    if (e) e.textContent = fmtTime(_mobEnd, true);
+  } else {
+    var vid = _mobVideo();
+    var center = (vid && isFinite(vid.currentTime)) ? vid.currentTime : (_mobViewMin + _mobViewMax) / 2;
+    var halfWin = _mobZoomSpan / 2;
+    var bStart = Math.max(0, Math.min(_mobDuration - _mobZoomSpan, center - halfWin));
+    var bEnd = Math.min(_mobDuration, bStart + _mobZoomSpan);
+    if (s) s.textContent = fmtTime(bStart, true);
+    if (e) e.textContent = fmtTime(bEnd, true);
+  }
 
-  var dur = _mobZoomed ? (_mobEnd - _mobStart) : (_mobBracketEnd - _mobBracketStart);
+  var dur = _mobZoomed ? (_mobEnd - _mobStart) : _mobZoomSpan;
   if (d) {
     if (dur >= 60) {
       d.textContent = Math.round(dur / 60) + 'min';
@@ -560,15 +562,7 @@ function mobSkip(delta) {
   var newTime = Math.max(0, Math.min(_mobDuration, vid.currentTime + delta));
   vid.currentTime = newTime;
 
-  if (!_mobZoomed) {
-    // Stage 1: slide the bracket to follow the new playback position.
-    var dur = _mobBracketEnd - _mobBracketStart;
-    _mobBracketStart = Math.max(0, newTime - dur / 2);
-    _mobBracketEnd = Math.min(_mobDuration, _mobBracketStart + dur);
-    if (_mobBracketEnd - _mobBracketStart < dur) {
-      _mobBracketStart = Math.max(0, _mobBracketEnd - dur);
-    }
-  }
+  // Stage 1: bracket follows playhead automatically (derived).
   // Stage 2: skip just nudges the playhead (scrub); view + window untouched.
 
   _mobUpdateTimeline();
@@ -583,7 +577,6 @@ function mobSkip(delta) {
  * Typical values: ±0.04 (one frame at 25 fps) or ±5 (coarse jump).
  */
 function mobNudgeStart(delta) {
-  _mobMode = 'manual';   // nudge parks the window
   _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, _mobStart + delta));
   _mobActiveHandle = 'start';
   seekVideoTo(_mobStart);
@@ -596,7 +589,6 @@ function mobNudgeStart(delta) {
  * Nudge the END handle by delta seconds.
  */
 function mobNudgeEnd(delta) {
-  _mobMode = 'manual';   // nudge parks the window
   _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, _mobEnd + delta));
   _mobActiveHandle = 'end';
   seekVideoTo(_mobEnd);
@@ -748,8 +740,7 @@ function mobLoop() {
   if (!vid) return;
   // Park the window: looped playback must not re-center a follow-mode window
   // or ride an armed edge — the user is auditioning their pinned range.
-  _mobArmed = null;
-  _mobMode = 'manual';
+  _mobPhase = null;
   // Sync desktop globals so the existing loop machinery uses the mobile range
   _sliderStart = _mobStart;
   _sliderEnd = _mobEnd;
@@ -774,18 +765,23 @@ function _mobUpdateLoopBtn() {
 function mobToggleZoom() {
   if (_mobDuration <= 0) return;
   if (!_mobZoomed) {
-    // Stage 1 → 2: freeze the view on the bracket, park + center the clip in it.
+    // Stage 1 → 2: freeze view on current playhead-centered bracket
+    var vid = _mobVideo();
+    var center = (vid && isFinite(vid.currentTime)) ? vid.currentTime : _mobDuration / 2;
+    var half = _mobZoomSpan / 2;
+    var lo = Math.max(0, Math.min(_mobDuration - _mobZoomSpan, center - half));
+    _mobSetViewFrozen(lo, lo + _mobZoomSpan);
     _mobZoomed = true;
-    _mobMode = 'manual';
-    _mobArmed = null;
-    _mobSetViewFrozen(_mobBracketStart, _mobBracketEnd);
-    var viewCenter = (_mobViewMin + _mobViewMax) / 2;
-    _mobCenterWindowOn(viewCenter);   // clip centers in frozen view (preserves duration)
+    _mobPhase = 'start';
+    _mobPhaseManual = false;
+    // Default end = start + 139s, clamped to view
+    _mobEnd = Math.min(_mobViewMax, _mobStart + 139);
   } else {
-    // Stage 2 → 1: back to full movie; bracket re-centers on clip center.
+    // Stage 2 → 1: back to full movie
     _mobZoomed = false;
+    _mobPhase = null;
+    _mobPhaseManual = false;
     _mobSetViewFull();
-    _mobCenterBracketOn((_mobStart + _mobEnd) / 2);
   }
   _mobUpdateZoomBtn();
   _mobUpdateStageLabel();
@@ -807,16 +803,24 @@ function _mobUpdateStageLabel() {
   var el = document.getElementById('mob-stage-label');
   if (el) {
     if (!_mobZoomed) {
-      el.textContent = 'STEP 1/2 \u2014 pick your 10 minutes';
-    } else if (_mobArmed === 'start') {
-      el.textContent = 'STEP 2/2 \u2014 set start: scrub to the in-point, tap start to lock';
-    } else if (_mobArmed === 'end') {
-      el.textContent = 'STEP 2/2 \u2014 set end: scrub to the out-point, tap end to lock';
+      el.textContent = 'STEP 1/2 \u2014 find your scene, then tap \uD83D\uDD0D';
+    } else if (_mobPhase === 'start') {
+      el.textContent = 'STEP 2/3 \u2014 start: scrub to in-point, tap \u25C0 to lock';
+    } else if (_mobPhase === 'end') {
+      el.textContent = 'STEP 3/3 \u2014 end: scrub to out-point, tap \u25B6 to lock';
     } else {
-      el.textContent = 'STEP 2/2 \u2014 tap a thumb to set start, then end';
+      // Phase null = done
+      var dur = _mobEnd - _mobStart;
+      if (dur >= 60) {
+        el.textContent = 'Clip ready \u2014 ' + Math.round(dur / 60) + 'min';
+      } else if (dur >= 1) {
+        el.textContent = 'Clip ready \u2014 ' + dur.toFixed(1) + 's';
+      } else {
+        el.textContent = 'Clip ready \u2014 ' + dur.toFixed(2) + 's';
+      }
     }
   }
-  // Fine-tune rows are stage-2 only (the clip is irrelevant in stage 1).
+  // Fine-tune rows are visible in Stage 2 (all phases).
   var ft = document.getElementById('mob-finetune');
   if (ft) ft.style.display = _mobZoomed ? '' : 'none';
 }
@@ -839,21 +843,14 @@ function _mobOnTimeUpdate() {
   var ct = vid.currentTime;
   if (ct < 0 || ct > _mobDuration + 0.5) return;  // +0.5: stream duration may exceed Plex metadata slightly
 
-  if (_mobArmed === 'start') {
-    _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, ct));
-  } else if (_mobArmed === 'end') {
-    _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, ct));
-  } else if (_mobZoomed) {
-    // Zoomed = tuning, not browsing: window stays parked, playhead line
-    // updates via _mobUpdateTimeline() below.
-  } else if (_mobMode === 'follow') {
-    // Stage 1 follow: the BRACKET chases the playhead (not the clip).
-    _mobCenterBracketOn(ct);
-  } else if (ct < _mobStart || ct > _mobEnd) {
-    // browsed outside the parked window → re-enter follow (bracket chases)
-    _mobMode = 'follow';
-    _mobCenterBracketOn(ct);
+  if (!_mobZoomed) {
+    // Stage 1: bracket always follows playhead (derived, just re-render)
+  } else if (_mobPhase === 'start' && !_mobPhaseManual) {
+    _mobStart = Math.max(_mobViewMin, Math.min(_mobEnd - 0.04, ct));
+  } else if (_mobPhase === 'end' && !_mobPhaseManual) {
+    _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobViewMax, ct));
   }
+  // Phase null: no playhead-ride
 
   _mobUpdateTimeline();
   _mobUpdateTimes();
@@ -867,41 +864,6 @@ function _mobCenterWindowOn(ct) {
   var s = Math.max(0, Math.min(_mobDuration - dur, ct - half));
   _mobStart = s;
   _mobEnd = s + dur;
-}
-
-/** Center the stage-1 bracket (fixed 600s neighborhood) on time ct. */
-function _mobCenterBracketOn(ct) {
-  var half = _mobZoomSpan / 2;
-  var s = Math.max(0, Math.min(_mobDuration - Math.min(_mobZoomSpan, _mobDuration), ct - half));
-  _mobBracketStart = s;
-  _mobBracketEnd = Math.min(_mobDuration, s + _mobZoomSpan);
-  if (_mobBracketEnd - _mobBracketStart < _mobZoomSpan) _mobBracketStart = Math.max(0, _mobBracketEnd - _mobZoomSpan);
-}
-
-/**
- * Toggle arm/pin for an edge: armed → lock (edge stays put); locked → arm
- * (edge rides the playhead on the next timeupdate/seeked).
- */
-function _mobToggleArmed(which) {
-  // Toggle: armed → lock (edge stays at current position). Locked → arm (edge rides playhead).
-  if (_mobArmed === which) {
-    _mobArmed = null;                       // lock
-    _mobMode = 'manual';                    // window is now parked where user pinned it
-  } else {
-    _mobArmed = which;                      // arm: next timeupdate rides this edge to the playhead
-    _mobMode = 'manual';
-    // If the playhead is outside the parked window, bring the window to it
-    // first — otherwise the armed edge clamps against a far-away edge and
-    // the window collapses to a sliver.
-    var vid = _mobVideo();
-    if (vid && isFinite(vid.currentTime)) {
-      var ct = vid.currentTime;
-      if (ct < _mobStart || ct > _mobEnd) _mobCenterWindowOn(ct);
-    }
-  }
-  _mobUpdateTimeline();
-  _mobUpdateTimes();
-  _mobUpdateStageLabel();   // arm/lock changes the stage-2 instruction text
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
