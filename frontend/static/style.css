@@ -731,6 +731,19 @@ main {
   font-weight: 600;
   color: var(--text);
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.range-zoom-btn {
+  font-size: 14px;
+  padding: 2px 6px;
+  line-height: 1;
+  min-width: 32px;
+}
+.range-zoom-btn.active {
+  background: var(--gold);
+  color: #141414;
 }
 
 .time-display {
@@ -872,6 +885,25 @@ main {
   display: none;
   box-shadow: 0 0 6px rgba(255,255,255,0.6);
   transition: left 0.08s linear;
+}
+
+/* Mini overview bar — thin full-movie context bar visible when range is zoomed */
+.range-overview {
+  position: relative;
+  height: 6px;
+  background: #1a1a1a;
+  border-radius: 3px;
+  margin: 4px 0 0;
+  border: 1px solid #252525;
+}
+.range-overview-window {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(196, 150, 59, 0.35);
+  border-radius: 3px;
+  pointer-events: none;
+  transition: left 0.15s ease, width 0.15s ease;
 }
 
 /* ── Clip duration badge ─────────────────────────────────────────────── */

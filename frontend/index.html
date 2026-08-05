@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=30">
+  <link rel="stylesheet" href="static/style.css?v=31">
 </head>
 <body>
 
@@ -168,7 +168,10 @@
 
     <!-- DESKTOP scrubber section -->
     <div class="scrubber-section desktop-only">
-      <div class="scrubber-header">Clip Range</div>
+      <div class="scrubber-header">
+        Clip Range
+        <button class="btn btn-tiny range-zoom-btn" id="btn-range-zoom" onclick="toggleRangeZoom()" title="Zoom to 10-minute view">🔍</button>
+      </div>
 
       <div class="time-display">
         <input class="time-box time-input" id="time-start-input" value="00:00" size="7" title="Start time (click to edit)">
@@ -183,6 +186,11 @@
         <div class="range-bar-marker range-bar-marker-start" id="range-bar-marker-start" title="Drag to set clip start"></div>
         <div class="range-bar-marker range-bar-marker-end" id="range-bar-marker-end" title="Drag to set clip end"></div>
         <div class="range-bar-playhead" id="range-bar-playhead" title="Current preview position"></div>
+      </div>
+
+      <!-- Mini overview bar — full-movie context when range bar is zoomed -->
+      <div class="range-overview" id="range-overview" style="display:none">
+        <div class="range-overview-window" id="range-overview-window"></div>
       </div>
 
       <div class="nudge-row">
@@ -359,8 +367,8 @@
 
 </main>
 
-<script src="static/app.js?v=30"></script>
-<script src="static/mobile.js?v=30"></script>
+<script src="static/app.js?v=31"></script>
+<script src="static/mobile.js?v=31"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");

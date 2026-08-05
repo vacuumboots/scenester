@@ -97,6 +97,13 @@ var _sliderEnd = 139;
 var _rangeLocked = false;
 var _lockedDuration = 30;
 
+// Range bar zoom: when active, the bar shows a 10-min window around the clip
+// for precise handle positioning (matches mobile Stage 2). ~1.2s/px on desktop.
+var _rangeZoomed = false;
+var _rangeViewMin = 0;
+var _rangeViewMax = 0;
+var _RANGE_ZOOM_SPAN = 600;  // 10 minutes
+
 // Social media options
 var _captionsEnabled = false;
 var _verticalEnabled = false;
@@ -360,7 +367,9 @@ function showDetailView() {
 
   // Reset lock state for new item
   _rangeLocked = false;
+  _rangeZoomed = false;
   updatePresetButtons();
+  _updateZoomBtn();
 
   // Seek video to start position once ready
   seekVideoTo(_sliderStart);
@@ -922,6 +931,11 @@ function jumpToFrame(t) {
 // ── Range bar (visual timeline showing selected clip region) ──────────
 
 function sliderGetPct(t) {
+  if (_rangeZoomed) {
+    var span = _rangeViewMax - _rangeViewMin;
+    if (span <= 0) return 0;
+    return Math.max(0, Math.min(100, ((t - _rangeViewMin) / span) * 100));
+  }
   return Math.max(0, Math.min(100, (t / state.mediaDuration) * 100));
 }
 
@@ -936,6 +950,20 @@ function updateRangeBar() {
   }
   if (dom.rangeBarMarkerStart) dom.rangeBarMarkerStart.style.left = pctStart + "%";
   if (dom.rangeBarMarkerEnd) dom.rangeBarMarkerEnd.style.left = pctEnd + "%";
+
+  // Mini overview bar — visible only when zoomed, shows full-movie context
+  var ov = document.getElementById("range-overview");
+  if (ov) {
+    ov.style.display = _rangeZoomed ? "block" : "none";
+    if (_rangeZoomed) {
+      var dur = state.mediaDuration || 1;
+      var ovWin = document.getElementById("range-overview-window");
+      if (ovWin) {
+        ovWin.style.left = (_rangeViewMin / dur * 100) + "%";
+        ovWin.style.width = ((_rangeViewMax - _rangeViewMin) / dur * 100) + "%";
+      }
+    }
+  }
 }
 
 // ── Range bar drag handles ──────────────────────────────────────────
@@ -957,7 +985,13 @@ function initRangeBarHandles() {
     var barWidth = barRect.width;
 
     var mousePct = Math.max(0, Math.min(100, ((clientX - barLeft) / barWidth) * 100));
-    var sec = (mousePct / 100) * state.mediaDuration;
+    var sec;
+    if (_rangeZoomed) {
+      var vSpan = _rangeViewMax - _rangeViewMin;
+      sec = _rangeViewMin + (mousePct / 100) * vSpan;
+    } else {
+      sec = (mousePct / 100) * state.mediaDuration;
+    }
 
     if (target === dom.rangeBarMarkerStart || (target.closest && target.closest("#range-bar-marker-start"))) {
       _handleDrag = "start";
@@ -1049,7 +1083,13 @@ function initRangeBarHandles() {
 }
 
 function applyDrag(pct) {
-  var sec = Math.floor((pct / 100) * state.mediaDuration);
+  var sec;
+  if (_rangeZoomed) {
+    var vSpan = _rangeViewMax - _rangeViewMin;
+    sec = _rangeViewMin + (pct / 100) * vSpan;
+  } else {
+    sec = Math.floor((pct / 100) * state.mediaDuration);
+  }
 
   if (_rangeLocked) {
     // Locked mode: dragging either handle slides the entire range,
@@ -1312,6 +1352,32 @@ function mobilePreset(duration) {
     var d = parseInt(btns[i].getAttribute("data-dur"));
     btns[i].classList.toggle("active", d === duration);
   }
+}
+
+// ── Range Bar Zoom ────────────────────────────────────────────────────
+
+function toggleRangeZoom() {
+  if (!state.mediaDuration) return;
+  if (!_rangeZoomed) {
+    // Zoom in: center 10-min window on the clip range
+    var center = _sliderStart + (_sliderEnd - _sliderStart) / 2;
+    var half = _RANGE_ZOOM_SPAN / 2;
+    _rangeViewMin = Math.max(0, Math.min(state.mediaDuration - _RANGE_ZOOM_SPAN, center - half));
+    _rangeViewMax = _rangeViewMin + _RANGE_ZOOM_SPAN;
+    _rangeZoomed = true;
+  } else {
+    _rangeZoomed = false;
+  }
+  _updateZoomBtn();
+  updateRangeBar();
+}
+
+function _updateZoomBtn() {
+  var b = document.getElementById("btn-range-zoom");
+  if (!b) return;
+  b.textContent = _rangeZoomed ? "\u293A Full" : "\uD83D\uDD0D";
+  b.classList.toggle("active", _rangeZoomed);
+  b.title = _rangeZoomed ? "Back to full movie" : "Zoom to 10-minute view";
 }
 
 // ── Preset Buttons ─────────────────────────────────────────────────────
