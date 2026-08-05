@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=25">
+  <link rel="stylesheet" href="static/style.css?v=26">
 </head>
 <body>
 
@@ -278,7 +278,7 @@
             <input type="range" class="mob-micro-slider" id="mob-micro-start" min="0" max="30" value="15" step="0.04">
             <span class="mob-micro-val" id="mob-micro-start-val">0:00.00</span>
           </div>
-          <div class="mob-micro-row">
+          <div class="mob-micro-row" id="mob-micro-row-end">
             <span class="mob-micro-label">End</span>
             <input type="range" class="mob-micro-slider" id="mob-micro-end" min="0" max="30" value="15" step="0.04">
             <span class="mob-micro-val" id="mob-micro-end-val">0:30.00</span>
@@ -294,7 +294,7 @@
             <button class="mob-ft-btn" onclick="mobNudgeStart(5)">+5s</button>
             <button class="mob-ft-btn" onclick="mobNudgeStart(0.04)">+1f</button>
           </div>
-          <div class="mob-ft-row">
+          <div class="mob-ft-row" id="mob-ft-row-end">
             <span class="mob-ft-label">End</span>
             <button class="mob-ft-btn" onclick="mobNudgeEnd(-0.04)">−1f</button>
             <button class="mob-ft-btn" onclick="mobNudgeEnd(-5)">−5s</button>
@@ -344,8 +344,8 @@
 
 </main>
 
-<script src="static/app.js?v=25"></script>
-<script src="static/mobile.js?v=25"></script>
+<script src="static/app.js?v=26"></script>
+<script src="static/mobile.js?v=26"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");

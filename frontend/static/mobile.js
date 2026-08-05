@@ -26,6 +26,7 @@ var _mobZoomed = false;      // true = stage 2 active: frozen 10-min neighborhoo
 var _mobZoomSpan = 600;      // seconds — 10 minutes (fixed zoom level)
 var _mobPhase = null;        // null | 'start' | 'end' — which edge is being phased in
 var _mobPhaseManual = false; // true after user drags the active thumb (stops playhead-ride)
+var _mobPresetDuration = 0;  // 0 = free mode; otherwise preset seconds (5/10/15/30/45/60/139)
 var _mobViewMin = 0;         // view range (seconds) — STORED at zoom-in, never re-derived
 var _mobViewMax = 0;
 var _mobSeekTimer = null;    // 40ms debounce timer for live drag seeks
@@ -81,6 +82,7 @@ function initMobileDetail(item) {
   _mobZoomed = false;
   _mobPhase = null;
   _mobPhaseManual = false;
+  _mobPresetDuration = 0;
   _mobVideoReady = false;
 
   _mobDuration = (item.duration || 0) / 1000;
@@ -598,22 +600,31 @@ function mobNudgeEnd(delta) {
 // ── Preset Chips ───────────────────────────────────────────────────────
 
 /**
- * Set clip end so the duration matches the preset value, anchored at the
- * current start position.
+ * Set or toggle a preset clip duration. Tapping the active preset
+ * deselects it (free mode). In free mode, the end is set by the user
+ * (Phase end). With a preset, end = start + duration — Phase end is
+ * skipped, end micro-scrubber hidden.
  */
 function mobPreset(duration) {
-  _mobEnd = Math.min(_mobDuration, _mobStart + duration);
+  if (_mobPresetDuration === duration) {
+    // Deselect — free mode
+    _mobPresetDuration = 0;
+  } else {
+    _mobPresetDuration = duration;
+    _mobEnd = Math.min(_mobDuration, _mobStart + duration);
+  }
   seekVideoTo(_mobStart);
 
   _mobUpdateTimeline();
   _mobUpdateTimes();
   _mobUpdateDownloadBtn();
+  _mobUpdateStageLabel();
 
-  // Highlight the active preset button
+  // Highlight the active preset button (none if free)
   var btns = document.querySelectorAll('.mob-preset-btn');
   for (var i = 0; i < btns.length; i++) {
     var btnDur = parseInt(btns[i].getAttribute('data-dur'), 10);
-    btns[i].classList.toggle('active', btnDur === duration);
+    btns[i].classList.toggle('active', btnDur === _mobPresetDuration);
   }
 }
 
@@ -765,9 +776,16 @@ function mobLockPhase() {
 
   if (_mobPhase === 'start') {
     _mobStart = Math.max(_mobViewMin, Math.min(_mobEnd - 0.04, ct));
-    _mobPhase = 'end';
     _mobPhaseManual = false;
-    _mobActiveHandle = 'end';
+    _mobActiveHandle = 'start';
+    if (_mobPresetDuration > 0) {
+      // Preset active — end is fixed, skip Phase end
+      _mobEnd = Math.min(_mobViewMax, _mobStart + _mobPresetDuration);
+      _mobPhase = null;
+    } else {
+      _mobPhase = 'end';
+      _mobActiveHandle = 'end';
+    }
   } else if (_mobPhase === 'end') {
     _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobViewMax, ct));
     _mobPhase = null;
@@ -830,10 +848,12 @@ function _mobUpdateStageLabel() {
       el.style.display = '';
       if (lockBtn) lockBtn.style.display = 'none';
     } else if (_mobPhase === 'start') {
-      el.textContent = 'STEP 2/3 \u2014 scrub to in-point';
+      el.textContent = _mobPresetDuration > 0
+        ? 'STEP 2/2 \u2014 scrub to in-point (' + _mobPresetDuration + 's preset)'
+        : 'STEP 2/3 \u2014 scrub to in-point';
       el.style.display = '';
       if (lockBtn) {
-        lockBtn.textContent = '\uD83D\uDD12 Lock Start';
+        lockBtn.textContent = _mobPresetDuration > 0 ? '\uD83D\uDD12 Lock Clip' : '\uD83D\uDD12 Lock Start';
         lockBtn.style.display = '';
       }
     } else if (_mobPhase === 'end') {
@@ -857,12 +877,17 @@ function _mobUpdateStageLabel() {
       if (lockBtn) lockBtn.style.display = 'none';
     }
   }
-  // Fine-tune rows are visible in Stage 2 (all phases).
+  // Fine-tune rows are visible in Stage 2 (all phases). End row hidden
+  // when a preset is active (end = start + preset, no manual adjustment).
   var ft = document.getElementById('mob-finetune');
   if (ft) ft.style.display = _mobZoomed ? '' : 'none';
-  // Micro-scrubbers visible in Stage 2 (all phases).
+  var ftEndRow = document.getElementById('mob-ft-row-end');
+  if (ftEndRow) ftEndRow.style.display = (_mobZoomed && _mobPresetDuration === 0) ? '' : 'none';
+  // Micro-scrubbers visible in Stage 2. End row hidden when preset active.
   var mc = document.getElementById('mob-micro');
   if (mc) mc.style.display = _mobZoomed ? '' : 'none';
+  var mcEndRow = document.getElementById('mob-micro-row-end');
+  if (mcEndRow) mcEndRow.style.display = (_mobZoomed && _mobPresetDuration === 0) ? '' : 'none';
 }
 
 // ── Micro-Scrubbers ──────────────────────────────────────────────────
@@ -977,6 +1002,9 @@ function _mobOnTimeUpdate() {
     // Stage 1: bracket always follows playhead (derived, just re-render)
   } else if (_mobPhase === 'start' && !_mobPhaseManual) {
     _mobStart = Math.max(_mobViewMin, Math.min(_mobEnd - 0.04, ct));
+    if (_mobPresetDuration > 0) {
+      _mobEnd = Math.min(_mobViewMax, _mobStart + _mobPresetDuration);
+    }
   } else if (_mobPhase === 'end' && !_mobPhaseManual) {
     _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobViewMax, ct));
   }
