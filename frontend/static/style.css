@@ -1732,6 +1732,26 @@ main {
   color: #141414;
 }
 
+/* Lock button — full-width gold action button for committing phases */
+.mob-lock-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 10px;
+  background: var(--gold);
+  color: #141414;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.mob-lock-btn:active {
+  filter: brightness(1.2);
+}
+
 /* Loop preview button — wider than skip buttons to fit its label */
 .mob-loop-btn {
   width: auto;

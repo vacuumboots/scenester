@@ -330,14 +330,8 @@ function _mobTimelineTouchEnd(e) {
     if (!moved && quick) {
       if (info.zone === 'thumb-start') {
         if (_mobPhase === 'start') {
-          // Commit start at current playhead position, advance to 'end'
-          var vid = _mobVideo();
-          if (vid && isFinite(vid.currentTime)) {
-            _mobStart = Math.max(_mobViewMin, Math.min(_mobEnd - 0.04, vid.currentTime));
-          }
-          _mobPhase = 'end';
-          _mobPhaseManual = false;
-          _mobActiveHandle = 'end';
+          // Toggle follow pause/resume — lock is a separate button
+          _mobPhaseManual = !_mobPhaseManual;
         } else if (_mobPhase === 'end') {
           // Tapping dimmed start thumb in Phase 'end' → return to Phase 'start'
           _mobPhase = 'start';
@@ -346,13 +340,8 @@ function _mobTimelineTouchEnd(e) {
         }
       } else if (info.zone === 'thumb-end') {
         if (_mobPhase === 'end') {
-          // Commit end at current playhead position, done
-          var vid2 = _mobVideo();
-          if (vid2 && isFinite(vid2.currentTime)) {
-            _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobViewMax, vid2.currentTime));
-          }
-          _mobPhase = null;
-          _mobPhaseManual = false;
+          // Toggle follow pause/resume — lock is a separate button
+          _mobPhaseManual = !_mobPhaseManual;
         }
       } else if (info.zone === 'window') {
         // Tap the fill: Stage 2 → seek playhead (start/end follow if not manual).
@@ -759,6 +748,29 @@ function _mobUpdateLoopBtn() {
   b.classList.toggle('active', active);
 }
 
+/** Lock the current phase edge at the playhead position and advance. */
+function mobLockPhase() {
+  var vid = _mobVideo();
+  if (!vid || !isFinite(vid.currentTime)) return;
+  var ct = vid.currentTime;
+
+  if (_mobPhase === 'start') {
+    _mobStart = Math.max(_mobViewMin, Math.min(_mobEnd - 0.04, ct));
+    _mobPhase = 'end';
+    _mobPhaseManual = false;
+    _mobActiveHandle = 'end';
+  } else if (_mobPhase === 'end') {
+    _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobViewMax, ct));
+    _mobPhase = null;
+    _mobPhaseManual = false;
+  }
+
+  _mobUpdateTimeline();
+  _mobUpdateTimes();
+  _mobUpdateStageLabel();
+  _mobUpdateDownloadBtn();
+}
+
 // ── Zoom (Two-Stage Selection) ────────────────────────────────────────
 
 /** Toggle Stage 2 (10-min neighborhood view). */
@@ -801,13 +813,27 @@ function _mobUpdateZoomBtn() {
 /** Update the two-stage instruction label + fine-tune row visibility. */
 function _mobUpdateStageLabel() {
   var el = document.getElementById('mob-stage-label');
+  var lockBtn = document.getElementById('mob-lock-btn');
+
   if (el) {
     if (!_mobZoomed) {
       el.textContent = 'STEP 1/2 \u2014 find your scene, then tap \uD83D\uDD0D';
+      el.style.display = '';
+      if (lockBtn) lockBtn.style.display = 'none';
     } else if (_mobPhase === 'start') {
-      el.textContent = 'STEP 2/3 \u2014 start: scrub to in-point, tap \u25C0 to lock';
+      el.textContent = 'STEP 2/3 \u2014 scrub to in-point';
+      el.style.display = '';
+      if (lockBtn) {
+        lockBtn.textContent = '\uD83D\uDD12 Lock Start';
+        lockBtn.style.display = '';
+      }
     } else if (_mobPhase === 'end') {
-      el.textContent = 'STEP 3/3 \u2014 end: scrub to out-point, tap \u25B6 to lock';
+      el.textContent = 'STEP 3/3 \u2014 scrub to out-point';
+      el.style.display = '';
+      if (lockBtn) {
+        lockBtn.textContent = '\uD83D\uDD12 Lock End';
+        lockBtn.style.display = '';
+      }
     } else {
       // Phase null = done
       var dur = _mobEnd - _mobStart;
@@ -818,6 +844,8 @@ function _mobUpdateStageLabel() {
       } else {
         el.textContent = 'Clip ready \u2014 ' + dur.toFixed(2) + 's';
       }
+      el.style.display = '';
+      if (lockBtn) lockBtn.style.display = 'none';
     }
   }
   // Fine-tune rows are visible in Stage 2 (all phases).

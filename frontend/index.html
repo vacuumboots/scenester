@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=22">
+  <link rel="stylesheet" href="static/style.css?v=23">
 </head>
 <body>
 
@@ -252,6 +252,7 @@
         <!-- Two-thumb timeline — 64px tall -->
         <div class="mob-timeline-container">
           <div class="mob-stage-label" id="mob-stage-label">STEP 1/2 — find your scene, then tap 🔍</div>
+          <button class="mob-lock-btn" id="mob-lock-btn" onclick="mobLockPhase()" style="display:none">🔒 Lock Start</button>
           <div class="mob-timeline" id="mob-timeline">
             <div class="mob-timeline-track"></div>
             <div class="mob-timeline-fill" id="mob-timeline-fill"></div>
@@ -329,8 +330,8 @@
 
 </main>
 
-<script src="static/app.js?v=22"></script>
-<script src="static/mobile.js?v=22"></script>
+<script src="static/app.js?v=23"></script>
+<script src="static/mobile.js?v=23"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
