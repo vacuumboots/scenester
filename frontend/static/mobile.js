@@ -507,8 +507,12 @@ function _mobUpdateTimeline() {
     }
   }
 
-  // Keep micro-scrubbers in sync with handle positions
-  _mobUpdateMicroScrubbers();
+  // Keep micro-scrubbers in sync with handle positions.
+  // Skip while video is playing AND no phase is active — DOM writes on every
+  // timeupdate tick starve the video decoder and cause buffering/stutter.
+  // During active phases (start/end riding playhead), the scrubbers must track.
+  var vid2 = _mobVideo();
+  if (!vid2 || vid2.paused || _mobPhase !== null) _mobUpdateMicroScrubbers();
 }
 
 /** Write current times to the three mobile time displays. */
