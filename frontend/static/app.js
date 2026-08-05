@@ -173,6 +173,15 @@ function sortItems(items, sortKey) {
         return (b.media_id || 0) - (a.media_id || 0);
       });
       break;
+    case "random":
+      // Fisher-Yates shuffle
+      for (var i = sorted.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = sorted[i];
+        sorted[i] = sorted[j];
+        sorted[j] = tmp;
+      }
+      break;
     default:
       break;
   }
