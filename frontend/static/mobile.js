@@ -107,6 +107,9 @@ function initMobileDetail(item) {
   // Wire timeline touch events
   initMobileTimeline();
 
+  // Wire micro-scrubbers (30s-per-handle precision sliders)
+  _mobInitMicroScrubbers();
+
   // Initial paint
   _mobUpdateZoomBtn();
   _mobUpdateStageLabel();
@@ -504,6 +507,8 @@ function _mobUpdateTimeline() {
     }
   }
 
+  // Keep micro-scrubbers in sync with handle positions
+  _mobUpdateMicroScrubbers();
 }
 
 /** Write current times to the three mobile time displays. */
@@ -851,6 +856,99 @@ function _mobUpdateStageLabel() {
   // Fine-tune rows are visible in Stage 2 (all phases).
   var ft = document.getElementById('mob-finetune');
   if (ft) ft.style.display = _mobZoomed ? '' : 'none';
+  // Micro-scrubbers visible in Stage 2 (all phases).
+  var mc = document.getElementById('mob-micro');
+  if (mc) mc.style.display = _mobZoomed ? '' : 'none';
+}
+
+// ── Micro-Scrubbers ──────────────────────────────────────────────────
+
+/** Flag: true while the user is dragging a micro-scrubber — prevents
+ *  _mobOnTimeUpdate from overriding the active scrub. */
+var _mobMicroDragging = null;  // null | 'start' | 'end'
+
+/** Wire input events on the micro-scrubber sliders. Called once from initMobileDetail. */
+function _mobInitMicroScrubbers() {
+  var ms = document.getElementById('mob-micro-start');
+  var me = document.getElementById('mob-micro-end');
+  if (!ms || !me) return;
+
+  // Remove old listeners (idempotent)
+  var newMs = ms.cloneNode(true);
+  var newMe = me.cloneNode(true);
+  ms.parentNode.replaceChild(newMs, ms);
+  me.parentNode.replaceChild(newMe, me);
+
+  newMs.addEventListener('input', function() {
+    _mobMicroDragging = 'start';
+    var val = parseFloat(newMs.value);
+    _mobStart = Math.max(0, Math.min(_mobEnd - 0.04, val));
+    _mobActiveHandle = 'start';
+    _mobPhaseManual = true;
+    seekVideoTo(_mobStart);
+    _mobUpdateMicroVal('start');
+    _mobUpdateTimeline();
+    _mobUpdateTimes();
+  });
+  newMs.addEventListener('change', function() {
+    _mobMicroDragging = null;
+    _mobUpdateDownloadBtn();
+  });
+
+  newMe.addEventListener('input', function() {
+    _mobMicroDragging = 'end';
+    var val = parseFloat(newMe.value);
+    _mobEnd = Math.max(_mobStart + 0.04, Math.min(_mobDuration, val));
+    _mobActiveHandle = 'end';
+    _mobPhaseManual = true;
+    seekVideoTo(_mobEnd);
+    _mobUpdateMicroVal('end');
+    _mobUpdateTimeline();
+    _mobUpdateTimes();
+  });
+  newMe.addEventListener('change', function() {
+    _mobMicroDragging = null;
+    _mobUpdateDownloadBtn();
+  });
+}
+
+/** Update the micro-scrubber range and value based on current handle positions.
+ *  Each slider spans ±15s around its handle, clamped to valid bounds.
+ *  Call from _mobUpdateTimeline and _mobUpdateStageLabel. */
+function _mobUpdateMicroScrubbers() {
+  var ms = document.getElementById('mob-micro-start');
+  var me = document.getElementById('mob-micro-end');
+  if (!ms || !me) return;
+
+  // Start micro-scrubber: ±15s around _mobStart
+  var sMin = Math.max(0, _mobStart - 15);
+  var sMax = Math.min(_mobEnd - 0.04, _mobStart + 15);
+  if (sMax < sMin + 0.04) sMax = sMin + 0.04;  // enforce minimum range
+  if (_mobMicroDragging !== 'start') {
+    if (parseFloat(ms.min) !== sMin) ms.min = sMin;
+    if (parseFloat(ms.max) !== sMax) ms.max = sMax;
+    ms.value = Math.max(sMin, Math.min(sMax, _mobStart));
+  }
+  _mobUpdateMicroVal('start');
+
+  // End micro-scrubber: ±15s around _mobEnd
+  var eMin = Math.max(_mobStart + 0.04, _mobEnd - 15);
+  var eMax = Math.min(_mobDuration, _mobEnd + 15);
+  if (eMax < eMin + 0.04) eMax = eMin + 0.04;
+  if (_mobMicroDragging !== 'end') {
+    if (parseFloat(me.min) !== eMin) me.min = eMin;
+    if (parseFloat(me.max) !== eMax) me.max = eMax;
+    me.value = Math.max(eMin, Math.min(eMax, _mobEnd));
+  }
+  _mobUpdateMicroVal('end');
+}
+
+/** Write the current formatted time to a micro-scrubber value span. */
+function _mobUpdateMicroVal(which) {
+  var el = document.getElementById('mob-micro-' + which + '-val');
+  if (!el) return;
+  var t = (which === 'start') ? _mobStart : _mobEnd;
+  el.textContent = fmtTime(t, true);
 }
 
 // ── Social Toggle Sync ─────────────────────────────────────────────────
@@ -865,7 +963,7 @@ function _mobUpdateStageLabel() {
  * CRITICAL: never seeks the video — only moves window/edge markers.
  */
 function _mobOnTimeUpdate() {
-  if (_mobDragging) return;                 // never fight the finger
+  if (_mobDragging || _mobMicroDragging) return;  // never fight the finger or micro-scrubber
   var vid = _mobVideo();
   if (!vid || !isFinite(vid.currentTime)) return;
   var ct = vid.currentTime;

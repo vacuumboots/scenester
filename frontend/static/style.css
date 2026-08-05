@@ -1752,6 +1752,60 @@ main {
   filter: brightness(1.2);
 }
 
+/* Micro-scrubbers — 30s-per-handle sliders for frame-precise selection */
+.mob-micro {
+  padding: 6px 0 8px;
+}
+.mob-micro-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.mob-micro-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 28px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.mob-micro-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+.mob-micro-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #141414;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(196,150,59,0.4);
+}
+.mob-micro-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #141414;
+  cursor: pointer;
+}
+.mob-micro-val {
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  color: var(--text);
+  min-width: 52px;
+  text-align: right;
+}
+
 /* Loop preview button — wider than skip buttons to fit its label */
 .mob-loop-btn {
   width: auto;
