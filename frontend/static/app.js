@@ -106,7 +106,7 @@ var _captionPosition = "bottom";    // "bottom" or "middle"
 // Fine-tune sliders — ±30s window for precise handle positioning
 var _fineTuneStartActive = false;
 var _fineTuneEndActive = false;
-var _FINE_TUNE_WINDOW = 30;
+var _FINE_TUNE_WINDOW = 15;   // ±15s = 30s window (matches mobile micro-scrubbers)
 
 // Mobile detection
 var _isMobile = false;
@@ -1155,34 +1155,36 @@ function updateDownloadButton() {
 // ── Fine-tune sliders ────────────────────────────────────────────────────
 
 function initFineTuneSliders() {
-  // Fine-tune sliders were replaced by nudge buttons (2026-08-03, mobile
-  // accessibility pass). Kept as a no-op guard — the nudge buttons call
-  // nudgeStart/nudgeEnd directly.
-  return;
-  var ss = document.getElementById("fine-tune-start");
-  var es = document.getElementById("fine-tune-end");
+  var ss = document.getElementById("dt-micro-start");
+  var es = document.getElementById("dt-micro-end");
   if (!ss || !es) return;
 
-  ss.addEventListener("input", function () {
+  // Remove old listeners (idempotent via cloneNode)
+  var newSs = ss.cloneNode(true);
+  var newEs = es.cloneNode(true);
+  ss.parentNode.replaceChild(newSs, ss);
+  es.parentNode.replaceChild(newEs, es);
+
+  newSs.addEventListener("input", function () {
     _fineTuneStartActive = true;
     var v = parseFloat(this.value);
-    setSliderStart(Math.min(_sliderEnd - 1, v));
+    setSliderStart(Math.min(_sliderEnd - 0.04, v));
     seekVideoTo(_sliderStart);
     _updateFineTuneStartVal();
   });
-  ss.addEventListener("change", function () {
+  newSs.addEventListener("change", function () {
     _fineTuneStartActive = false;
     _updateFineTuneStartRange();
   });
 
-  es.addEventListener("input", function () {
+  newEs.addEventListener("input", function () {
     _fineTuneEndActive = true;
     var v = parseFloat(this.value);
-    setSliderEnd(Math.max(_sliderStart + 1, v));
+    setSliderEnd(Math.max(_sliderStart + 0.04, v));
     seekVideoTo(_sliderEnd);
     _updateFineTuneEndVal();
   });
-  es.addEventListener("change", function () {
+  newEs.addEventListener("change", function () {
     _fineTuneEndActive = false;
     _updateFineTuneEndRange();
   });
@@ -1190,41 +1192,46 @@ function initFineTuneSliders() {
 
 function _updateFineTuneStartRange() {
   if (_fineTuneStartActive) return;
-  var s = document.getElementById("fine-tune-start");
+  var s = document.getElementById("dt-micro-start");
   if (!s) return;
   var dur = state.mediaDuration || 99999;
   var lo = Math.max(0, _sliderStart - _FINE_TUNE_WINDOW);
-  var hi = Math.min(dur, _sliderStart + _FINE_TUNE_WINDOW);
+  var hi = Math.min(_sliderEnd - 0.04, _sliderStart + _FINE_TUNE_WINDOW);
+  if (hi < lo + 0.04) hi = lo + 0.04;
   s.min = lo;
   s.max = hi;
-  s.value = _sliderStart;
+  s.value = Math.max(lo, Math.min(hi, _sliderStart));
   _updateFineTuneStartVal();
 }
 
 function _updateFineTuneEndRange() {
   if (_fineTuneEndActive) return;
-  var s = document.getElementById("fine-tune-end");
+  var s = document.getElementById("dt-micro-end");
   if (!s) return;
   var dur = state.mediaDuration || 99999;
-  var lo = Math.max(0, _sliderEnd - _FINE_TUNE_WINDOW);
+  var lo = Math.max(_sliderStart + 0.04, _sliderEnd - _FINE_TUNE_WINDOW);
   var hi = Math.min(dur, _sliderEnd + _FINE_TUNE_WINDOW);
+  if (hi < lo + 0.04) hi = lo + 0.04;
   s.min = lo;
   s.max = hi;
-  s.value = _sliderEnd;
+  s.value = Math.max(lo, Math.min(hi, _sliderEnd));
   _updateFineTuneEndVal();
 }
 
 function _updateFineTuneStartVal() {
-  var el = document.getElementById("fine-tune-start-val");
+  var el = document.getElementById("dt-micro-start-val");
   if (el) el.textContent = fmtTime(_sliderStart);
 }
 
 function _updateFineTuneEndVal() {
-  var el = document.getElementById("fine-tune-end-val");
+  var el = document.getElementById("dt-micro-end-val");
   if (el) el.textContent = fmtTime(_sliderEnd);
 }
 
 function updateFineTuneSliders() {
+  // Skip during passive playback — DOM writes starve video decoder
+  var vid = document.getElementById("preview-video");
+  if (vid && !vid.paused) return;
   _updateFineTuneStartRange();
   _updateFineTuneEndRange();
 }

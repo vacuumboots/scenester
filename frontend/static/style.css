@@ -988,6 +988,64 @@ main {
   min-width: 36px;
   text-align: center;
 }
+
+/* Desktop micro-scrubbers — 30s per-handle sliders (matches mobile) */
+.dt-micro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 4px;
+}
+.dt-micro-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dt-micro-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 32px;
+}
+.dt-micro-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+.dt-micro-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #141414;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(196,150,59,0.35);
+}
+.dt-micro-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #141414;
+  cursor: pointer;
+}
+.dt-micro-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  min-width: 52px;
+  text-align: right;
+}
+
 /* ── Mark Mode — the video is the scrubber (2026-08-03) ────────────── */
 .mark-mode {
   display: flex;

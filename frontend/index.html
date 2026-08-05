@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=28">
+  <link rel="stylesheet" href="static/style.css?v=29">
 </head>
 <body>
 
@@ -206,6 +206,20 @@
         </div>
       </div>
 
+      <!-- Micro-scrubbers — 30s per-handle sliders for frame-precise selection -->
+      <div class="dt-micro" id="dt-micro">
+        <div class="dt-micro-row">
+          <span class="dt-micro-label">Start</span>
+          <input type="range" class="dt-micro-slider" id="dt-micro-start" min="0" max="30" value="15" step="0.04">
+          <span class="dt-micro-val" id="dt-micro-start-val">0:00.00</span>
+        </div>
+        <div class="dt-micro-row">
+          <span class="dt-micro-label">End</span>
+          <input type="range" class="dt-micro-slider" id="dt-micro-end" min="0" max="30" value="15" step="0.04">
+          <span class="dt-micro-val" id="dt-micro-end-val">0:30.00</span>
+        </div>
+      </div>
+
       <div class="preset-buttons">
         <button class="btn btn-small preset-duration-btn" data-duration="5" onclick="handlePreset('set-duration',5)">5s</button>
         <button class="btn btn-small preset-duration-btn" data-duration="10" onclick="handlePreset('set-duration',10)">10s</button>
@@ -345,8 +359,8 @@
 
 </main>
 
-<script src="static/app.js?v=28"></script>
-<script src="static/mobile.js?v=28"></script>
+<script src="static/app.js?v=29"></script>
+<script src="static/mobile.js?v=29"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
