@@ -1818,20 +1818,25 @@ main {
   filter: brightness(1.2);
 }
 
-/* Micro-scrubbers — 30s-per-handle sliders for frame-precise selection */
+/* Micro-scrubbers — 30s-per-handle sliders for frame-precise selection.
+   ACCESSIBILITY: oversized for fat thumbs and radial nerve palsy.
+   Track and thumb are deliberately huge — these are precision controls
+   that must be usable without fine motor accuracy. */
 .mob-micro {
-  padding: 6px 0 8px;
+  padding: 8px 0 10px;
 }
 .mob-micro-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-height: 48px;  /* generous tap target per row */
 }
 .mob-micro-label {
-  font-size: 10px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-dim);
-  min-width: 28px;
+  min-width: 36px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1839,36 +1844,38 @@ main {
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
-  height: 6px;
+  height: 24px;        /* 4× default — impossible to miss */
   background: #2a2a2a;
-  border-radius: 3px;
+  border-radius: 12px;
   outline: none;
   cursor: pointer;
+  margin: 0;
 }
 .mob-micro-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 36px;         /* big gold knob */
+  height: 36px;
   border-radius: 50%;
   background: var(--gold);
-  border: 2px solid #141414;
+  border: 3px solid #141414;
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(196,150,59,0.4);
+  box-shadow: 0 0 10px rgba(196,150,59,0.5);
+  margin-top: -6px;    /* center 36px thumb on 24px track */
 }
 .mob-micro-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--gold);
-  border: 2px solid #141414;
+  border: 3px solid #141414;
   cursor: pointer;
 }
 .mob-micro-val {
-  font-size: 11px;
+  font-size: 14px;
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   color: var(--text);
-  min-width: 52px;
+  min-width: 60px;
   text-align: right;
 }
 
@@ -2191,5 +2198,30 @@ main {
     padding: 12px;
     font-size: 15px;
     min-height: 44px;
+  }
+
+  .mob-micro-slider {
+    height: 18px;
+  }
+  .mob-micro-slider::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+    margin-top: -5px;
+  }
+  .mob-micro-slider::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  .mob-micro-val {
+    font-size: 12px;
+    min-width: 48px;
+  }
+  .mob-micro-label {
+    font-size: 11px;
+    min-width: 30px;
+  }
+  .mob-micro-row {
+    min-height: 40px;
+    margin-bottom: 6px;
   }
 }
