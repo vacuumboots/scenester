@@ -28,6 +28,11 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
+  /* Keep pull-to-refresh / overscroll navigation INSIDE the app:
+     a pull-down at the top of a scrollable area must not reload the
+     page or navigate away (mobile browsers). */
+  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
   height: 100%;
   background: var(--bg);
   color: var(--text);
@@ -1611,6 +1616,9 @@ main {
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* Scrolling the sheet must not chain into page-level overscroll
+     (pull-to-refresh / swipe-navigation) — keep the gesture in-app. */
+  overscroll-behavior: contain;
 }
 
 /* Sheet handle (visual drag indicator at top) */

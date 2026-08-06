@@ -92,6 +92,10 @@ let dom;
 var _sliderStart = 0;
 var _sliderEnd = 139;
 
+// Bumped by goHome()/goBack() so in-flight selectItem() fetches can detect
+// that the user navigated away (SPA history integration, v=35).
+var _navCounter = 0;
+
 // Range lock mode: when _rangeLocked is true, dragging either handle
 // slides the entire range as a unit, maintaining _lockedDuration.
 var _rangeLocked = false;
@@ -279,6 +283,12 @@ function escAttr(str) {
 // ── Navigation ─────────────────────────────────────────────────────────
 
 function goHome() {
+  _navCounter++;
+  // On a pushed detail entry, route through history so the browser
+  // back-stack stays consistent (popstate handler does the view switch).
+  if (window.history && history.state && history.state.view === "detail") {
+    try { history.back(); return; } catch (e) {}
+  }
   if (dom.detailView) dom.detailView.style.display = "none";
   if (dom.libraryView) dom.libraryView.style.display = "block";
   if (dom.framePreview) dom.framePreview.style.display = "none";
@@ -301,10 +311,15 @@ function goHome() {
 // ── Detail View ────────────────────────────────────────────────────────
 
 async function selectItem(mediaId) {
+  var navAtStart = _navCounter;
   try {
     var resp = await fetch("api/library/" + mediaId);
     if (!resp.ok) throw new Error("HTTP " + resp.status);
-    state.currentItem = await resp.json();
+    var item = await resp.json();
+    // User may have swiped back / hit Home while the fetch was in flight —
+    // don't yank them back into the detail view.
+    if (_navCounter !== navAtStart) return;
+    state.currentItem = item;
     showDetailView();
   } catch (err) {
     console.error("Failed to load item:", err);
@@ -381,9 +396,22 @@ function showDetailView() {
   if (window.innerWidth <= 768 && typeof initMobileDetail === 'function') {
     initMobileDetail(item);
   }
+
+  // Push a "detail" history entry so back-swipe/back-button from a movie
+  // lands on the in-app home (popstate handler switches views) instead of
+  // popping the real entry and leaving the site.
+  if (window.history && history.pushState) {
+    try { history.pushState({ view: "detail" }, ""); } catch (e) {}
+  }
 }
 
 function goBack() {
+  _navCounter++;
+  // On a pushed detail entry, route through history so the browser
+  // back-stack stays consistent (popstate handler does the view switch).
+  if (window.history && history.state && history.state.view === "detail") {
+    try { history.back(); return; } catch (e) {}
+  }
   if (dom.detailView) dom.detailView.style.display = "none";
   if (dom.libraryView) dom.libraryView.style.display = "block";
   if (dom.framePreview) dom.framePreview.style.display = "none";
@@ -1696,6 +1724,32 @@ function showClipShortcut() {
 
 function init() {
   dom = getDom();
+
+  // ── SPA history: keep back-swipe / back-button INSIDE the app ──
+  // Cliparr is a single page with JS-swapped views. Without history
+  // entries, a phone's edge-swipe-back (iOS) or back button pops the ONE
+  // real entry and navigates away from the site entirely. Seed two in-app
+  // "home" entries, push a "detail" entry when a movie opens, and intercept
+  // popstate to switch views in-app instead of leaving.
+  if (window.history && history.pushState) {
+    try {
+      history.replaceState({ view: "home" }, "");
+      history.pushState({ view: "home" }, "");
+    } catch (e) { /* history API unavailable — fall back to no-op */ }
+  }
+  window.addEventListener("popstate", function(e) {
+    var st = e.state;
+    if (st && st.view === "detail") {
+      // Forward/restore into detail: only if we still have an item.
+      if (state.currentItem) showDetailView();
+      return;
+    }
+    // Back to home: switch in-app, never leave the site.
+    goHome();
+    // Absorb the back gesture: push a fresh home entry so the NEXT back
+    // also lands in-app instead of popping into the previous website.
+    try { history.pushState({ view: "home" }, ""); } catch (err) {}
+  });
 
   // Detect mobile at init
   _isMobile = window.innerWidth <= 768;
