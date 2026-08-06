@@ -181,6 +181,19 @@ async def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+# PWA root-level files: service worker + manifest MUST be served from the
+# app root (not /static/) so their scope covers the whole app at both the
+# Caddy /cliparr/ URL and the direct :8096 URL.
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(STATIC_DIR / "sw.js")
+
+
+@app.get("/manifest.json")
+async def manifest():
+    return FileResponse(STATIC_DIR / "manifest.json", media_type="application/manifest+json")
+
+
 # Serve /static/... from frontend/static/
 static_path = STATIC_DIR / "static"
 if static_path.exists():

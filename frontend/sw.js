@@ -1,23 +1,26 @@
-// Service worker — app shell caching with network-first freshness for code.
+// Service worker — app-shell caching with network-first freshness for code.
 // HTML/JS/CSS are network-first (deploys show immediately; cached copy is the
 // offline fallback). Icons/manifest are cache-first. API is network-only.
-const CACHE = "cliparr-v2";
-const SHELL = [
-  "/cliparr/",
-  "/cliparr/static/manifest.json"
-];
+//
+// Served from the APP ROOT (not /static/) so its scope covers the whole app
+// at both the Caddy /cliparr/ URL and the direct :8096 URL. All shell paths
+// are derived from self.registration.scope — never hardcode the prefix.
+const CACHE = "cliparr-v3";
 
 self.addEventListener("install", e => {
+  const scope = self.registration.scope;           // "/" or "/cliparr/"
+  const shell = [scope, scope + "manifest.json"];
+  self.skipWaiting();                              // new SW activates at once
   e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(SHELL))
+    caches.open(CACHE).then(cache => cache.addAll(shell))
   );
 });
 
 self.addEventListener("activate", e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())            // control open tabs now
   );
 });
 
