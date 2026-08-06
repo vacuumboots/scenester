@@ -5,7 +5,8 @@ Plex clip maker. Browse your library, scrub through video with a live preview, s
 ## Features
 
 - **Video-first preview** — direct media streaming with instant seeking, no proxy generation
-- **Frame strip scrubber** — click to set start, shift+click to set end, drag to slide range
+- **Frame strip (click-only)** — click to set start, shift+click to set end; tap/long-press on mobile. Not a scrubber — the video + range bar scrub.
+- **Mobile mark-from-playhead editor** — native video controls as the scrubber, huge Set Start/Set End buttons, unset buttons, 8-step nudge rows, presets, loop preview. Fat-thumb accessible.
 - **Range bar with lock mode** — draggable handles, duration presets (5s–139s), range slides as a unit when locked
 - **Looped clip preview** — separate Clip/Full play buttons, clip playback loops within the selected range
 - **Plex OAuth login** — no token management needed, or use `PLEX_TOKEN` env var
