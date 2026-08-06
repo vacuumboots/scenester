@@ -12,7 +12,6 @@ import re
 import time
 from pathlib import Path
 
-import ffmpeg
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -417,6 +416,88 @@ async def serve_subtitle(media_id: int):
 
 clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 
+# ── Hardware-accelerated clipping (VAAPI) ──────────────────────────────
+# The host is a Haswell iGPU (i965 driver): H264/MPEG2/VC1 HW decode,
+# H264 Main-profile HW encode. No HEVC/VP9/AV1 HW decode — those fall
+# back to CPU decode + HW encode. Set CLIPARR_DISABLE_VAAPI=1 to force
+# the legacy libx264 path (debugging / no /dev/dri in container).
+
+VAAPI_DEVICE = "/dev/dri/renderD128"
+_VAAPI_DECODE_OK = {"h264", "mpeg2video", "vc1", "vc1image"}
+_VAAPI_ENCODE_QUALITY = "23"  # ICQ; ~matches libx264 crf 20 bitrate
+
+
+def _vaapi_available() -> bool:
+    """True if a VAAPI render node is present in the container."""
+    if os.environ.get("CLIPARR_DISABLE_VAAPI") == "1":
+        return False
+    return os.path.exists(VAAPI_DEVICE)
+
+
+def _probe_video_codec(path: str) -> str:
+    """Return the source's primary video codec name via ffprobe."""
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=30,
+        )
+        name = (out.stdout or "").strip().lower()
+        return name
+    except Exception:
+        return ""
+
+
+def _build_clip_cmd(
+    file_path: str, start_sec: float, duration: float,
+    output_path: str, vf: str, meta_args: list,
+    use_vaapi: bool, hw_decode: bool, simple_scale: bool,
+) -> list[str]:
+    """Assemble the ffmpeg command for one clip.
+
+    use_vaapi: encode with h264_vaapi (and decode on GPU when hw_decode).
+    hw_decode: source codec can be decoded by the Haswell iGPU.
+    simple_scale: vf is only the plain `scale=1920:-2` (no subtitles /
+    vertical crop) — can run fully on GPU via scale_vaapi with zero
+    download/upload round-trips (the fastest tier).
+    """
+    cmd: list[str] = []
+
+    if use_vaapi:
+        # Always init the device + filter device explicitly so hwupload /
+        # hwdownload work regardless of which tier is active.
+        cmd += ["-init_hw_device", f"vaapi=va:{VAAPI_DEVICE}", "-filter_hw_device", "va"]
+        if hw_decode and simple_scale:
+            # Fastest tier: decode, scale and encode all stay on the GPU.
+            cmd += ["-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"]
+            vf_full = "scale_vaapi=1920:-2"
+        elif hw_decode:
+            # HW decode, drop to CPU for the filter chain, upload again.
+            cmd += ["-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"]
+            vf_full = f"hwdownload,format=nv12,{vf},format=nv12,hwupload"
+        else:
+            # CPU decode (HEVC/VP9/AV1 — no HW decode on Haswell), upload
+            # frames for HW encode.
+            vf_full = f"format=nv12,{vf},format=nv12,hwupload"
+    else:
+        vf_full = vf
+
+    cmd += ["-y", "-v", "error", "-ss", str(start_sec), "-t", str(duration),
+            "-i", file_path, "-vf", vf_full]
+
+    if use_vaapi:
+        cmd += ["-c:v", "h264_vaapi", "-global_quality", _VAAPI_ENCODE_QUALITY]
+    else:
+        cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "20"]
+
+    cmd += ["-c:a", "aac", "-b:a", "128k",
+            "-map", "0:v:0", "-map", "0:a:0"]
+    cmd += ["-progress", "pipe:2"]
+    cmd += meta_args
+    cmd.append(str(output_path))
+    return cmd
+
 
 async def _run_ffmpeg_clip(
     filename: str,
@@ -493,6 +574,7 @@ async def _run_ffmpeg_clip(
                 vf_chain.append(f"subtitles={tmp_srt}:force_style='{style}'")
 
     vf = ",".join(vf_chain) if vf_chain else "scale=1920:-2"
+    simple_scale = (vf == "scale=1920:-2")
 
     # Build metadata for MP4 embedding
     meta_args = []
@@ -509,56 +591,58 @@ async def _run_ffmpeg_clip(
             meta_args.extend(["-metadata", f"date={meta['year']}"])
         meta_args.extend(["-metadata", "comment=Clipped with Cliparr"])
 
-    stream = (
-        ffmpeg
-        .input(file_path, ss=start_sec, t=duration)
-        .output(
-            str(output_path),
-            vf=vf,
-            vcodec="libx264",
-            preset="fast",
-            crf=20,
-            acodec="aac",
-            **{"b:a": "128k"},
+    # ── Encoder selection: VAAPI tiers with libx264 fallback ──────────
+    # Tier 1 (fastest): HW decode + scale_vaapi + h264_vaapi — all on GPU.
+    # Tier 2:           CPU decode (HEVC/VP9/AV1) + HW encode.
+    # Tier 3 (fallback): libx264 — used when /dev/dri is absent OR a VAAPI
+    #                    run fails (the clip must never silently break).
+    use_vaapi = _vaapi_available()
+    hw_decode = False
+    if use_vaapi:
+        codec = _probe_video_codec(file_path)
+        hw_decode = codec in _VAAPI_DECODE_OK
+
+    async def _run_async(cmd: list[str]) -> int:
+        """Execute ffmpeg, stream progress into clip_jobs, return rc."""
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
         )
-        .global_args("-progress", "pipe:2", "-map", "0:v:0", "-map", "0:a:0")
-        .compile()
-    )
-    # -metadata must be placed BEFORE the output file path.
-    cmd = list(stream)
-    if meta_args:
-        try:
-            out_idx = cmd.index(str(output_path))
-            cmd[out_idx:out_idx] = meta_args
-        except ValueError:
-            cmd.extend(meta_args)
-
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stderr=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.DEVNULL,
-    )
-
-    time_pattern = re.compile(r"out_time_us=(\d+)")
-    out_time_ms_pattern = re.compile(r"out_time_ms=(\d+)")
-    last_progress = 0.0
-
-    async for line in proc.stderr:
-        decoded = line.decode("utf-8", errors="ignore")
-        match = time_pattern.search(decoded)
-        if match:
-            current = int(match.group(1)) / 1_000_000
-        else:
-            match = out_time_ms_pattern.search(decoded)
+        time_pattern = re.compile(r"out_time_us=(\d+)")
+        out_time_ms_pattern = re.compile(r"out_time_ms=(\d+)")
+        last_progress = 0.0
+        current = 0.0
+        async for line in proc.stderr:
+            decoded = line.decode("utf-8", errors="ignore")
+            match = time_pattern.search(decoded)
             if match:
                 current = int(match.group(1)) / 1_000_000
-        if match and duration > 0:
-            pct = min(current / duration, 0.99)
-            if pct > last_progress:
-                last_progress = pct
-                clip_jobs[filename]["progress"] = pct
+            else:
+                match = out_time_ms_pattern.search(decoded)
+                if match:
+                    current = int(match.group(1)) / 1_000_000
+            if match and duration > 0:
+                pct = min(current / duration, 0.99)
+                if pct > last_progress:
+                    last_progress = pct
+                    clip_jobs[filename]["progress"] = pct
+        await proc.wait()
+        return proc.returncode if proc.returncode is not None else 1
 
-    await proc.wait()
+    cmd = _build_clip_cmd(
+        file_path, start_sec, duration, str(output_path), vf, meta_args,
+        use_vaapi=use_vaapi, hw_decode=hw_decode, simple_scale=simple_scale,
+    )
+    rc = await _run_async(cmd)
+
+    # VAAPI failed (e.g. driver hiccup, odd resolution)? Retry with libx264.
+    if rc != 0 and use_vaapi:
+        cmd_fallback = _build_clip_cmd(
+            file_path, start_sec, duration, str(output_path), vf, meta_args,
+            use_vaapi=False, hw_decode=False, simple_scale=simple_scale,
+        )
+        rc = await _run_async(cmd_fallback)
 
     # Clean up temp SRT
     if tmp_srt and tmp_srt.exists():
@@ -567,10 +651,10 @@ async def _run_ffmpeg_clip(
         except OSError:
             pass
 
-    if proc.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+    if rc == 0 and output_path.exists() and output_path.stat().st_size > 0:
         clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
     else:
-        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {proc.returncode}"}
+        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {rc}"}
 
 
 @app.post("/api/clip")

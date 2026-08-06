@@ -5,7 +5,9 @@ COPY frontend/ ./static/
 
 # Stage 2: runtime
 FROM python:3.12-slim
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# i965-va-driver + libva = VAAPI hardware-accelerated clipping on the
+# Haswell iGPU (render node /dev/dri/renderD128 passed at runtime).
+RUN apt-get update && apt-get install -y ffmpeg i965-va-driver libva-drm2 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=frontend /app/static ./static
 COPY backend/requirements.txt .
