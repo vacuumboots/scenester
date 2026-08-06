@@ -3,14 +3,15 @@
  *
  * Minimal mobile clip editor: native video controls are the only scrubber.
  * Two huge buttons mark clip edges from video.currentTime. The range follows
- * the playhead (browse mode) until an edge is marked, then stays anchored.
+ * the playhead (browse mode) until an edge is marked, then stays anchored
+ * (or rides the playhead again after Unset Start/End).
  *
  * Reads/writes the app.js globals DIRECTLY (_sliderStart, _sliderEnd via
- * setSliderStart/setSliderEnd). No parallel mobile state. The only mobile
- * state is _mobBrowse.
+ * setSliderStart/setSliderEnd). No parallel mobile state. Mobile state:
+ * _mobStartSet/_mobEndSet flags; _mobBrowse is DERIVED via _mobSyncBrowse().
  *
  * ES5 only (no arrow functions, no let/const, no template literals).
- * Loaded after app.js via <script src="static/mobile.js?v=32"></script>.
+ * Loaded after app.js via <script src="static/mobile.js?v=33"></script>.
  */
 
 // ── Module state ───────────────────────────────────────────────────────
@@ -74,12 +75,12 @@ function initMobileDetail(item) {
   if (vid) {
     vid.removeEventListener("timeupdate", _mobOnTimeUpdate);
     vid.removeEventListener("seeked", _mobOnTimeUpdate);
-    vid.removeEventListener("pause", _mobOnPause);
-    vid.removeEventListener("play", _mobOnPlay);
+    vid.removeEventListener("pause", _mobOnPlayPause);
+    vid.removeEventListener("play", _mobOnPlayPause);
     vid.addEventListener("timeupdate", _mobOnTimeUpdate);
     vid.addEventListener("seeked", _mobOnTimeUpdate);
-    vid.addEventListener("pause", _mobOnPause);
-    vid.addEventListener("play", _mobOnPlay);
+    vid.addEventListener("pause", _mobOnPlayPause);
+    vid.addEventListener("play", _mobOnPlayPause);
   }
 
   // Default range: [0, min(139, duration)]
@@ -102,8 +103,8 @@ function destroyMobileDetail() {
   if (vid) {
     vid.removeEventListener("timeupdate", _mobOnTimeUpdate);
     vid.removeEventListener("seeked", _mobOnTimeUpdate);
-    vid.removeEventListener("pause", _mobOnPause);
-    vid.removeEventListener("play", _mobOnPlay);
+    vid.removeEventListener("pause", _mobOnPlayPause);
+    vid.removeEventListener("play", _mobOnPlayPause);
   }
   _mobStartSet = false;
   _mobEndSet = false;
@@ -115,7 +116,7 @@ function destroyMobileDetail() {
 /**
  * timeupdate + seeked handler on the shared video.
  *
- * THREE modes (decided by the two edge flags):
+ * FOUR modes (decided by the two edge flags):
  * 1. NEITHER pinned (_mobBrowse): center the range window on the playhead,
  *    preserving duration — "range follows wherever I look/scrub".
  * 2. Start pinned, end free: END rides the playhead (clip grows as you
@@ -155,13 +156,8 @@ function _mobOnTimeUpdate() {
   _mobRender();
 }
 
-/** Pause restores the loop button label (called via listener). */
-function _mobOnPause() {
-  _mobRender();
-}
-
-/** Play sets the loop button label to the active state (called via listener). */
-function _mobOnPlay() {
+/** Play/pause both just re-render (loop button label + unset visibility). */
+function _mobOnPlayPause() {
   _mobRender();
 }
 

@@ -1287,11 +1287,9 @@ function markStart() {
   // Keep playing — user will tap MARK END when the moment finishes.
   var msg = "Start marked at " + fmtTime(_sliderStart, true) + " — keep playing, tap Mark End when it's over.";
   if (dom.clipStatus) dom.clipStatus.textContent = msg;
-  // Visual feedback: highlight the start button briefly (desktop + mobile)
+  // Visual feedback: highlight the start button briefly
   var b = document.getElementById("btn-mark-start");
   if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
-  var bm = document.getElementById("btn-mark-start-mob");
-  if (bm) { bm.classList.add("just-marked"); setTimeout(function(){ bm.classList.remove("just-marked"); }, 600); }
 }
 
 function markEnd() {
@@ -1309,8 +1307,6 @@ function markEnd() {
   if (dom.clipStatus) dom.clipStatus.textContent = msg;
   var b = document.getElementById("btn-mark-end");
   if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
-  var bm = document.getElementById("btn-mark-end-mob");
-  if (bm) { bm.classList.add("just-marked"); setTimeout(function(){ bm.classList.remove("just-marked"); }, 600); }
   // No auto-loop — the video stays paused where the user ended it.
   // The ▶ Clip button previews the selection when the user asks for it.
 }
@@ -1323,35 +1319,6 @@ function nudgeStart(delta) {
 function nudgeEnd(delta) {
   setSliderEnd(_sliderEnd + delta);
   seekVideoTo(_sliderEnd);
-}
-
-// ── Frame-level nudge (mobile) ────────────────────────────────────────
-// delta is in seconds — ±0.04s ≈ 1 frame at 25fps
-
-function nudgeFrame(delta, isStart) {
-  if (isStart) {
-    setSliderStart(_sliderStart + delta);
-    seekVideoTo(_sliderStart);
-  } else {
-    setSliderEnd(_sliderEnd + delta);
-    seekVideoTo(_sliderEnd);
-  }
-}
-
-// ── Mobile preset: sets duration from current start ──────────────────
-
-function mobilePreset(duration) {
-  var ns = _sliderStart;
-  var ne = Math.min(state.mediaDuration, ns + duration);
-  setSliderStart(ns);
-  setSliderEnd(ne);
-  seekVideoTo(_sliderStart);
-  // Highlight the active preset
-  var btns = document.querySelectorAll(".mobile-preset-btn");
-  for (var i = 0; i < btns.length; i++) {
-    var d = parseInt(btns[i].getAttribute("data-dur"));
-    btns[i].classList.toggle("active", d === duration);
-  }
 }
 
 // ── Range Bar Zoom ────────────────────────────────────────────────────
@@ -1547,13 +1514,9 @@ async function downloadClip() {
   if (dom.clipProgress) dom.clipProgress.style.display = "block";
   if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
   if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip " + fmtTime(startSec) + "-" + fmtTime(endSec) + "...";
-  // Mobile progress
-  var mobProgress = document.getElementById("clip-progress-mob");
-  var mobProgressFill = document.getElementById("clip-progress-fill-mob");
-  var mobProgressText = document.getElementById("clip-progress-text-mob");
-  if (mobProgress) mobProgress.style.display = "block";
-  if (mobProgressFill) mobProgressFill.style.width = "0%";
-  if (mobProgressText) mobProgressText.textContent = "Starting clip...";
+  // NOTE: mobile progress is driven by mobile.js mobDownload() ->
+  // _mobShowProgress()/_mobStartProgressPolling(), which mirrors the
+  // desktop bar into #mob-clip-progress*. No app.js mobile writes here.
 
   try {
     // 1) Start clip generation (returns immediately)
@@ -1593,7 +1556,6 @@ async function downloadClip() {
   } finally {
     if (dom.clipProgress) dom.clipProgress.style.display = "none";
     if (dom.btnDownload) { dom.btnDownload.disabled = false; dom.btnDownload.textContent = "\u{1F4E5} Download Clip"; }
-    if (mobProgress) mobProgress.style.display = "none";
   }
 }
 
@@ -1629,11 +1591,6 @@ function pollClipStatus(filename) {
           }
           if (dom.clipProgressFill) dom.clipProgressFill.style.width = pct + "%";
           if (dom.clipProgressText) dom.clipProgressText.textContent = text;
-          // Mobile progress
-          var mpf = document.getElementById("clip-progress-fill-mob");
-          var mpt = document.getElementById("clip-progress-text-mob");
-          if (mpf) mpf.style.width = pct + "%";
-          if (mpt) mpt.textContent = text;
 
           // Poll again
           setTimeout(poll, 2000);
