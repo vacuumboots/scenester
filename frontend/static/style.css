@@ -1613,7 +1613,7 @@ main {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Sheet handle (visual indicator at top) */
+/* Sheet handle (visual drag indicator at top) */
 .mob-sheet::before {
   content: '';
   display: block;
@@ -1624,308 +1624,108 @@ main {
   margin: 0 auto 14px;
 }
 
-/* ── Two-Thumb Timeline — 64px tall ──────────────────────────────────── */
+/* ── Readout row: skip buttons flank start / dur / end ──────────────── */
 
-.mob-timeline-container {
-  /* padding handled by sheet */
-}
-
-.mob-stage-label {
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-  color: var(--gold);
-  text-transform: uppercase;
-  margin-bottom: 6px;
-  min-height: 14px;
-}
-
-.mob-timeline {
-  position: relative;
-  height: 64px;
-  background: #1a1a1a;
-  border-radius: 10px;
-  margin: 0 0 4px;
-  overflow: hidden;
-  touch-action: none;
-  border: 1px solid #252525;
-}
-
-.mob-timeline-track {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent calc(10% - 1px),
-    #2a2a2a calc(10% - 1px),
-    #2a2a2a 10%
-  );
-}
-
-.mob-timeline-fill {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  background: linear-gradient(
-    180deg,
-    rgba(196, 150, 59, 0.5),
-    rgba(196, 150, 59, 0.2)
-  );
-  z-index: 1;
-  border-radius: 4px;
-  transition: left 0.08s ease, width 0.08s ease;
-  pointer-events: none;
-}
-.mob-timeline-fill.loop-flash {
-  filter: brightness(2.5);
-  transition: filter 0.08s ease-in;
-}
-
-.mob-timeline-thumb {
-  position: absolute;
-  top: 0;
-  width: 28px;
-  height: 100%;
-  z-index: 2;
-  cursor: grab;
-  background: rgba(196, 150, 59, 0.12);
-  transition: background 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mob-timeline-thumb:active {
-  cursor: grabbing;
-}
-
-.mob-timeline-thumb.dragging {
-  background: rgba(196, 150, 59, 0.35);
-  transform: scaleX(1.12);
-}
-
-.mob-timeline-thumb.armed {
-  animation: long-press-pulse 0.8s ease-in-out infinite;
-  border-color: var(--gold);
-}
-
-.mob-timeline-thumb.armed-dim {
-  opacity: 0.25;
-}
-
-.mob-timeline-playhead {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  margin-left: -1px;
-  background: #fff;
-  pointer-events: none;
-  z-index: 3;
-  display: none;
-  box-shadow: 0 0 4px rgba(255,255,255,0.5);
-}
-.mob-timeline-playhead.looping {
-  background: #4ade80;
-  box-shadow: 0 0 8px rgba(74,222,128,0.6);
-}
-
-.mob-thumb-start {
-  border-left: 3px solid var(--gold);
-  border-radius: 6px 0 0 6px;
-  background-image: repeating-linear-gradient(
-    90deg,
-    var(--gold-dim) 0px,
-    var(--gold-dim) 2px,
-    transparent 2px,
-    transparent 5px
-  );
-}
-
-.mob-thumb-end {
-  border-right: 3px solid var(--gold);
-  border-radius: 0 6px 6px 0;
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent calc(100% - 5px),
-    var(--gold-dim) calc(100% - 5px),
-    var(--gold-dim) calc(100% - 2px),
-    transparent calc(100% - 2px)
-  );
-}
-
-/* ── Timeline times ──────────────────────────────────────────────────── */
-
-.mob-timeline-times {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-dim);
-  padding: 2px 2px 0;
-  margin-bottom: 12px;
-  gap: 4px;
-}
-
-.mob-timeline-dur {
-  background: rgba(196, 150, 59, 0.15);
-  color: var(--gold);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-#mob-time-start,
-#mob-time-end {
-  font-size: 11px;
-  color: var(--text-dim);
-  min-width: 52px;
-}
-
-#mob-time-start { text-align: center; }
-#mob-time-end { text-align: center; }
-
-/* Skip buttons — integrated into timeline times row */
-.mob-skip-btn {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: 6px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 14px;
-  cursor: pointer;
+.mob-readout {
   display: flex;
   align-items: center;
   justify-content: center;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.mob-skip-btn:active {
-  background: #1e1e1e;
-  color: var(--text);
-  border-color: var(--border-hover);
-}
-
-.mob-skip-btn.active {
-  background: var(--gold);
-  color: #141414;
-}
-
-.mob-zoom-btn {
-  width: auto;
-  min-width: 44px;
-  padding: 0 6px;
-  font-size: 13px;
-}
-.mob-zoom-btn.active {
-  background: var(--gold);
-  color: #141414;
-}
-
-/* Lock button — full-width gold action button for committing phases */
-.mob-lock-btn {
-  display: block;
-  width: 100%;
-  margin-bottom: 8px;
-  padding: 10px;
-  background: var(--gold);
-  color: #141414;
-  border: none;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-.mob-lock-btn:active {
-  filter: brightness(1.2);
-}
-
-/* Micro-scrubbers — 30s-per-handle sliders for frame-precise selection.
-   ACCESSIBILITY: oversized for fat thumbs and radial nerve palsy.
-   Track and thumb are deliberately huge — these are precision controls
-   that must be usable without fine motor accuracy. */
-.mob-micro {
-  padding: 8px 0 10px;
-}
-.mob-micro-row {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
-  min-height: 48px;  /* generous tap target per row */
-}
-.mob-micro-label {
+  font-family: var(--font-mono);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-dim);
-  min-width: 36px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.mob-micro-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 24px;        /* 4× default — impossible to miss */
-  background: #2a2a2a;
-  border-radius: 12px;
-  outline: none;
-  cursor: pointer;
-  margin: 0;
-}
-.mob-micro-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 36px;         /* big gold knob */
-  height: 36px;
-  border-radius: 50%;
-  background: var(--gold);
-  border: 3px solid #141414;
-  cursor: pointer;
-  box-shadow: 0 0 10px rgba(196,150,59,0.5);
-  margin-top: -6px;    /* center 36px thumb on 24px track */
-}
-.mob-micro-slider::-moz-range-thumb {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--gold);
-  border: 3px solid #141414;
-  cursor: pointer;
-}
-.mob-micro-val {
-  font-size: 14px;
-  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   color: var(--text);
-  min-width: 60px;
-  text-align: right;
+  padding: 2px 0 4px;
 }
 
-/* Loop preview button — wider than skip buttons to fit its label */
-.mob-loop-btn {
-  width: auto;
-  min-width: 56px;
-  padding: 0 8px;
+.mob-readout .mob-dur {
+  color: var(--text-dim);
   font-size: 12px;
 }
 
-/* ── Fine-tune — two explicit rows ──────────────────────────────────── */
+.mob-skip-btn {
+  min-width: 44px;
+  min-height: 44px;
+  background: #222;
+  color: var(--gold);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-skip-btn:active {
+  background: #2c2c2c;
+}
+
+/* ── Overview bar (read-only range indicator — no aiming) ───────────── */
+
+.mob-overview {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: #1a1a1a;
+  border-radius: 3px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.mob-overview-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  background: var(--gold);
+  border-radius: 3px;
+}
+
+/* ── Two huge mark buttons — the only selection surface ─────────────── */
+
+.mob-mark-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.mob-mark-btn {
+  min-height: 64px;
+  font-size: 16px;
+  font-weight: 700;
+  background: #1e1e1e;
+  color: var(--gold);
+  border: 2px solid var(--gold);
+  border-radius: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-mark-btn:active {
+  background: #2a2a2a;
+}
+
+.mob-mark-btn-end {
+  opacity: 0.75;
+}
+
+.mob-mark-btn.just-marked {
+  animation: mob-mark-flash 0.6s ease;
+}
+
+@keyframes mob-mark-flash {
+  0%   { background: #242013; border-color: var(--gold); color: var(--gold); }
+  100% { background: #1e1e1e; }
+}
+
+/* ── Finetune nudge rows ────────────────────────────────────────────── */
 
 .mob-finetune {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 4px 0 8px;
+  gap: 8px;
+  margin: 10px 0;
 }
 
 .mob-ft-row {
@@ -1935,124 +1735,124 @@ main {
 }
 
 .mob-ft-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--gold);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  min-width: 36px;
+  min-width: 40px;
+  font-size: 13px;
+  color: var(--text-dim);
   text-align: right;
-  flex-shrink: 0;
 }
 
 .mob-ft-btn {
   flex: 1;
-  min-height: 44px;
-  padding: 8px 4px;
+  min-height: 48px;
+  min-width: 44px;
   font-size: 13px;
-  font-weight: 600;
-  border-radius: 8px;
-  background: var(--panel);
+  background: #222;
+  color: var(--text);
   border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-family: var(--font-sans);
+  border-radius: 8px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .mob-ft-btn:active {
-  background: #1e1e1e;
-  color: var(--text);
-  border-color: var(--border-hover);
+  background: #2c2c2c;
 }
 
-/* ── Presets ─────────────────────────────────────────────────────────── */
+/* ── Preset duration chips ──────────────────────────────────────────── */
 
 .mob-presets {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin: 10px 0;
 }
 
 .mob-preset-btn {
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 14px;
+  background: #1e1e1e;
+  color: var(--text);
+  border: 1px solid #3a3a3a;
   border-radius: 20px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-family: var(--font-sans);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  min-height: 44px;
 }
 
 .mob-preset-btn:active {
-  background: var(--gold);
-  color: var(--bg);
-  border-color: var(--gold);
+  background: #2a2a2a;
 }
 
 .mob-preset-btn.active {
   background: var(--gold);
-  color: var(--bg);
+  color: #111;
   border-color: var(--gold);
+  font-weight: 700;
 }
 
-/* ── Download ────────────────────────────────────────────────────────── */
+/* ── Actions: loop (secondary) + download (primary gold) ────────────── */
+
+.mob-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.mob-loop-btn {
+  min-height: 56px;
+  font-size: 15px;
+  font-weight: 700;
+  background: #222;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-loop-btn:active {
+  background: #2c2c2c;
+}
 
 .mob-download-btn {
-  display: block;
-  width: 100%;
-  padding: 16px;
-  font-size: 17px;
+  min-height: 56px;
+  font-size: 16px;
   font-weight: 700;
-  font-family: var(--font-sans);
   background: var(--gold);
-  color: var(--bg);
+  color: #111;
   border: none;
   border-radius: 12px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  margin-bottom: 12px;
-  transition: background 0.15s;
-  min-height: 52px;
 }
 
 .mob-download-btn:active {
-  background: var(--gold-dim);
+  filter: brightness(1.1);
 }
 
 .mob-download-btn:disabled {
-  background: var(--gold-dim);
-  opacity: 0.4;
-  cursor: not-allowed;
+  background: #333;
+  color: var(--text-muted);
+  cursor: default;
 }
 
-/* ── Options ─────────────────────────────────────────────────────────── */
+/* ── Options (details / summary) ────────────────────────────────────── */
 
 .mob-options {
-  margin-bottom: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
+  margin: 6px 0;
+  border-top: 1px solid var(--border);
 }
 
 .mob-options summary {
-  padding: 12px 16px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--text-dim);
+  color: var(--text);
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
   list-style: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mob-options summary::-webkit-details-marker {
@@ -2062,198 +1862,56 @@ main {
 .mob-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 10px;
+  min-height: 44px;
   font-size: 14px;
   color: var(--text);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  min-height: 44px;
 }
 
 .mob-option input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   accent-color: var(--gold);
 }
 
-/* ── Progress & status ───────────────────────────────────────────────── */
+/* ── Progress + status ──────────────────────────────────────────────── */
 
-#mob-clip-progress {
-  margin: 12px 0;
-}
-
-#mob-clip-progress .progress-bar {
-  height: 8px;
-  background: #1a1a1a;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-#mob-clip-progress .progress-fill {
-  height: 100%;
-  background: var(--gold);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-#mob-clip-progress .progress-text {
-  font-size: 12px;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  margin-top: 4px;
-  text-align: center;
-}
+/* #mob-clip-progress reuses the shared .clip-progress/.progress-bar/
+   .progress-fill/.progress-text styles defined above. */
 
 .clip-status-mob {
-  text-align: center;
+  min-height: 18px;
   font-size: 12px;
   color: var(--text-dim);
-  font-family: var(--font-mono);
-  margin-top: 8px;
+  text-align: center;
+  padding: 2px 0;
 }
 
-
-/* ── Long-press animation (frame strip, mobile) ──────────────────── */
-
-@keyframes long-press-pulse {
-  0%   { box-shadow: 0 0 0 rgba(196,150,59,0); transform: scale(1); }
-  50%  { box-shadow: 0 0 14px rgba(196,150,59,0.6); transform: scale(1.05); }
-  100% { box-shadow: 0 0 0 rgba(196,150,59,0); transform: scale(1); }
-}
-
-.frame-thumb.long-press-active {
-  animation: long-press-pulse 0.5s ease-in-out;
-  border-color: var(--gold);
-  z-index: 2;
-}
-
-@media (max-width: 768px) {
-  .header-inner {
-    flex-direction: column;
-    gap: 10px;
-    align-items: stretch;
-  }
-
-  .search-row {
-    max-width: none;
-  }
-
-  .grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 10px;
-  }
-
-  .time-display {
-    flex-wrap: wrap;
-  }
-
-  /* Mark Mode — comfortable tap zones, not shouty */
-  .mark-buttons {
-    gap: 10px;
-  }
-  .btn-mark {
-    min-height: 58px;
-    font-size: 17px;
-    padding: 16px 10px;
-  }
-
-  /* Nudge buttons — comfortable, quiet */
-  .nudge-row {
-    gap: 12px;
-  }
-  .btn-nudge {
-    min-height: 50px;
-    font-size: 16px;
-    padding: 14px 8px;
-  }
-  .nudge-label {
-    font-size: 13px;
-    min-width: 36px;
-  }
-
-  .preset-duration-btn {
-    padding: 10px 12px;
-    font-size: 14px;
-    min-height: 44px;
-  }
-
-  .btn-download {
-    padding: 14px;
-    font-size: 16px;
-    min-height: 52px;
-  }
-}
-
-/* ── Landscape: tighter video, sheet still fits ─────────────────────── */
+/* ── Landscape: shrink everything so it fits in the short viewport ──── */
 
 @media (max-width: 768px) and (orientation: landscape) {
-  .preview-video-shared {
-    max-height: 40vh;
-  }
-
   .mob-sheet {
     padding: 12px 16px 16px;
   }
 
-  .mob-timeline {
-    height: 52px;
-  }
-
-  .mob-finetune {
-    gap: 4px;
+  .mob-mark-btn {
+    min-height: 44px;
+    font-size: 14px;
   }
 
   .mob-ft-btn {
     min-height: 38px;
     font-size: 12px;
-    padding: 6px 2px;
-  }
-
-  .mob-ft-label {
-    font-size: 9px;
-    min-width: 28px;
-  }
-
-  .mob-presets {
-    gap: 4px;
-    margin-bottom: 10px;
   }
 
   .mob-preset-btn {
-    padding: 6px 10px;
-    font-size: 11px;
-    min-height: 36px;
+    min-height: 40px;
   }
 
   .mob-download-btn {
-    padding: 12px;
+    min-height: 48px;
     font-size: 15px;
-    min-height: 44px;
-  }
-
-  .mob-micro-slider {
-    height: 18px;
-  }
-  .mob-micro-slider::-webkit-slider-thumb {
-    width: 28px;
-    height: 28px;
-    margin-top: -5px;
-  }
-  .mob-micro-slider::-moz-range-thumb {
-    width: 28px;
-    height: 28px;
-  }
-  .mob-micro-val {
-    font-size: 12px;
-    min-width: 48px;
-  }
-  .mob-micro-label {
-    font-size: 11px;
-    min-width: 30px;
-  }
-  .mob-micro-row {
-    min-height: 40px;
-    margin-bottom: 6px;
   }
 }
