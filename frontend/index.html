@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=33">
+  <link rel="stylesheet" href="static/style.css?v=34">
 </head>
 <body>
 
@@ -301,17 +301,25 @@
     <div class="mob-finetune">
       <div class="mob-ft-row">
         <span class="mob-ft-label">Start</span>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(-0.04)">−1f</button>
+        <button class="mob-ft-btn" onclick="mobNudgeStart(-30)">−30s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeStart(-10)">−10s</button>
         <button class="mob-ft-btn" onclick="mobNudgeStart(-5)">−5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(5)">+5s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeStart(-0.04)">−1f</button>
         <button class="mob-ft-btn" onclick="mobNudgeStart(0.04)">+1f</button>
+        <button class="mob-ft-btn" onclick="mobNudgeStart(5)">+5s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeStart(10)">+10s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeStart(30)">+30s</button>
       </div>
       <div class="mob-ft-row">
         <span class="mob-ft-label">End</span>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(-0.04)">−1f</button>
+        <button class="mob-ft-btn" onclick="mobNudgeEnd(-30)">−30s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeEnd(-10)">−10s</button>
         <button class="mob-ft-btn" onclick="mobNudgeEnd(-5)">−5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(5)">+5s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeEnd(-0.04)">−1f</button>
         <button class="mob-ft-btn" onclick="mobNudgeEnd(0.04)">+1f</button>
+        <button class="mob-ft-btn" onclick="mobNudgeEnd(5)">+5s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeEnd(10)">+10s</button>
+        <button class="mob-ft-btn" onclick="mobNudgeEnd(30)">+30s</button>
       </div>
     </div>
 
@@ -359,8 +367,8 @@
 
 </main>
 
-<script src="static/app.js?v=33"></script>
-<script src="static/mobile.js?v=33"></script>
+<script src="static/app.js?v=34"></script>
+<script src="static/mobile.js?v=34"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");
