@@ -462,7 +462,7 @@ def _build_clip_cmd(
     vertical crop) — can run fully on GPU via scale_vaapi with zero
     download/upload round-trips (the fastest tier).
     """
-    cmd: list[str] = []
+    cmd: list[str] = ["ffmpeg"]
 
     if use_vaapi:
         # Always init the device + filter device explicitly so hwupload /
