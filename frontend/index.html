@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="static/manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=32">
+  <link rel="stylesheet" href="static/style.css?v=33">
 </head>
 <body>
 
@@ -291,6 +291,12 @@
       <button class="mob-mark-btn mob-mark-btn-end" id="mob-btn-end" onclick="mobMarkEnd()">■ Set End</button>
     </div>
 
+    <!-- Unset — appears contextually when an edge is pinned -->
+    <div class="mob-unset-buttons">
+      <button class="mob-unset-btn" id="mob-btn-unset-start" onclick="mobUnsetStart()" style="display:none">✕ Unset Start</button>
+      <button class="mob-unset-btn" id="mob-btn-unset-end" onclick="mobUnsetEnd()" style="display:none">✕ Unset End</button>
+    </div>
+
     <!-- Nudge rows: two EXPLICIT rows, never one ambiguous row -->
     <div class="mob-finetune">
       <div class="mob-ft-row">
@@ -328,7 +334,7 @@
     </div>
 
     <!-- Options -->
-    <details class="mob-options" id="mob-options" style="display:none">
+    <details class="mob-options" id="mob-options">
       <summary>Options</summary>
       <label class="mob-option" id="mob-opt-captions" style="display:none">
         <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
@@ -353,8 +359,8 @@
 
 </main>
 
-<script src="static/app.js?v=32"></script>
-<script src="static/mobile.js?v=32"></script>
+<script src="static/app.js?v=33"></script>
+<script src="static/mobile.js?v=33"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("static/sw.js");

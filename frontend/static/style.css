@@ -1719,6 +1719,31 @@ main {
   100% { background: #1e1e1e; }
 }
 
+/* ── Unset buttons — contextually shown when an edge is pinned ───────── */
+
+.mob-unset-buttons {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.mob-unset-btn {
+  flex: 1;
+  min-height: 44px;
+  font-size: 13px;
+  background: #1a1a1a;
+  color: var(--text-dim);
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-unset-btn:active {
+  background: #2a2a2a;
+  color: var(--text);
+}
+
 /* ── Finetune nudge rows ────────────────────────────────────────────── */
 
 .mob-finetune {
@@ -1899,6 +1924,11 @@ main {
   .mob-mark-btn {
     min-height: 44px;
     font-size: 14px;
+  }
+
+  .mob-unset-btn {
+    min-height: 38px;
+    font-size: 12px;
   }
 
   .mob-ft-btn {

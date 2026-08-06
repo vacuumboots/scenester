@@ -15,11 +15,18 @@
 
 // ── Module state ───────────────────────────────────────────────────────
 
-var _mobBrowse = true;          // true = range follows the playhead
+var _mobBrowse = true;          // derived: true while NEITHER edge is pinned
+var _mobStartSet = false;       // true = start edge explicitly marked/pinned
+var _mobEndSet = false;         // true = end edge explicitly marked/pinned
 var _mobEls = {};               // cached DOM refs (filled at init)
 var _mobActivePreset = 0;       // 0 = free mode; otherwise active preset seconds
 var _mobProgressTimer = null;   // download progress poll interval
 var _mobFlashTimer = null;      // "just-marked" button flash timeout
+
+/** Keep _mobBrowse derived from the two edge flags (single source of truth). */
+function _mobSyncBrowse() {
+  _mobBrowse = !_mobStartSet && !_mobEndSet;
+}
 
 // ── DOM caching ────────────────────────────────────────────────────────
 
@@ -33,6 +40,8 @@ function _mobCacheDom() {
   _mobEls.btnLoop = document.getElementById("mob-btn-loop");
   _mobEls.btnStart = document.getElementById("mob-btn-start");
   _mobEls.btnEnd = document.getElementById("mob-btn-end");
+  _mobEls.btnUnsetStart = document.getElementById("mob-btn-unset-start");
+  _mobEls.btnUnsetEnd = document.getElementById("mob-btn-unset-end");
   _mobEls.progress = document.getElementById("mob-clip-progress");
   _mobEls.progressFill = document.getElementById("mob-clip-progress-fill");
   _mobEls.progressText = document.getElementById("mob-clip-progress-text");
@@ -56,7 +65,9 @@ function initMobileDetail(item) {
   _mobStopProgressPolling();
   if (_mobFlashTimer) { clearTimeout(_mobFlashTimer); _mobFlashTimer = null; }
 
-  _mobBrowse = true;
+  _mobStartSet = false;
+  _mobEndSet = false;
+  _mobSyncBrowse();
   _mobActivePreset = 0;
 
   var vid = _mobEls.video;
@@ -94,30 +105,53 @@ function destroyMobileDetail() {
     vid.removeEventListener("pause", _mobOnPause);
     vid.removeEventListener("play", _mobOnPlay);
   }
-  _mobBrowse = true;
+  _mobStartSet = false;
+  _mobEndSet = false;
+  _mobSyncBrowse();
 }
 
 // ── Follow driver ──────────────────────────────────────────────────────
 
 /**
- * timeupdate + seeked handler on the shared video. While _mobBrowse,
- * centers the range window on the playhead (preserving its duration),
- * clamped to media bounds. NEVER seeks or writes vid.currentTime here —
- * that would loop forever. Setters only update desktop readouts.
+ * timeupdate + seeked handler on the shared video.
+ *
+ * THREE modes (decided by the two edge flags):
+ * 1. NEITHER pinned (_mobBrowse): center the range window on the playhead,
+ *    preserving duration — "range follows wherever I look/scrub".
+ * 2. Start pinned, end free: END rides the playhead (clip grows as you
+ *    watch); start stays. This is the natural "mark start, play, clip
+ *    extends until I tap Set End" flow.
+ * 3. End pinned, start free: START rides the playhead (after Unset Start).
+ * 4. BOTH pinned: anchored — no-op.
+ *
+ * NEVER seeks or writes vid.currentTime here — that would loop forever.
+ * Setters only update state + desktop readouts.
  */
 function _mobOnTimeUpdate() {
-  if (!_mobBrowse) return;
   var vid = _mobEls.video;
   if (!vid || !vid.duration || isNaN(vid.duration) || vid.duration <= 0) return;
 
-  var dur = _sliderEnd - _sliderStart;
+  var ct = vid.currentTime;
   var maxDur = state.mediaDuration > 0 ? state.mediaDuration : vid.duration;
-  if (dur > maxDur) dur = maxDur;
 
-  var start = vid.currentTime - (dur / 2);
-  start = Math.max(0, Math.min(maxDur - dur, start));
-  setSliderStart(start);
-  setSliderEnd(start + dur);
+  if (!_mobStartSet && !_mobEndSet) {
+    // Browse mode: center the window on the playhead
+    var dur = _sliderEnd - _sliderStart;
+    if (dur > maxDur) dur = maxDur;
+    var start = ct - (dur / 2);
+    start = Math.max(0, Math.min(maxDur - dur, start));
+    setSliderStart(start);
+    setSliderEnd(start + dur);
+  } else if (_mobStartSet && !_mobEndSet) {
+    // End rides the playhead (start pinned)
+    var ne = Math.max(_sliderStart + 0.04, Math.min(maxDur, ct));
+    setSliderEnd(ne);
+  } else if (!_mobStartSet && _mobEndSet) {
+    // Start rides the playhead (end pinned)
+    var ns = Math.max(0, Math.min(_sliderEnd - 0.04, ct));
+    setSliderStart(ns);
+  }
+  // Both pinned: anchored, nothing to do.
   _mobRender();
 }
 
@@ -141,7 +175,9 @@ function mobMarkStart() {
     var fallbackDur = _mobActivePreset > 0 ? _mobActivePreset : 139;
     setSliderEnd(_sliderStart + fallbackDur); // setSliderEnd clamps to mediaDuration
   }
-  _mobBrowse = false;
+  _mobStartSet = true;
+  _mobEndSet = true;
+  _mobSyncBrowse();
   _mobFlash(_mobEls.btnStart);
   if (_mobEls.status) _mobEls.status.textContent = "";
   _mobRender();
@@ -150,15 +186,41 @@ function mobMarkStart() {
 function mobMarkEnd() {
   var vid = _mobEls.video;
   if (!vid) return;
-  if (vid.currentTime <= _sliderStart + 0.04) {
+  // Only guard when start is actually pinned. If start is unset (riding the
+  // playhead), ct tracks _sliderStart and the guard would falsely fire.
+  if (_mobStartSet && vid.currentTime <= _sliderStart + 0.04) {
     if (_mobEls.status) _mobEls.status.textContent = "End must be after start";
     return;
   }
   setSliderEnd(vid.currentTime);
-  _mobBrowse = false;
+  _mobStartSet = true;
+  _mobEndSet = true;
+  _mobSyncBrowse();
   vid.pause();
   _mobFlash(_mobEls.btnEnd);
   if (_mobEls.status) _mobEls.status.textContent = "";
+  _mobRender();
+}
+
+// ── Unset buttons ──────────────────────────────────────────────────────
+
+/** Clear the start mark. The start edge rides the playhead again
+ *  (end stays pinned if set); if nothing is pinned, back to browse mode. */
+function mobUnsetStart() {
+  _mobStartSet = false;
+  _mobSyncBrowse();
+  _mobOnTimeUpdate(); // immediately apply ride/browse to the current playhead
+  if (_mobEls.status) _mobEls.status.textContent = "Start unset — follows the playhead";
+  _mobRender();
+}
+
+/** Clear the end mark. The end edge rides the playhead again
+ *  (start stays pinned if set); if nothing is pinned, back to browse mode. */
+function mobUnsetEnd() {
+  _mobEndSet = false;
+  _mobSyncBrowse();
+  _mobOnTimeUpdate();
+  if (_mobEls.status) _mobEls.status.textContent = "End unset — follows the playhead";
   _mobRender();
 }
 
@@ -176,7 +238,8 @@ function mobSkip(delta) {
 function mobNudgeStart(delta) {
   var ns = Math.max(0, Math.min(_sliderEnd - 0.04, _sliderStart + delta));
   setSliderStart(ns);
-  _mobBrowse = false;
+  _mobStartSet = true;
+  _mobSyncBrowse();
   seekVideoTo(_sliderStart);
   _mobRender();
 }
@@ -184,7 +247,8 @@ function mobNudgeStart(delta) {
 function mobNudgeEnd(delta) {
   var ne = Math.max(_sliderStart + 0.04, Math.min(state.mediaDuration, _sliderEnd + delta));
   setSliderEnd(ne);
-  _mobBrowse = false;
+  _mobEndSet = true;
+  _mobSyncBrowse();
   seekVideoTo(_sliderEnd);
   _mobRender();
 }
@@ -207,7 +271,9 @@ function mobPreset(duration) {
     } else {
       setSliderEnd(Math.min(_sliderStart + duration, state.mediaDuration));
     }
-    _mobBrowse = false;
+    _mobStartSet = true;
+    _mobEndSet = true;
+    _mobSyncBrowse();
   }
   _mobRender();
 }
@@ -309,6 +375,15 @@ function _mobRender() {
   if (_mobEls.btnLoop && _mobEls.video) {
     if (_loopPlayback && !_mobEls.video.paused) _mobEls.btnLoop.textContent = "⏸ Loop";
     else _mobEls.btnLoop.textContent = "🔁 Loop";
+  }
+
+  // Unset buttons: visible only for pinned edges. The unpinned edge has
+  // nothing to unset — it's already riding the playhead (or browsing).
+  if (_mobEls.btnUnsetStart) {
+    _mobEls.btnUnsetStart.style.display = _mobStartSet ? "" : "none";
+  }
+  if (_mobEls.btnUnsetEnd) {
+    _mobEls.btnUnsetEnd.style.display = _mobEndSet ? "" : "none";
   }
 }
 

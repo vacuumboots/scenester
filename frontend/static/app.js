@@ -1509,7 +1509,7 @@ function updateSocialToggles() {
   }
   updateToggleButtons();
   // Sync mobile options visibility
-  var mobOpts = document.getElementById("mobile-options");
+  var mobOpts = document.getElementById("mob-options");
   if (mobOpts) mobOpts.style.display = (item && dom.detailView && dom.detailView.style.display !== "none") ? "" : "none";
   var mobCaptions = document.getElementById("mob-opt-captions");
   if (mobCaptions) mobCaptions.style.display = (item && item.subtitle_path) ? "" : "none";
