@@ -6,7 +6,6 @@ generating low-res proxy previews, and creating frame-accurate ffmpeg clips.
 """
 
 import asyncio
-import mimetypes
 import os
 import re
 import time
@@ -22,6 +21,39 @@ import plex
 app = FastAPI(title="Cliparr")
 
 # ── Helpers ───────────────────────────────────────────────────────────────
+
+# Explicit video MIME map. python:3.12-slim ships NO /etc/mime.types, so
+# mimetypes.guess_type() returns None for .mkv/.m4v/.ts and the stream
+# endpoint used to fall back to video/mp4. Browsers demux by content-type:
+# an mkv served as video/mp4 runs the MP4 parser on Matroska bytes, never
+# finds a moov atom, and the <video> element stalls at readyState 0
+# forever (endless retry — looks like "the player won't load at all").
+_VIDEO_MIME = {
+    ".mp4":  "video/mp4",
+    ".m4v":  "video/mp4",
+    ".mkv":  "video/x-matroska",
+    ".webm": "video/webm",
+    ".avi":  "video/x-msvideo",
+    ".mov":  "video/quicktime",
+    ".ts":   "video/mp2t",
+    ".m2ts": "video/mp2t",
+    ".wmv":  "video/x-ms-wmv",
+    ".flv":  "video/x-flv",
+    ".ogv":  "video/ogg",
+    ".mpeg": "video/mpeg",
+    ".mpg":  "video/mpeg",
+}
+
+
+def _video_mime(path: str) -> str:
+    """Browser media type for a video file (never None, never wrong).
+
+    Do NOT use mimetypes.guess_type here — it returns None for mkv/m4v/ts
+    on the slim base image, and the wrong content-type makes browsers pick
+    the wrong demuxer (mkv-as-mp4 = infinite stall).
+    """
+    ext = os.path.splitext(path)[1].lower()
+    return _VIDEO_MIME.get(ext, "video/mp4")
 
 def _slugify(text: str) -> str:
     """Convert a title to a filename-safe slug: letters, digits, underscores."""
@@ -358,10 +390,11 @@ async def stream_media(media_id: int):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Media file not found on disk")
 
-    # Determine MIME type from extension
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if not mime_type:
-        mime_type = "video/mp4"
+    # Determine MIME type from extension — explicit map, NOT
+    # mimetypes.guess_type (returns None for mkv on slim images -> mkv
+    # mislabeled as video/mp4 -> browser MP4 demuxer never finds moov ->
+    # video element stalls forever).
+    mime_type = _video_mime(file_path)
 
     return FileResponse(
         file_path,
