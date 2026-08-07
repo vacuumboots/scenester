@@ -70,6 +70,7 @@ function initMobileDetail(item) {
   _mobEndSet = false;
   _mobSyncBrowse();
   _mobActivePreset = 0;
+  _mobLast = null;  // force full render on entry
 
   var vid = _mobEls.video;
   if (vid) {
@@ -327,59 +328,99 @@ function _mobPollProgress() {
 
 // ── Render ─────────────────────────────────────────────────────────────
 
+// Last-rendered values for dirty-checking. _mobRender is called on every
+// timeupdate/seeked (~4Hz during playback); without this cache it rewrites
+// ~10 DOM nodes per tick even when nothing changed (e.g. both edges pinned).
+// Values only get written when they actually differ from what's on screen.
+var _mobLast = null;
+
 function _mobRender() {
   var dur = _sliderEnd - _sliderStart;
+  var s = fmtTime(_sliderStart, true);
+  var e = fmtTime(_sliderEnd, true);
+  var d = dur.toFixed(1) + "s";
 
-  if (_mobEls.timeStart) _mobEls.timeStart.textContent = fmtTime(_sliderStart, true);
-  if (_mobEls.timeEnd) _mobEls.timeEnd.textContent = fmtTime(_sliderEnd, true);
-  if (_mobEls.timeDur) _mobEls.timeDur.textContent = dur.toFixed(1) + "s";
+  if (!_mobLast) {
+    _mobLast = { start: "", end: "", dur: "", ovL: null, ovW: null,
+                 dl: null, dlDisabled: null, preset: -1, loop: null,
+                 us: null, ue: null };
+  }
+
+  if (_mobEls.timeStart && s !== _mobLast.start) {
+    _mobEls.timeStart.textContent = s;
+    _mobLast.start = s;
+  }
+  if (_mobEls.timeEnd && e !== _mobLast.end) {
+    _mobEls.timeEnd.textContent = e;
+    _mobLast.end = e;
+  }
+  if (_mobEls.timeDur && d !== _mobLast.dur) {
+    _mobEls.timeDur.textContent = d;
+    _mobLast.dur = d;
+  }
 
   var md = state.mediaDuration > 0 ? state.mediaDuration : 0;
   if (_mobEls.overviewFill && md > 0) {
     var pStart = Math.max(0, Math.min(100, (_sliderStart / md) * 100));
     var pEnd = Math.max(pStart, Math.min(100, (_sliderEnd / md) * 100));
-    _mobEls.overviewFill.style.left = pStart + "%";
-    _mobEls.overviewFill.style.width = (pEnd - pStart) + "%";
+    var ovL = pStart + "%";
+    var ovW = (pEnd - pStart) + "%";
+    if (ovL !== _mobLast.ovL) { _mobEls.overviewFill.style.left = ovL; _mobLast.ovL = ovL; }
+    if (ovW !== _mobLast.ovW) { _mobEls.overviewFill.style.width = ovW; _mobLast.ovW = ovW; }
   }
 
   if (_mobEls.btnDownload) {
+    var dlDisabled;
+    var dlLabel;
     if (dur <= 0) {
-      _mobEls.btnDownload.disabled = true;
-      _mobEls.btnDownload.textContent = "⬇ Download Clip";
+      dlDisabled = true;
+      dlLabel = "⬇ Download Clip";
     } else {
-      _mobEls.btnDownload.disabled = false;
-      var label = "⬇ Download Clip";
+      dlDisabled = false;
+      dlLabel = "⬇ Download Clip";
       var parts = [];
       if (_captionsEnabled) parts.push("captions");
       if (_verticalEnabled) parts.push("vertical");
-      if (parts.length) label = "⬇ Download Clip (" + parts.join(" + ") + ")";
-      _mobEls.btnDownload.textContent = label;
+      if (parts.length) dlLabel = "⬇ Download Clip (" + parts.join(" + ") + ")";
+    }
+    if (dlDisabled !== _mobLast.dlDisabled) {
+      _mobEls.btnDownload.disabled = dlDisabled;
+      _mobLast.dlDisabled = dlDisabled;
+    }
+    if (dlLabel !== _mobLast.dl) {
+      _mobEls.btnDownload.textContent = dlLabel;
+      _mobLast.dl = dlLabel;
     }
   }
 
-  // Preset chip highlight
-  if (_mobEls.presetBtns) {
+  // Preset chip highlight — only re-loop when the active preset changed
+  if (_mobEls.presetBtns && _mobActivePreset !== _mobLast.preset) {
     for (var i = 0; i < _mobEls.presetBtns.length; i++) {
       var b = _mobEls.presetBtns[i];
-      var d = parseFloat(b.getAttribute("data-dur")) || 0;
-      if (_mobActivePreset === d) b.classList.add("active");
+      var pd = parseFloat(b.getAttribute("data-dur")) || 0;
+      if (_mobActivePreset === pd) b.classList.add("active");
       else b.classList.remove("active");
     }
+    _mobLast.preset = _mobActivePreset;
   }
 
   // Loop button label
   if (_mobEls.btnLoop && _mobEls.video) {
-    if (_loopPlayback && !_mobEls.video.paused) _mobEls.btnLoop.textContent = "⏸ Loop";
-    else _mobEls.btnLoop.textContent = "🔁 Loop";
+    var loopLabel = (_loopPlayback && !_mobEls.video.paused) ? "⏸ Loop" : "🔁 Loop";
+    if (loopLabel !== _mobLast.loop) {
+      _mobEls.btnLoop.textContent = loopLabel;
+      _mobLast.loop = loopLabel;
+    }
   }
 
-  // Unset buttons: visible only for pinned edges. The unpinned edge has
-  // nothing to unset — it's already riding the playhead (or browsing).
+  // Unset buttons: visible only for pinned edges.
   if (_mobEls.btnUnsetStart) {
-    _mobEls.btnUnsetStart.style.display = _mobStartSet ? "" : "none";
+    var us = _mobStartSet ? "" : "none";
+    if (us !== _mobLast.us) { _mobEls.btnUnsetStart.style.display = us; _mobLast.us = us; }
   }
   if (_mobEls.btnUnsetEnd) {
-    _mobEls.btnUnsetEnd.style.display = _mobEndSet ? "" : "none";
+    var ue = _mobEndSet ? "" : "none";
+    if (ue !== _mobLast.ue) { _mobEls.btnUnsetEnd.style.display = ue; _mobLast.ue = ue; }
   }
 }
 

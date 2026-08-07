@@ -127,7 +127,9 @@ function isMobile() { return _isMobile; }
 
 function fmtTime(seconds, precise) {
   if (seconds == null || isNaN(seconds)) return "0:00";
-  var s = Math.max(0, seconds);
+  // Round to 2dp BEFORE splitting minutes/seconds so boundary values
+  // roll over correctly (59.999s -> 1:00.00, not 0:60.00).
+  var s = Math.max(0, Math.round(seconds * 100) / 100);
   var m = Math.floor(s / 60);
   var sec = s % 60;
   if (precise) {
@@ -627,10 +629,15 @@ function loadVideoPreview(mediaId) {
 
   vid.ontimeupdate = function() {
     var ct = vid.currentTime;
-    if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
-    if (dom.rangeBarPlayhead) {
-      dom.rangeBarPlayhead.style.display = "block";
-      dom.rangeBarPlayhead.style.left = sliderGetPct(ct) + "%";
+    // Desktop-only visual readouts — skip on mobile (display:none; writing
+    // them on every tick is main-thread style churn that janks scrolling).
+    // mobile.js renders its own readouts via _mobRender.
+    if (!_isMobile) {
+      if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
+      if (dom.rangeBarPlayhead) {
+        dom.rangeBarPlayhead.style.display = "block";
+        dom.rangeBarPlayhead.style.left = sliderGetPct(ct) + "%";
+      }
     }
     // Loop within clip range when playing a clip preview
     if (_loopPlayback && ct >= _sliderEnd) {
@@ -913,6 +920,7 @@ function findNearestThumb(clientX) {
 
 // Highlight thumbnails in selected range
 function updateStripRange() {
+  if (_isMobile) return;  // desktop-only strip visual; mobile has mob-overview
   for (var i = 0; i < _stripThumbs.length; i++) {
     var t = _stripThumbs[i];
     if (t.time >= _sliderStart && t.time <= _sliderEnd) {
@@ -968,6 +976,7 @@ function sliderGetPct(t) {
 }
 
 function updateRangeBar() {
+  if (_isMobile) return;  // desktop-only visual; mobile has mob-overview
   if (!dom.rangeBar) return;
   var pctStart = sliderGetPct(_sliderStart);
   var pctEnd = sliderGetPct(_sliderEnd);
@@ -1163,6 +1172,12 @@ function updateTimeDisplay() {
   if (_sliderEnd > state.mediaDuration) _sliderEnd = Math.floor(state.mediaDuration);
   if (_sliderStart > state.mediaDuration) _sliderStart = Math.floor(state.mediaDuration);
   if (_sliderStart < 0) _sliderStart = 0;
+
+  // On mobile the desktop readouts are display:none — writing them on every
+  // timeupdate/seeked is main-thread style churn that janks page scrolling.
+  // mobile.js renders its own readouts (_mobRender). Constraints above still
+  // apply; only the DOM writes are skipped.
+  if (_isMobile) return;
 
   if (dom.timeStartInput) dom.timeStartInput.value = fmtTime(_sliderStart);
   if (dom.timeEndInput) dom.timeEndInput.value = fmtTime(_sliderEnd);

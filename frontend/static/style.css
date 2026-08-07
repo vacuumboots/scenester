@@ -1594,6 +1594,11 @@ main {
     height: auto;
     border-radius: 0;
     object-fit: contain;
+    /* Android Chrome captures vertical swipes on <video> for its native
+       seek gesture, which makes the top ~60% of the clip page dead to
+       scrolling. pan-y hands vertical pans to the page scroller while
+       taps (play/pause, controls) and horizontal seeks still work. */
+    touch-action: pan-y;
   }
 }
 
