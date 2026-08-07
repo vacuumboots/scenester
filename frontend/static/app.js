@@ -593,6 +593,18 @@ function loadVideoPreview(mediaId) {
   if (!dom.previewVideo) return;
   var vid = dom.previewVideo;
 
+  // Clear any subtitle <track> left over from a previous movie. A stale
+  // track element stays attached to <video> across src changes, and the
+  // browser re-associates its TextTrack with the new resource — so the
+  // previous movie's subtitles can render over the next one. Removing the
+  // elements (and disabling any lingering TextTrack objects) here, BEFORE
+  // the new src is set, gives every load a clean slate — including movies
+  // that have no subtitle file at all.
+  var staleTracks = vid.querySelectorAll("track");
+  for (var sti = 0; sti < staleTracks.length; sti++) staleTracks[sti].remove();
+  var staleTT = vid.textTracks;
+  for (var stj = 0; stj < staleTT.length; stj++) staleTT[stj].mode = "disabled";
+
   if (dom.previewError) dom.previewError.style.display = "none";
   if (dom.previewLoading) dom.previewLoading.style.display = "block";
 
@@ -601,12 +613,16 @@ function loadVideoPreview(mediaId) {
     if (dom.previewLoading) dom.previewLoading.style.display = "none";
     if (dom.previewError) dom.previewError.style.display = "none";
     vid.currentTime = _sliderStart;
-    // Add subtitle track if available — must be AFTER metadata loads
-    // (adding before vid.src causes MEDIA_ERR_SRC_NOT_SUPPORTED on mobile)
+    // Always clear stale subtitle tracks (belt & braces — loadVideoPreview
+    // already cleared before setting src). A track left from a previous
+    // movie renders its cues over the new one. Must be AFTER metadata
+    // loads (adding before vid.src causes MEDIA_ERR_SRC_NOT_SUPPORTED on
+    // mobile).
+    var oldTracks = vid.querySelectorAll("track");
+    for (var ti = 0; ti < oldTracks.length; ti++) oldTracks[ti].remove();
+    var oldTT = vid.textTracks;
+    for (var tj = 0; tj < oldTT.length; tj++) oldTT[tj].mode = "disabled";
     if (state.currentItem && state.currentItem.subtitle_path) {
-      // Remove any old track elements first
-      var oldTracks = vid.querySelectorAll("track");
-      for (var ti = 0; ti < oldTracks.length; ti++) oldTracks[ti].remove();
       try {
         var track = document.createElement("track");
         track.kind = "subtitles";
@@ -617,6 +633,11 @@ function loadVideoPreview(mediaId) {
         track.onload = function() { console.log("Subtitle track loaded"); };
         track.onerror = function() { console.warn("Subtitle track failed to load"); };
         vid.appendChild(track);
+        // Force-show: default=true only auto-shows a track at resource-fetch
+        // time, but this track is added AFTER metadata — without this the
+        // subtitles silently stay off on subsequent loads of the same movie.
+        var tt = vid.textTracks;
+        if (tt && tt.length) tt[tt.length - 1].mode = "showing";
         // Enable native subtitle toggle in controls
         if (!vid.hasAttribute("controls")) vid.setAttribute("controls", "controls");
       } catch(e) {
