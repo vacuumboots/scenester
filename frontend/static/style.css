@@ -1611,7 +1611,6 @@ main {
 /* ── Bottom sheet ───────────────────────────────────────────────────── */
 
 .mob-sheet {
-  flex: 1;
   background: var(--panel);
   border-radius: 16px 16px 0 0;
   margin-top: -8px;
@@ -1619,11 +1618,12 @@ main {
   z-index: 2;
   padding: 16px 16px 24px;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  /* Scrolling the sheet must not chain into page-level overscroll
-     (pull-to-refresh / swipe-navigation) — keep the gesture in-app. */
-  overscroll-behavior: contain;
+  /* NOT a scroll container — main is the single page scroller.
+     An overflow-y:auto sheet that fits its content (no internal overflow)
+     plus overscroll-behavior:contain swallows touch pans on Android
+     Chrome: the sheet covers nearly the whole viewport, so the page
+     becomes a scroll dead-zone. Removing the scroll-container props lets
+     every pan fall through to main. */
 }
 
 /* Sheet handle (visual drag indicator at top) */

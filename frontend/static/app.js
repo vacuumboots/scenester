@@ -335,6 +335,13 @@ function showDetailView() {
   if (dom.libraryView) dom.libraryView.style.display = "none";
   if (dom.detailView) dom.detailView.style.display = "block";
 
+  // Landing position: the library grid is huge (100k+ px), so swapping
+  // views clamps the old scrollTop to the much shorter detail view —
+  // on mobile that lands at the BOTTOM of the clip sheet (video hidden,
+  // page feels stuck). Always start the detail view at the top.
+  var mainEl = document.getElementById("main");
+  if (mainEl) mainEl.scrollTop = 0;
+
   if (dom.detailTitle) dom.detailTitle.textContent = item.title || "Unknown";
 
   var parts = [];
