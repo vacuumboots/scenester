@@ -1732,6 +1732,52 @@ main {
   100% { background: #1e1e1e; }
 }
 
+/* ── Frame snapshots (IN/OUT previews under the mark buttons) ────────── */
+
+.mob-frame-snaps {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+
+.mob-snap {
+  position: relative;
+  flex: 1;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border);
+}
+
+.mob-snap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
+.mob-snap-loading {
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+.mob-snap-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 1;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
 /* ── Unset buttons — contextually shown when an edge is pinned ───────── */
 
 .mob-unset-buttons {

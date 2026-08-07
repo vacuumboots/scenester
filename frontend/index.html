@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=40">
+  <link rel="stylesheet" href="static/style.css?v=41">
 </head>
 <body>
 
@@ -291,6 +291,18 @@
       <button class="mob-mark-btn mob-mark-btn-end" id="mob-btn-end" onclick="mobMarkEnd()">■ Set End</button>
     </div>
 
+    <!-- Frame snapshots: the exact frame at each marked edge (tap to jump) -->
+    <div class="mob-frame-snaps">
+      <div class="mob-snap" id="mob-snap-start" style="display:none">
+        <img id="mob-snap-start-img" alt="Start frame" onclick="mobJumpToSnap('start')">
+        <span class="mob-snap-label">IN</span>
+      </div>
+      <div class="mob-snap" id="mob-snap-end" style="display:none">
+        <img id="mob-snap-end-img" alt="End frame" onclick="mobJumpToSnap('end')">
+        <span class="mob-snap-label">OUT</span>
+      </div>
+    </div>
+
     <!-- Unset — appears contextually when an edge is pinned -->
     <div class="mob-unset-buttons">
       <button class="mob-unset-btn" id="mob-btn-unset-start" onclick="mobUnsetStart()" style="display:none">✕ Unset Start</button>
@@ -367,8 +379,8 @@
 
 </main>
 
-<script src="static/app.js?v=40"></script>
-<script src="static/mobile.js?v=40"></script>
+<script src="static/app.js?v=41"></script>
+<script src="static/mobile.js?v=41"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");

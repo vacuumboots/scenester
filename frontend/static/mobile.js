@@ -41,6 +41,10 @@ function _mobCacheDom() {
   _mobEls.btnLoop = document.getElementById("mob-btn-loop");
   _mobEls.btnStart = document.getElementById("mob-btn-start");
   _mobEls.btnEnd = document.getElementById("mob-btn-end");
+  _mobEls.snapStart = document.getElementById("mob-snap-start");
+  _mobEls.snapStartImg = document.getElementById("mob-snap-start-img");
+  _mobEls.snapEnd = document.getElementById("mob-snap-end");
+  _mobEls.snapEndImg = document.getElementById("mob-snap-end-img");
   _mobEls.btnUnsetStart = document.getElementById("mob-btn-unset-start");
   _mobEls.btnUnsetEnd = document.getElementById("mob-btn-unset-end");
   _mobEls.progress = document.getElementById("mob-clip-progress");
@@ -71,6 +75,8 @@ function initMobileDetail(item) {
   _mobSyncBrowse();
   _mobActivePreset = 0;
   _mobLast = null;  // force full render on entry
+  _mobHideSnap("start");
+  _mobHideSnap("end");
 
   var vid = _mobEls.video;
   if (vid) {
@@ -177,6 +183,10 @@ function mobMarkStart() {
   _mobSyncBrowse();
   _mobFlash(_mobEls.btnStart);
   if (_mobEls.status) _mobEls.status.textContent = "";
+  // Show the frame at the new start; end was auto-pinned to start+dur, so
+  // show its frame too — the clip window is now fully visible.
+  _mobRefreshSnap("start");
+  _mobRefreshSnap("end");
   _mobRender();
 }
 
@@ -196,6 +206,7 @@ function mobMarkEnd() {
   vid.pause();
   _mobFlash(_mobEls.btnEnd);
   if (_mobEls.status) _mobEls.status.textContent = "";
+  _mobRefreshSnap("end");
   _mobRender();
 }
 
@@ -208,6 +219,7 @@ function mobUnsetStart() {
   _mobSyncBrowse();
   _mobOnTimeUpdate(); // immediately apply ride/browse to the current playhead
   if (_mobEls.status) _mobEls.status.textContent = "Start unset — follows the playhead";
+  _mobHideSnap("start");
   _mobRender();
 }
 
@@ -218,7 +230,46 @@ function mobUnsetEnd() {
   _mobSyncBrowse();
   _mobOnTimeUpdate();
   if (_mobEls.status) _mobEls.status.textContent = "End unset — follows the playhead";
+  _mobHideSnap("end");
   _mobRender();
+}
+
+// ── Frame snapshots (marked edge previews) ─────────────────────────────
+
+/** Fetch and show the frame at a marked edge via api/frame (server-side
+ *  ffmpeg extraction — the same endpoint the desktop frame strip uses).
+ *  Tap-driven only (mark/nudge buttons); never called from the follow
+ *  driver, which would hammer the server on every timeupdate. */
+function _mobRefreshSnap(edge) {
+  var wrap = edge === "start" ? _mobEls.snapStart : _mobEls.snapEnd;
+  var img = edge === "start" ? _mobEls.snapStartImg : _mobEls.snapEndImg;
+  if (!wrap || !img) return;
+  var item = state.currentItem;
+  if (!item || !item.media_id) return;
+  var t = edge === "start" ? _sliderStart : _sliderEnd;
+  if (t == null || isNaN(t) || t < 0) return;
+  wrap.style.display = "block";
+  wrap.classList.add("mob-snap-loading");
+  img.onload = function() { wrap.classList.remove("mob-snap-loading"); };
+  img.onerror = function() {
+    wrap.classList.remove("mob-snap-loading");
+    wrap.style.display = "none";
+  };
+  img.src = "api/frame/" + item.media_id + "?t=" + t.toFixed(2);
+}
+
+function _mobHideSnap(edge) {
+  var wrap = edge === "start" ? _mobEls.snapStart : _mobEls.snapEnd;
+  if (wrap) wrap.style.display = "none";
+}
+
+/** Tap an IN/OUT thumbnail to jump the playhead to that edge. */
+function mobJumpToSnap(edge) {
+  var vid = _mobEls.video;
+  if (!vid) return;
+  var t = edge === "start" ? _sliderStart : _sliderEnd;
+  if (t == null || isNaN(t)) return;
+  seekVideoTo(t);
 }
 
 /** Nudge the playhead; the timeupdate listener follows while _mobBrowse. */
@@ -238,6 +289,7 @@ function mobNudgeStart(delta) {
   _mobStartSet = true;
   _mobSyncBrowse();
   seekVideoTo(_sliderStart);
+  _mobRefreshSnap("start");
   _mobRender();
 }
 
@@ -247,6 +299,7 @@ function mobNudgeEnd(delta) {
   _mobEndSet = true;
   _mobSyncBrowse();
   seekVideoTo(_sliderEnd);
+  _mobRefreshSnap("end");
   _mobRender();
 }
 
