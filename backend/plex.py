@@ -304,17 +304,20 @@ async def _get_section_items(section_id: int) -> list[dict]:
 
 
 async def get_library_sections() -> list[dict]:
-    """Auto-detect movie and TV sections, return combined library items.
+    """Auto-detect MOVIE sections only, return combined library items.
 
-    Returns a flat list of all items from all movie + TV sections.
-    Each item has a 'type' field: 'movie' or 'episode'.
+    TV sections are intentionally excluded (user preference): shows have no
+    playable Media/Part at the show level, so they render as dead cards.
+
+    Returns a flat list of all items from all movie sections.
+    Each item has a 'type' field: 'movie'.
     """
     data = await _get("/library/sections")
     sections = data.get("MediaContainer", {}).get("Directory", [])
     all_items = []
     for section in sections:
         stype = section.get("type", "")
-        if stype in ("movie", "show"):
+        if stype == "movie":
             items = await _get_section_items(int(section["key"]))
             all_items.extend(items)
     return all_items
