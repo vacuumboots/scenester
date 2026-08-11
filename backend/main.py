@@ -508,7 +508,7 @@ def _build_clip_cmd(
         elif hw_decode:
             # HW decode, drop to CPU for the filter chain, upload again.
             cmd += ["-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"]
-            vf_full = f"hwdownload,format=nv12,{vf},format=nv12,hwupload"
+            vf_full = f"hwdownload,format=yuv420p,{vf},format=nv12,hwupload"
         else:
             # CPU decode (HEVC/VP9/AV1 — no HW decode on Haswell), upload
             # frames for HW encode.
