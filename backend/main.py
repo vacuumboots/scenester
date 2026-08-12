@@ -438,7 +438,6 @@ async def serve_subtitle(media_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
     # Convert SRT to WebVTT: add header, replace comma with period in timestamps
-    import re
     vtt = "WEBVTT\n\n"
     vtt += re.sub(
         r'(\d{2}:\d{2}:\d{2}),(\d{3})',

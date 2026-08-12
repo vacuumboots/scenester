@@ -346,20 +346,18 @@ function showDetailView() {
   if (window._jumpOffset != null) {
     _pendingSeek = window._jumpOffset;
     window._jumpOffset = null;
-    window._jumpDuration = null;
   }
 
-  updateTimeDisplay();
-  updateDownloadButton();
-  updateStripRange();
+  // Reset the "Frame at" readout; it's refreshed once the video loads
+  // (onloadedmetadata seeks to _pendingSeek or 0, then timeupdate updates it).
+  if (dom.frameTimeValue) dom.frameTimeValue.textContent = "0:00";
+
+  // Sync per-item social option visibility (captions availability, vertical)
+  // — also resets _captionsEnabled for subtitle-less movies. The range/readout/
+  // download-button render is owned by initMobileDetail → _mobRender below.
   updateSocialToggles();
 
-  // Seek video to start position once ready
-  seekVideoTo(_sliderStart);
-
-  if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(durationS);
-
-  // Init radical mobile timeline (two-thumb scrubber)
+  // Init the unified mark-from-playhead editor (both viewports)
   if (typeof initMobileDetail === 'function') {
     initMobileDetail(item);
   }
@@ -445,7 +443,6 @@ function dismissNowPlaying() {
 
 function jumpToClip(session) {
   window._jumpOffset = session.viewOffset;
-  window._jumpDuration = session.duration / 1000;
   selectItem(session.media_id);
 }
 
@@ -639,13 +636,6 @@ function loadVideoPreview(mediaId) {
   vid.src = "api/media/" + mediaId + "/stream";
 }
 
-function onPreviewError() {
-  _videoFailed = true;
-  _videoReady = false;
-  if (dom.previewLoading) dom.previewLoading.style.display = "none";
-  if (dom.previewError) dom.previewError.style.display = "block";
-}
-
 function seekVideoTo(t) {
   if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(t));
   // readyState >= 1 means metadata is loaded — browser can seek, it'll buffer
@@ -763,22 +753,6 @@ function initStripDrag() {
   dom.frameStripInner.addEventListener("touchcancel", function() {
     _stripClickTime = null;
   }, { passive: true });
-}
-
-// Find the thumb nearest to a given clientX coordinate
-function findNearestThumb(clientX) {
-  var best = null;
-  var bestDist = Infinity;
-  for (var i = 0; i < _stripThumbs.length; i++) {
-    var rect = _stripThumbs[i].el.getBoundingClientRect();
-    var cx = rect.left + rect.width / 2;
-    var dist = Math.abs(clientX - cx);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = _stripThumbs[i].time;
-    }
-  }
-  return best;
 }
 
 // Highlight thumbnails in selected range
@@ -920,13 +894,10 @@ async function downloadClip() {
 
   if (dom.btnDownload) { dom.btnDownload.disabled = true; dom.btnDownload.textContent = "Clipping..."; }
   if (dom.clipStatus) dom.clipStatus.textContent = "";
-  // Desktop progress
+  // Progress UI (unified #mob-clip-progress* — dom.clipProgress* re-point there)
   if (dom.clipProgress) dom.clipProgress.style.display = "block";
   if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
   if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip " + fmtTime(startSec) + "-" + fmtTime(endSec) + "...";
-  // NOTE: mobile progress is driven by mobile.js mobDownload() ->
-  // _mobShowProgress()/_mobStartProgressPolling(), which mirrors the
-  // desktop bar into #mob-clip-progress*. No app.js mobile writes here.
 
   try {
     // 1) Start clip generation (returns immediately)
@@ -1058,10 +1029,6 @@ async function deleteClip(filename) {
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────
-
-function sleep(ms) {
-  return new Promise(function(resolve) { setTimeout(resolve, ms); });
-}
 
 function showClipShortcut() {
   var link = document.getElementById("clip-shortcut-link");

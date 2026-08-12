@@ -21,7 +21,6 @@ var _mobStartSet = false;       // true = start edge explicitly marked/pinned
 var _mobEndSet = false;         // true = end edge explicitly marked/pinned
 var _mobEls = {};               // cached DOM refs (filled at init)
 var _mobActivePreset = 0;       // 0 = free mode; otherwise active preset seconds
-var _mobProgressTimer = null;   // download progress poll interval
 var _mobFlashTimer = null;      // "just-marked" button flash timeout
 
 /** Keep _mobBrowse derived from the two edge flags (single source of truth). */
@@ -62,7 +61,6 @@ function _mobCacheDom() {
  */
 function initMobileDetail(item) {
   _mobCacheDom();
-  _mobStopProgressPolling();
   if (_mobFlashTimer) { clearTimeout(_mobFlashTimer); _mobFlashTimer = null; }
 
   _mobStartSet = false;
@@ -98,7 +96,6 @@ function initMobileDetail(item) {
 
 /** Called from app.js goBack()/goHome(). Removes listeners, clears timers. */
 function destroyMobileDetail() {
-  _mobStopProgressPolling();
   if (_mobFlashTimer) { clearTimeout(_mobFlashTimer); _mobFlashTimer = null; }
   var vid = _mobEls.video;
   if (vid) {
@@ -368,13 +365,6 @@ function _mobShowProgress() {
   if (_mobEls.progress) _mobEls.progress.style.display = "block";
   if (_mobEls.progressFill) _mobEls.progressFill.style.width = "0%";
   if (_mobEls.progressText) _mobEls.progressText.textContent = "Starting clip...";
-}
-
-function _mobStopProgressPolling() {
-  if (_mobProgressTimer) {
-    clearInterval(_mobProgressTimer);
-    _mobProgressTimer = null;
-  }
 }
 
 // ── Render ─────────────────────────────────────────────────────────────

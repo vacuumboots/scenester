@@ -498,13 +498,6 @@ main {
   margin-bottom: 20px;
 }
 
-.btn-download {
-  margin-top: 16px;
-  width: 100%;
-  padding: 12px;
-  font-size: 15px;
-}
-
 /* ── Target Card (detail view) ─────────────────────────────────────── */
 
 .target-card {
@@ -535,38 +528,6 @@ main {
 }
 
 /* ── Player ────────────────────────────────────────────────────────── */
-
-/* Frame preview (instant, no proxy) */
-.frame-container {
-  position: relative;
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-
-.frame-container img {
-  width: 100%;
-  display: block;
-  max-height: 480px;
-  object-fit: contain;
-  transition: opacity 0.15s ease;
-}
-
-.frame-overlay {
-  display: none;
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.6);
-  align-items: center;
-  justify-content: center;
-}
-
-.frame-loading {
-  color: var(--text-dim);
-  font-size: 13px;
-}
 
 /* Frame strip — thumbnail row across the movie */
 .frame-strip {
@@ -635,60 +596,6 @@ main {
   color: #fff;
   text-shadow: 0 0 4px rgba(0,0,0,0.9);
   z-index: 1;
-}
-
-.player-container {
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-
-/* Video preview overlay */
-.video-preview {
-  margin-bottom: 8px;
-  position: relative;
-}
-
-.video-preview video {
-  width: 100%;
-  max-height: 400px;
-  background: #000;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-
-.video-preview-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  background: rgba(0,0,0,0.7);
-  color: #fff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-}
-
-.video-preview-close:hover {
-  background: rgba(196,59,59,0.8);
-}
-
-#btn-play-preview {
-  color: var(--gold);
-  border-color: var(--gold-dim);
-}
-
-.player-container video {
-  width: 100%;
-  display: block;
-  max-height: 480px;
 }
 
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
@@ -776,22 +683,6 @@ main {
     height: 52px;
   }
 
-  .caption-options {
-    display: none;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .caption-options.visible {
-    display: flex;
-  }
-
-  /* Download button */
-  .btn-download {
-    padding: 14px;
-    font-size: 16px;
-    margin-top: 12px;
-  }
-
   /* Clip gallery */
   .clip-card {
     width: 100%;
@@ -865,16 +756,6 @@ main {
   color: var(--text-muted);
   max-width: 400px;
   margin: 0 auto;
-}
-
-.caption-option {
-  font-size: 12px;
-  padding: 5px 10px;
-  opacity: 0.6;
-}
-
-.caption-option.active {
-  opacity: 1;
 }
 
 /* ── Clip Gallery ─────────────────────────────────────────────────── */
@@ -961,14 +842,6 @@ main {
   font-size: 13px;
   color: var(--gold);
   padding: 8px 0;
-}
-
-.clip-status {
-  text-align: center;
-  font-size: 13px;
-  color: var(--text-dim);
-  margin-top: 8px;
-  font-family: var(--font-mono);
 }
 
 /* ── Shared video player (desktop + mobile) ──────────────────────────── */
