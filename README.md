@@ -119,6 +119,28 @@ your network layer), not in the app itself.
 - **Container:** Docker, two-stage build (alpine → python:3.12-slim)
 - **Reverse proxy:** Caddy (or Traefik / nginx)
 
+## Development
+
+Run the backend locally without Docker (the frontend needs no build step):
+
+```bash
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+uvicorn main:app --reload --app-dir backend
+```
+
+`STATIC_DIR` resolves automatically: the container layout (`backend/static`)
+when present, otherwise the repo-layout `frontend/` directory. Override with
+`CLIPARR_STATIC_DIR` if your checkout differs.
+
+Run the tests:
+
+```bash
+python -m pytest
+```
+
+CI (`.github/workflows/ci.yml`) runs the same pytest suite on Python 3.12 plus
+a `node --check` syntax gate on the frontend JS.
+
 ## VAAPI-accelerated clipping
 
 Cliparr hardware-accelerates clip generation on Intel iGPUs via ffmpeg's VAAPI

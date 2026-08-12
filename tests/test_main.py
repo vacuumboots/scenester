@@ -1,0 +1,194 @@
+"""Characterization tests for Cliparr's pure backend helpers in ``main.py``.
+
+These functions are synchronous and side-effect-free (``parse_srt`` only reads
+a path passed to it). The tests lock in *current* behavior so future refactors
+don't silently change clip naming, subtitle parsing, or the video MIME map.
+"""
+
+import pytest
+
+import main
+
+
+# ── _video_mime ────────────────────────────────────────────────────────────
+
+
+def test_video_mime_known_extensions():
+    assert main._video_mime("/media/movies/Film.mkv") == "video/x-matroska"
+    assert main._video_mime("/media/Film.m4v") == "video/mp4"
+    assert main._video_mime("/media/Film.ts") == "video/mp2t"
+
+
+def test_video_mime_unknown_falls_back_to_mp4():
+    assert main._video_mime("/media/Film.xyz") == "video/mp4"
+
+
+def test_video_mime_case_insensitive():
+    assert main._video_mime("/media/Film.MKV") == "video/x-matroska"
+
+
+# ── _slugify ───────────────────────────────────────────────────────────────
+
+
+def test_slugify_basic():
+    assert main._slugify("The Matrix") == "The_Matrix"
+
+
+def test_slugify_collapses_separators():
+    assert main._slugify("  Star   Wars---Ep. IV  ") == "Star_Wars_Ep_IV"
+
+
+def test_slugify_strips_punctuation():
+    assert main._slugify("Star Wars: Episode IV") == "Star_Wars_Episode_IV"
+
+
+def test_slugify_empty_or_symbols_returns_unknown():
+    assert main._slugify("") == "unknown"
+    assert main._slugify("!!!@@@") == "unknown"
+
+
+# ── _clip_basename ─────────────────────────────────────────────────────────
+
+
+def test_clip_basename_movie():
+    meta = {"title": "Inception"}
+    assert main._clip_basename(meta, 5307.2, 5337.4) == "Inception_5307.2-5337.4"
+
+
+def test_clip_basename_episode_with_show():
+    meta = {
+        "type": "episode",
+        "title": "Pilot",
+        "show_title": "Breaking Bad",
+        "season": 1,
+        "episode": 2,
+    }
+    assert (
+        main._clip_basename(meta, 120.0, 150.0)
+        == "Breaking_Bad_Pilot_S01E02_120.0-150.0"
+    )
+
+
+def test_clip_basename_episode_without_show_title():
+    # Current behavior: an episode with no show_title gets the "unknown" slug
+    # (because _slugify("") returns "unknown"). Characterized, not idealized.
+    meta = {"type": "episode", "title": "Pilot", "season": 3, "episode": 7}
+    assert main._clip_basename(meta, 1.5, 2.5) == "unknown_Pilot_S03E07_1.5-2.5"
+
+
+def test_clip_basename_no_collision_on_subsecond_difference():
+    # Same integer-second range, different sub-second → distinct filenames
+    # (the Task 1.2 fix).
+    a = main._clip_basename({"title": "Inception"}, 30.2, 40.4)
+    b = main._clip_basename({"title": "Inception"}, 30.8, 40.4)
+    assert a != b
+    assert a == "Inception_30.2-40.4"
+    assert b == "Inception_30.8-40.4"
+
+
+def test_clip_basename_slugifies_title():
+    meta = {"title": "The Matrix: Reloaded"}
+    assert main._clip_basename(meta, 10.0, 20.0) == "The_Matrix_Reloaded_10.0-20.0"
+
+
+# ── _srt_timestamp / _fmt_srt_timestamp ────────────────────────────────────
+
+
+def test_srt_timestamp_converts_to_seconds():
+    assert main._srt_timestamp("1", "2", "3", "456") == 3723.456
+
+
+def test_fmt_srt_timestamp_formats():
+    assert main._fmt_srt_timestamp(3723.456) == "01:02:03,456"
+    assert main._fmt_srt_timestamp(0.0) == "00:00:00,000"
+
+
+# ── parse_srt ──────────────────────────────────────────────────────────────
+
+
+def test_parse_srt_comma_milliseconds(tmp_path):
+    p = tmp_path / "comma.srt"
+    p.write_text(
+        "1\n00:00:01,000 --> 00:00:02,500\nHello world\n\n"
+        "2\n00:00:03,000 --> 00:00:04,000\n<i>Second</i> line\n\n",
+        encoding="utf-8",
+    )
+    entries = main.parse_srt(str(p))
+    assert entries == [
+        {"start": 1.0, "end": 2.5, "text": "Hello world"},
+        {"start": 3.0, "end": 4.0, "text": "Second line"},  # HTML stripped
+    ]
+
+
+def test_parse_srt_period_milliseconds(tmp_path):
+    p = tmp_path / "period.srt"
+    p.write_text("1\n00:00:01.000 --> 00:00:02.500\nHello\n\n", encoding="utf-8")
+    assert main.parse_srt(str(p)) == [
+        {"start": 1.0, "end": 2.5, "text": "Hello"}
+    ]
+
+
+def test_parse_srt_multiline_text_collapsed(tmp_path):
+    p = tmp_path / "multi.srt"
+    p.write_text(
+        "1\n00:00:01,000 --> 00:00:02,000\nLine one\nLine two\n\n", encoding="utf-8"
+    )
+    entries = main.parse_srt(str(p))
+    assert entries[0]["text"] == "Line one Line two"
+
+
+def test_parse_srt_latin1_fallback(tmp_path):
+    p = tmp_path / "latin1.srt"
+    p.write_bytes("1\n00:00:01,000 --> 00:00:02,000\ncaf\xe9\n\n".encode("latin-1"))
+    entries = main.parse_srt(str(p))
+    assert entries == [{"start": 1.0, "end": 2.0, "text": "café"}]
+
+
+def test_parse_srt_missing_file_returns_empty():
+    assert main.parse_srt("/nonexistent/definitely-not-here.srt") == []
+
+
+# ── chunk_srt_for_social ───────────────────────────────────────────────────
+
+
+def test_chunk_word_grouping_and_uppercase():
+    out = main.chunk_srt_for_social(
+        [{"start": 0.0, "end": 2.0, "text": "one two three four"}],
+        words_per_chunk=2,
+    )
+    # 4 words / 2-per-chunk → 2 chunks, uppercased, evenly split over 2s.
+    assert out == (
+        "1\n00:00:00,000 --> 00:00:01,000\nONE TWO\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nTHREE FOUR\n"
+    )
+
+
+def test_chunk_min_display_time_floor():
+    # Three single-word chunks over 1s: each would be 0.333s, but the 0.4s
+    # readability floor widens the first to 0.4s and shifts the rest.
+    out = main.chunk_srt_for_social(
+        [{"start": 0.0, "end": 1.0, "text": "a b c"}], words_per_chunk=1
+    )
+    assert out == (
+        "1\n00:00:00,000 --> 00:00:00,400\nA\n\n"
+        "2\n00:00:00,333 --> 00:00:00,733\nB\n\n"
+        "3\n00:00:00,600 --> 00:00:01,000\nC\n"
+    )
+
+
+def test_chunk_sorts_by_start_time():
+    # Entries given out of order come back sorted by start time.
+    out = main.chunk_srt_for_social(
+        [
+            {"start": 2.0, "end": 3.0, "text": "later words"},
+            {"start": 0.0, "end": 1.0, "text": "first words"},
+        ]
+    )
+    assert out == (
+        "1\n00:00:00,000 --> 00:00:01,000\nFIRST WORDS\n\n"
+        "2\n00:00:02,000 --> 00:00:03,000\nLATER WORDS\n"
+    )
+
+
+def test_chunk_skips_empty_entries():
+    assert main.chunk_srt_for_social([{"start": 0.0, "end": 1.0, "text": "   "}]) == ""

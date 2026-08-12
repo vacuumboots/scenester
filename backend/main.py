@@ -191,7 +191,27 @@ def chunk_srt_for_social(srt_entries: list[dict], words_per_chunk: int = 3) -> s
 
 
 # ── Paths ────────────────────────────────────────────────────────────────
-STATIC_DIR = Path(__file__).parent / "static"
+
+def _resolve_static_dir() -> Path:
+    """Locate the frontend assets.
+
+    In the Docker image main.py is copied to /app alongside a static/
+    directory, so the default `backend/static` (== /app/static) already works.
+    For local development from a source checkout there is no backend/static —
+    fall back to the repo-layout `frontend/` directory so `uvicorn main:app`
+    run from backend/ serves the SPA with no build step. A CLIPARR_STATIC_DIR
+    env var overrides both.
+    """
+    env = os.environ.get("CLIPARR_STATIC_DIR")
+    if env:
+        return Path(env)
+    default = Path(__file__).parent / "static"
+    if (default / "index.html").exists():
+        return default
+    return Path(__file__).parent.parent / "frontend"
+
+
+STATIC_DIR = _resolve_static_dir()
 CLIPS_DIR = Path("/tmp/clips")
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
