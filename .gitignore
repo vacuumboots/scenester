@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 .DS_Store
 ._*
+
+# Hermes agent internals
+.hermes/
+HANDOFF.md
