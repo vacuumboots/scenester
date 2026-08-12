@@ -5,11 +5,6 @@
  * proxy generation UX, scrubber controls, and clip downloads.
  */
 
-// Quick load test — if you don't see 'JS ✓' in the header, JS didn't load
-(function() {
-  var el = document.querySelector("header h1 span");
-  if (el) el.textContent = el.textContent + " · JS ✓";
-})();
 
 // ── State ──────────────────────────────────────────────────────────────
 
@@ -53,9 +48,6 @@ function getDom() {
     previewError:    qs("#preview-error"),
     previewLoading:  qs("#preview-loading"),
     frameTimeValue:  qs("#frame-time-value"),
-    btnPlayClip:  qs("#btn-play-clip"),
-    btnPlayFull:  qs("#btn-play-full"),
-    btnMuteToggle:  qs("#btn-mute-toggle"),
     frameStrip:      qs("#frame-strip"),
     frameStripInner: qs("#frame-strip-inner"),
     // Unified editor elements (single selection + download surface on both
@@ -77,7 +69,7 @@ let dom;
 
 // Clip range state — float precision for frame-accurate seeking
 var _sliderStart = 0;
-var _sliderEnd = 139;
+var _sliderEnd = 0;
 
 // Bumped by goHome()/goBack() so in-flight selectItem() fetches can detect
 // that the user navigated away (SPA history integration, v=35).
@@ -263,6 +255,8 @@ function goHome() {
   }
   if (dom.detailView) dom.detailView.style.display = "none";
   if (dom.libraryView) dom.libraryView.style.display = "block";
+  var mainEl = document.getElementById("main");
+  if (mainEl) mainEl.scrollTop = 0;
   if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
   if (dom.search) dom.search.value = "";
@@ -327,9 +321,6 @@ function showDetailView() {
 
   // Show frame preview area
   if (dom.framePreview) dom.framePreview.style.display = "block";
-  if (dom.btnPlayClip) dom.btnPlayClip.style.display = "inline-flex";
-  if (dom.btnPlayFull) dom.btnPlayFull.style.display = "inline-flex";
-  if (dom.btnMuteToggle) dom.btnMuteToggle.style.display = "inline-flex";
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   if (dom.clipStatus) dom.clipStatus.textContent = "";
 
@@ -349,7 +340,7 @@ function showDetailView() {
     window._jumpDuration = null;
   } else {
     _sliderStart = 0;
-    _sliderEnd = Math.min(139, Math.floor(durationS));
+    _sliderEnd = Math.floor(durationS);
   }
 
   updateTimeDisplay();
@@ -384,6 +375,8 @@ function goBack() {
   }
   if (dom.detailView) dom.detailView.style.display = "none";
   if (dom.libraryView) dom.libraryView.style.display = "block";
+  var mainEl = document.getElementById("main");
+  if (mainEl) mainEl.scrollTop = 0;
   if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
   // Clean up video preview
@@ -403,6 +396,7 @@ function goBack() {
 
 var sessionPollTimer = null;
 var _currentSession = null;  // stored for Quick Clip
+var _bannerDismissed = false;  // ✕ dismiss; auto-clears when no session paused
 
 async function pollSessions() {
   try {
@@ -421,18 +415,26 @@ async function pollSessions() {
 
     if (paused && dom.nowPlaying) {
       _currentSession = paused;
-      dom.nowPlaying.style.display = "block";
-      if (dom.npTitle) dom.npTitle.textContent = paused.title;
-      if (dom.npTime) dom.npTime.textContent = "at " + fmtTime(paused.viewOffset);
-      if (dom.btnJumpClip) dom.btnJumpClip.onclick = function() { jumpToClip(paused); };
-      if (dom.btnQuickClip) dom.btnQuickClip.onclick = function() { quickClip(); };
+      if (!_bannerDismissed) {
+        dom.nowPlaying.style.display = "block";
+        if (dom.npTitle) dom.npTitle.textContent = paused.title;
+        if (dom.npTime) dom.npTime.textContent = "at " + fmtTime(paused.viewOffset);
+        if (dom.btnJumpClip) dom.btnJumpClip.onclick = function() { jumpToClip(paused); };
+        if (dom.btnQuickClip) dom.btnQuickClip.onclick = function() { quickClip(); };
+      }
     } else if (dom.nowPlaying) {
       _currentSession = null;
+      _bannerDismissed = false;
       dom.nowPlaying.style.display = "none";
     }
   } catch (err) {
     // Silently fail — banner is optional
   }
+}
+
+function dismissNowPlaying() {
+  _bannerDismissed = true;
+  if (dom.nowPlaying) dom.nowPlaying.style.display = "none";
 }
 
 function jumpToClip(session) {
@@ -617,12 +619,9 @@ function loadVideoPreview(mediaId) {
 
   vid.ontimeupdate = function() {
     var ct = vid.currentTime;
-    // Desktop-only visual readouts — skip on mobile (display:none; writing
-    // them on every tick is main-thread style churn that janks scrolling).
-    // mobile.js renders its own readouts via _mobRender.
-    if (!_isMobile) {
-      if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
-    }
+    // Current "Frame at" readout (now shared desktop+mobile — lives in the
+    // unified clip editor).
+    if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
     // Loop within clip range when playing a clip preview
     if (_loopPlayback && ct >= _sliderEnd) {
       vid.currentTime = _sliderStart;
@@ -675,71 +674,6 @@ function playClip() {
   }
 }
 
-function playFull() {
-  if (!dom.previewVideo) return;
-  var vid = dom.previewVideo;
-  if (vid.readyState < 2) {
-    if (dom.clipStatus) dom.clipStatus.textContent = "Video still loading...";
-    return;
-  }
-
-  if (!vid.paused && !_loopPlayback) {
-    // Already playing full — pause
-    vid.pause();
-    return;
-  }
-
-  _loopPlayback = false;
-  vid.currentTime = _sliderStart;
-  var promise = vid.play();
-  if (promise) {
-    promise.catch(function(err) {
-      if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
-    });
-  }
-}
-
-// Update play buttons: active mode shows ⏸, inactive is dimmed
-function updatePlayButtons() {
-  if (!dom.previewVideo) return;
-  var playing = !dom.previewVideo.paused;
-
-  if (dom.btnPlayClip) {
-    if (playing && _loopPlayback) {
-      dom.btnPlayClip.textContent = '⏸ Clip';
-    } else {
-      dom.btnPlayClip.textContent = '▶ Clip';
-    }
-    dom.btnPlayClip.disabled = playing && !_loopPlayback;
-    dom.btnPlayClip.classList.toggle('active', playing && _loopPlayback);
-  }
-
-  if (dom.btnPlayFull) {
-    if (playing && !_loopPlayback) {
-      dom.btnPlayFull.textContent = '⏸ Full';
-    } else {
-      dom.btnPlayFull.textContent = '▶ Full';
-    }
-    dom.btnPlayFull.disabled = playing && _loopPlayback;
-    dom.btnPlayFull.classList.toggle('active', playing && !_loopPlayback);
-  }
-}
-
-// Wire play/pause state tracking
-function initPlayStateTracking() {
-  if (!dom.previewVideo) return;
-  dom.previewVideo.addEventListener('play', updatePlayButtons);
-  dom.previewVideo.addEventListener('pause', updatePlayButtons);
-  dom.previewVideo.addEventListener('ended', updatePlayButtons);
-}
-
-function toggleMute() {
-  if (!dom.previewVideo) return;
-  dom.previewVideo.muted = !dom.previewVideo.muted;
-  if (dom.btnMuteToggle) {
-    dom.btnMuteToggle.textContent = dom.previewVideo.muted ? '🔇' : '🔊';
-  }
-}
 
 // ── Scrubber Controls (frame strip) ───────────────────────────────────
 
@@ -759,9 +693,6 @@ function buildFrameStrip(mediaId, durationS) {
   }
   dom.frameStripInner.innerHTML = html;
   dom.frameStrip.style.display = "block";
-  // Hide desktop hint on mobile
-  var hint = document.querySelector(".strip-hint");
-  if (hint && window.innerWidth <= 480) hint.style.display = "none";
 
   var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
   for (var j = 0; j < thumbs.length; j++) {
@@ -770,14 +701,10 @@ function buildFrameStrip(mediaId, durationS) {
   }
 }
 
-// The film strip is a click/tap surface ONLY — it is NOT a scrubber.
-// The preview video + range bar are the scrubber. Click/tap a thumbnail =
-// set clip start. Shift+click (desktop) or long-press (mobile) = set clip
-// end. Dragging/panning never seeks the video or moves the range.
-var _stripDragActive = false;  // kept false — range bar mutual-exclusion check
+// The film strip is navigation-only — it is NOT a scrubber and does NOT
+// mark clip edges. Tap/click a thumbnail to move the playhead there.
+// Dragging/panning never seeks.
 var _stripClickTime = null;
-var _stripLongPressTimer = null;
-var _stripLongPressFired = false;
 var _lastTouchEndTime = 0;  // suppresses compatibility mouse events after touch
 // Film-strip opt-in toggle — hidden by default, shown on request.
 var _filmStripEnabled = false;
@@ -800,89 +727,33 @@ function toggleFilmStrip() {
 function initStripDrag() {
   if (!dom.frameStripInner) return;
 
-  function applyStripSelection(t, isEnd) {
-    if (t == null) return;
-    if (isEnd) {
-      // Set end (desktop shift+click, mobile long-press)
-      setSliderEnd(t);
-    } else {
-      // Set start (desktop click, mobile tap)
-      var dur = _sliderEnd - _sliderStart;
-      // Clamp so a click near the very end can't collapse the range to 0s
-      var ns = Math.max(0, Math.min(t, state.mediaDuration - 1));
-      setSliderStart(ns);
-      if (dur > 0) {
-        setSliderEnd(Math.min(state.mediaDuration, ns + dur));
-      }
-    }
-    seekVideoTo(_sliderStart);
-    updateStripRange();
-    if (dom.clipStatus) {
-      dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration);
-    }
-  }
-
   dom.frameStripInner.addEventListener("mousedown", function(e) {
     if (e.button !== 0) return;
     if (Date.now() - _lastTouchEndTime < 600) return;  // ghost mousedown after touch
     var thumb = e.target.closest && e.target.closest(".frame-thumb");
     if (!thumb) return;
     e.preventDefault();
-    _stripClickTime = parseInt(thumb.getAttribute("data-time"));
-    seekVideoTo(_stripClickTime);  // preview follows the thumb being clicked
-  });
-
-  document.addEventListener("mouseup", function(e) {
-    if (Date.now() - _lastTouchEndTime < 600) return;  // ghost mouseup after touch
-    if (_stripClickTime == null) return;
-    var t = _stripClickTime;
-    _stripClickTime = null;
-    applyStripSelection(t, !!(e.shiftKey));
+    seekVideoTo(parseInt(thumb.getAttribute("data-time")));  // move the playhead
   });
 
   dom.frameStripInner.addEventListener("touchstart", function(e) {
     var thumb = e.target.closest && e.target.closest(".frame-thumb");
     if (!thumb) return;
     _stripClickTime = parseInt(thumb.getAttribute("data-time"));
-    // NOTE: no seek here — starting a pan/scroll is browsing, not scrubbing.
-    // The preview only seeks on an actual tap (touchend) or long-press.
-    if (_stripLongPressTimer) clearTimeout(_stripLongPressTimer);
-    _stripLongPressFired = false;
-    thumb.classList.add("long-press-active");
-    _stripLongPressTimer = setTimeout(function() {
-      _stripLongPressFired = true;
-      thumb.classList.remove("long-press-active");
-      var t = _stripClickTime;
-      _stripClickTime = null;
-      applyStripSelection(t, true);  // long-press = set end
-    }, 500);
+    // No seek here — a pan/scroll is browsing, not scrubbing. Seek on tap.
   }, { passive: true });
 
   dom.frameStripInner.addEventListener("touchend", function() {
     _lastTouchEndTime = Date.now();
-    if (_stripLongPressTimer) {
-      clearTimeout(_stripLongPressTimer);
-      _stripLongPressTimer = null;
-      var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
-      for (var i = 0; i < thumbs.length; i++) thumbs[i].classList.remove("long-press-active");
-    }
-    if (_stripLongPressFired || _stripClickTime == null) {
-      _stripLongPressFired = false;
-      _stripClickTime = null;
-      return;
-    }
+    if (_stripClickTime == null) return;
     var t = _stripClickTime;
     _stripClickTime = null;
-    applyStripSelection(t, false);  // tap = set start
+    seekVideoTo(t);  // move the playhead to the tapped frame
   }, { passive: true });
 
-  // The browser claimed the gesture (pan/scroll) — cancel any pending tap/long-press.
+  // The browser claimed the gesture (pan/scroll) — cancel any pending tap.
   dom.frameStripInner.addEventListener("touchcancel", function() {
-    if (_stripLongPressTimer) { clearTimeout(_stripLongPressTimer); _stripLongPressTimer = null; }
-    _stripLongPressFired = false;
     _stripClickTime = null;
-    var thumbs = dom.frameStripInner.querySelectorAll(".frame-thumb");
-    for (var i = 0; i < thumbs.length; i++) thumbs[i].classList.remove("long-press-active");
   }, { passive: true });
 }
 
@@ -904,7 +775,7 @@ function findNearestThumb(clientX) {
 
 // Highlight thumbnails in selected range
 function updateStripRange() {
-  if (_isMobile) return;  // desktop-only strip visual; mobile has mob-overview
+  if (!dom.frameStrip || dom.frameStrip.style.display === "none") return;
   if (!dom.frameStripInner || !_stripThumbs || !_stripThumbs.length) return;
   for (var i = 0; i < _stripThumbs.length; i++) {
     var t = _stripThumbs[i];
@@ -916,31 +787,6 @@ function updateStripRange() {
   }
 }
 
-function highlightFrameStrip(currentT) {
-  for (var i = 0; i < _stripThumbs.length; i++) {
-    var t = _stripThumbs[i];
-    var dist = Math.abs(t.time - currentT);
-    if (dist < 3 || (i > 0 && currentT > _stripThumbs[i-1].time && currentT <= t.time)) {
-      t.el.classList.add("active");
-      t.el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-    } else {
-      t.el.classList.remove("active");
-    }
-  }
-}
-
-function jumpToFrame(t) {
-  // Slide the clip range to follow the jump point
-  var dur = _sliderEnd - _sliderStart;
-  var ns = Math.max(0, t);
-  setSliderStart(ns);
-  if (dur > 0) {
-    setSliderEnd(Math.min(state.mediaDuration, ns + dur));
-  }
-  seekVideoTo(t);
-  highlightFrameStrip(t);
-  updateStripRange();
-}
 
 function updateTimeDisplay() {
   // Enforce constraints FIRST, then display.
@@ -1209,38 +1055,6 @@ function sleep(ms) {
   return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
-function parseTimeInput(val) {
-  // Parse "1:23", "1:23:45", "90", "90s"
-  val = val.replace(/s$/i, "");
-  var parts = val.split(":");
-  if (parts.length === 3) {
-    return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-  } else if (parts.length === 2) {
-    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
-  } else {
-    return parseInt(parts[0]) || null;
-  }
-}
-// ── Video Size Presets ───────────────────────────────
-
-var _videoSize = "medium";  // small, medium, large
-
-function setVideoSize(size) {
-  _videoSize = size;
-  var vid = document.getElementById("preview-video");
-  if (!vid) return;
-  switch (size) {
-    case "small":  vid.style.maxHeight = "160px"; break;
-    case "medium": vid.style.maxHeight = "240px"; break;
-    case "large":  vid.style.maxHeight = "420px"; break;
-  }
-  // Update active button
-  var btns = document.querySelectorAll(".video-size-btn");
-  for (var i = 0; i < btns.length; i++) {
-    btns[i].classList.toggle("active", btns[i].textContent.toLowerCase().charAt(0) === size.charAt(0));
-  }
-}
-
 function showClipShortcut() {
   var link = document.getElementById("clip-shortcut-link");
   if (link) link.style.display = "inline-block";
@@ -1307,11 +1121,8 @@ function init() {
   // Detail back button
   if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
 
-  // Download clip
-  if (dom.btnDownload) dom.btnDownload.addEventListener("click", downloadClip);
-
-  // Play/pause + mute are wired via onclick in HTML (survives partial DOM failures)
-  initPlayStateTracking();
+  // Download clip is wired via onclick="mobDownload()" in HTML (mobDownload
+  // calls downloadClip) — no addEventListener here or every click fires twice.
 
   // Frame strip drag-to-select
   initStripDrag();
@@ -1366,23 +1177,6 @@ function init() {
   // Load library
   loadLibrary();
   startSessionPolling();
-
-  // Time jump input
-  var jumpInput = qs("#jump-time");
-  if (jumpInput) {
-    jumpInput.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        var val = jumpInput.value.trim();
-        if (!val) return;
-        var secs = parseTimeInput(val);
-        if (secs !== null && secs >= 0 && secs <= state.mediaDuration) {
-          jumpToFrame(secs);
-          jumpInput.value = "";
-        }
-      }
-    });
-  }
 }
 
 // ── Auth: Plex OAuth PIN flow ───────────────────────────────────────────

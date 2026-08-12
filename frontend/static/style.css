@@ -330,6 +330,18 @@ header h1 span {
   background: #d4a64b;
 }
 
+.np-dismiss {
+  margin-left: auto;
+  color: var(--text-dim);
+  border-color: transparent;
+  background: transparent;
+}
+
+.np-dismiss:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
 .np-progress {
   margin-top: 8px;
 }
@@ -556,48 +568,6 @@ main {
   font-size: 13px;
 }
 
-.frame-time {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 16px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.frame-time-value {
-  font-family: var(--font-mono);
-  color: var(--gold);
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.frame-time-hint {
-  font-style: italic;
-  opacity: 0.6;
-}
-
-#jump-time {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 12px;
-  font-family: var(--font-mono);
-  padding: 3px 8px;
-  width: 90px;
-  outline: none;
-}
-
-#jump-time:focus {
-  border-color: var(--gold-dim);
-}
-
-#jump-time::placeholder {
-  color: var(--text-dim);
-  opacity: 0.4;
-}
-
 /* Frame strip — thumbnail row across the movie */
 .frame-strip {
   margin-bottom: 20px;
@@ -721,15 +691,6 @@ main {
   max-height: 480px;
 }
 
-/* ── Frame strip hint ───────────────────────────────────────────────── */
-
-.strip-hint {
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-  text-align: center;
-}
-
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
 
 /* ── Clip shortcut link ─────────────────────────────────────────── */
@@ -747,23 +708,6 @@ main {
 
 .clip-shortcut:hover {
   background: rgba(196,150,59,0.1);
-}
-
-/* ── Video size presets ────────────────────────────────────────── */
-
-.video-size-btn {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 2px 7px;
-  min-width: 22px;
-  text-align: center;
-}
-
-.video-size-btn.active {
-  background: var(--gold);
-  color: #0d0d0d;
-  border-color: var(--gold);
-  font-weight: 600;
 }
 
 @media (max-width: 480px) {
@@ -826,22 +770,10 @@ main {
   #preview-video {
     max-height: 220px;
   }
-  .frame-time {
-    flex-wrap: wrap;
-    gap: 4px;
-    font-size: 11px;
-  }
-  .frame-time-value {
-    font-size: 12px;
-  }
-
-  /* Frame strip — smaller thumbs, hide desktop hint */
+  /* Frame strip — smaller thumbs */
   .frame-thumb {
     width: 84px;
     height: 52px;
-  }
-  .strip-hint {
-    display: none;
   }
 
   .caption-options {
@@ -1039,16 +971,6 @@ main {
   font-family: var(--font-mono);
 }
 
-/* ── Desktop-only / Mobile-only visibility ───────────────────────────── */
-
-.desktop-only { display: block; }
-.mobile-only  { display: none; }
-
-@media (max-width: 768px) {
-  .desktop-only { display: none !important; }
-  .mobile-only  { display: block; }
-}
-
 /* ── Shared video player (desktop + mobile) ──────────────────────────── */
 
 .preview-video-shared {
@@ -1108,13 +1030,39 @@ main {
   margin: 0 auto 14px;
 }
 
+/* ── Playhead readout: current "Frame at" time ──────────────────────── */
+
+.mob-playhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding-bottom: 8px;
+}
+
+.mob-playhead-label {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
+}
+
+.mob-playhead-value {
+  font-family: var(--font-mono);
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 15px;
+}
+
 /* ── Readout row: skip buttons flank start / dur / end ──────────────── */
 
 .mob-readout {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text);
@@ -1163,6 +1111,36 @@ main {
   width: 50%;
   background: var(--gold);
   border-radius: 3px;
+}
+
+/* ── Film strip toggle (opt-in thumbnail navigator) ─────────────────── */
+
+.mob-filmstrip-row {
+  margin: 6px 0 2px;
+}
+
+.mob-filmstrip-btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 13px;
+  background: #1e1e1e;
+  color: var(--text-dim);
+  border: 1px dashed #3a3a3a;
+  border-radius: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-filmstrip-btn:active {
+  background: #2a2a2a;
+}
+
+.mob-filmstrip-btn.active {
+  background: var(--gold);
+  color: #141414;
+  border-color: var(--gold);
+  border-style: solid;
+  font-weight: 700;
 }
 
 /* ── Two huge mark buttons — the only selection surface ─────────────── */
@@ -1541,11 +1519,5 @@ main {
   }
   .fine-tune[open] summary {
     border-color: var(--border-hover);
-  }
-
-  #btn-film-strip.active {
-    background: var(--gold);
-    color: #141414;
-    border-color: var(--gold);
   }
 }

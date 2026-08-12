@@ -85,13 +85,11 @@ function initMobileDetail(item) {
     vid.addEventListener("play", _mobOnPlayPause);
   }
 
-  // Default range: [0, min(139, duration)]
-  var dur = 139;
-  if (item && item.duration && item.duration > 0) dur = item.duration;
-  else if (state.mediaDuration > 0) dur = state.mediaDuration;
-  if (dur > 139) dur = 139;
-  setSliderStart(0);
-  setSliderEnd(dur);
+  // Default: FREE — neither start nor end selected. Empty range; the user
+  // marks both edges. (Assign directly so the range stays a true 0-length —
+  // setSliderEnd() floors at 0.01s and updateTimeDisplay() would widen it.)
+  _sliderStart = 0;
+  _sliderEnd = 0;
 
   if (_mobEls.status) _mobEls.status.textContent = "";
   _mobRender();
@@ -139,13 +137,16 @@ function _mobOnTimeUpdate() {
   var maxDur = state.mediaDuration > 0 ? state.mediaDuration : vid.duration;
 
   if (!_mobStartSet && !_mobEndSet) {
-    // Browse mode: center the window on the playhead
+    // Browse mode: center the window on the playhead. In FREE mode nothing
+    // is selected (0-length window) so there's nothing to center — skip.
     var dur = _sliderEnd - _sliderStart;
     if (dur > maxDur) dur = maxDur;
-    var start = ct - (dur / 2);
-    start = Math.max(0, Math.min(maxDur - dur, start));
-    setSliderStart(start);
-    setSliderEnd(start + dur);
+    if (dur > 0.04) {
+      var start = ct - (dur / 2);
+      start = Math.max(0, Math.min(maxDur - dur, start));
+      setSliderStart(start);
+      setSliderEnd(start + dur);
+    }
   } else if (_mobStartSet && !_mobEndSet) {
     // End rides the playhead (start pinned)
     var ne = Math.max(_sliderStart + 0.04, Math.min(maxDur, ct));
@@ -166,22 +167,48 @@ function _mobOnPlayPause() {
 
 // ── Mark buttons ───────────────────────────────────────────────────────
 
-function mobMarkStart() {
-  var vid = _mobEls.video;
-  if (!vid) return;
-  setSliderStart(vid.currentTime);
-  if (_sliderEnd - _sliderStart < 0.04) {
-    var fallbackDur = _mobActivePreset > 0 ? _mobActivePreset : 139;
-    setSliderEnd(_sliderStart + fallbackDur); // setSliderEnd clamps to mediaDuration
-  }
+/** Mark the start edge at an explicit time (Set Start button AND
+ *  film-strip tap). Free mode marks start only (end rides the playhead);
+ *  a preset pins start and auto-sets end = start + preset. */
+function mobMarkStartAt(t) {
+  setSliderStart(t);
   _mobStartSet = true;
-  _mobEndSet = true;
+  if (_mobActivePreset > 0) {
+    setSliderEnd(Math.min(_sliderStart + _mobActivePreset, state.mediaDuration));
+    _mobEndSet = true;
+    _mobRefreshSnap("end");
+  } else {
+    _mobEndSet = false;
+    if (_sliderEnd <= _sliderStart) setSliderEnd(_sliderStart + 0.04);
+  }
   _mobSyncBrowse();
   _mobFlash(_mobEls.btnStart);
   if (_mobEls.status) _mobEls.status.textContent = "";
-  // Show the frame at the new start; end was auto-pinned to start+dur, so
-  // show its frame too — the clip window is now fully visible.
   _mobRefreshSnap("start");
+  _mobRender();
+}
+
+function mobMarkStart() {
+  var vid = _mobEls.video;
+  if (!vid) return;
+  mobMarkStartAt(vid.currentTime);
+}
+
+/** Mark the end edge at an explicit time (Set End button AND film-strip
+ *  shift+click). Guards against end <= start when start is pinned. */
+function mobMarkEndAt(t) {
+  var vid = _mobEls.video;
+  if (_mobStartSet && t <= _sliderStart + 0.04) {
+    if (_mobEls.status) _mobEls.status.textContent = "End must be after start";
+    return;
+  }
+  setSliderEnd(t);
+  _mobStartSet = true;
+  _mobEndSet = true;
+  _mobSyncBrowse();
+  if (vid) vid.pause();
+  _mobFlash(_mobEls.btnEnd);
+  if (_mobEls.status) _mobEls.status.textContent = "";
   _mobRefreshSnap("end");
   _mobRender();
 }
@@ -189,21 +216,7 @@ function mobMarkStart() {
 function mobMarkEnd() {
   var vid = _mobEls.video;
   if (!vid) return;
-  // Only guard when start is actually pinned. If start is unset (riding the
-  // playhead), ct tracks _sliderStart and the guard would falsely fire.
-  if (_mobStartSet && vid.currentTime <= _sliderStart + 0.04) {
-    if (_mobEls.status) _mobEls.status.textContent = "End must be after start";
-    return;
-  }
-  setSliderEnd(vid.currentTime);
-  _mobStartSet = true;
-  _mobEndSet = true;
-  _mobSyncBrowse();
-  vid.pause();
-  _mobFlash(_mobEls.btnEnd);
-  if (_mobEls.status) _mobEls.status.textContent = "";
-  _mobRefreshSnap("end");
-  _mobRender();
+  mobMarkEndAt(vid.currentTime);
 }
 
 // ── Unset buttons ──────────────────────────────────────────────────────
@@ -301,9 +314,22 @@ function mobNudgeEnd(delta) {
 
 // ── Preset chips ───────────────────────────────────────────────────────
 
+function _mobClearSelection() {
+  _mobActivePreset = 0;
+  _mobStartSet = false;
+  _mobEndSet = false;
+  _mobSyncBrowse();
+  _sliderStart = 0;
+  _sliderEnd = 0;
+  _mobHideSnap("start");
+  _mobHideSnap("end");
+  if (_mobEls.status) _mobEls.status.textContent = "";
+}
+
 function mobPreset(duration) {
-  if (_mobActivePreset === duration) {
-    _mobActivePreset = 0; // same chip again = deselect, free mode, duration stays
+  if (duration === 0 || _mobActivePreset === duration) {
+    // Free (or deselect): no locked duration — clear any selection.
+    _mobClearSelection();
   } else {
     _mobActivePreset = duration;
     // In browse mode (no start marked yet), anchor the start to the playhead
@@ -360,10 +386,11 @@ function _mobStopProgressPolling() {
 var _mobLast = null;
 
 function _mobRender() {
-  var dur = _sliderEnd - _sliderStart;
-  var s = fmtTime(_sliderStart, true);
-  var e = fmtTime(_sliderEnd, true);
-  var d = dur.toFixed(1) + "s";
+  var unselected = !_mobStartSet && !_mobEndSet;
+  var dur = unselected ? 0 : (_sliderEnd - _sliderStart);
+  var s = unselected ? "0:00.00" : fmtTime(_sliderStart, true);
+  var e = unselected ? "0:00.00" : fmtTime(_sliderEnd, true);
+  var d = unselected ? "free" : (dur.toFixed(1) + "s");
 
   if (!_mobLast) {
     _mobLast = { start: "", end: "", dur: "", ovL: null, ovW: null,
@@ -386,8 +413,12 @@ function _mobRender() {
 
   var md = state.mediaDuration > 0 ? state.mediaDuration : 0;
   if (_mobEls.overviewFill && md > 0) {
-    var pStart = Math.max(0, Math.min(100, (_sliderStart / md) * 100));
-    var pEnd = Math.max(pStart, Math.min(100, (_sliderEnd / md) * 100));
+    var pStart = 0;
+    var pEnd = 0;
+    if (!unselected) {
+      pStart = Math.max(0, Math.min(100, (_sliderStart / md) * 100));
+      pEnd = Math.max(pStart, Math.min(100, (_sliderEnd / md) * 100));
+    }
     var ovL = pStart + "%";
     var ovW = (pEnd - pStart) + "%";
     if (ovL !== _mobLast.ovL) { _mobEls.overviewFill.style.left = ovL; _mobLast.ovL = ovL; }
@@ -399,7 +430,7 @@ function _mobRender() {
     var dlLabel;
     if (dur <= 0) {
       dlDisabled = true;
-      dlLabel = "⬇ Download Clip";
+      dlLabel = "⚠ Set a clip range";
     } else {
       dlDisabled = false;
       dlLabel = "⬇ Download Clip";

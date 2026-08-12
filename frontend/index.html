@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-title" content="Cliparr">
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="manifest.json">
-  <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=43">
+  <title>Cliparr</title>
+  <link rel="stylesheet" href="static/style.css?v=47">
 </head>
 <body>
 
@@ -52,7 +52,7 @@
 
 <header>
   <div class="header-inner">
-    <h1>Cliparr <span>plex clip maker</span></h1>
+    <h1>Cliparr</h1>
     <div class="search-row">
       <input id="search" type="text" placeholder="Search library..." autocomplete="off">
       <select id="sort-by">
@@ -73,6 +73,7 @@
       <span class="np-time" id="np-time"></span>
       <button class="btn btn-small" id="btn-jump-clip">Jump to clip</button>
       <button class="btn btn-small btn-quick-clip" id="btn-quick-clip">Quick Clip 30s</button>
+      <button class="btn btn-small np-dismiss" id="btn-dismiss-np" onclick="dismissNowPlaying()" title="Dismiss" aria-label="Dismiss now playing">✕</button>
     </div>
     <div class="np-progress" id="np-progress" style="display:none">
       <div class="progress-bar">
@@ -135,26 +136,10 @@
       <div id="preview-loading" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
         Loading preview...
       </div>
-      <div class="frame-time desktop-only">
-        <span class="frame-time-label">Frame at</span>
-        <span class="frame-time-value" id="frame-time-value">0:00</span>
-        <span class="frame-time-sep">·</span>
-        <button class="btn btn-small" id="btn-play-clip" onclick="playClip()">▶ Clip</button>
-        <button class="btn btn-small" id="btn-play-full" onclick="playFull()">▶ Full</button>
-        <button class="btn btn-small" id="btn-mute-toggle" onclick="toggleMute()" title="Toggle audio">🔊</button>
-        <span class="frame-time-sep">·</span>
-        <button class="btn btn-small video-size-btn" onclick="setVideoSize('small')" title="Small player">S</button>
-        <button class="btn btn-small video-size-btn active" onclick="setVideoSize('medium')" title="Medium player">M</button>
-        <button class="btn btn-small video-size-btn" onclick="setVideoSize('large')" title="Large player">L</button>
-        <span class="frame-time-sep">·</span>
-        <input id="jump-time" type="text" placeholder="jump to..." size="8" title="Type time like 1:23 or 90s and press Enter">
-        <button class="btn btn-small" id="btn-film-strip" onclick="toggleFilmStrip()" title="Show film strip">🗂 Film strip</button>
-      </div>
     </div>
 
-    <!-- Frame strip — desktop only -->
-    <div class="frame-strip desktop-only" id="frame-strip" style="display:none">
-      <div class="strip-hint">Optional: tap a frame to move, drag to slide range</div>
+    <!-- Frame strip — opt-in thumbnail navigator (desktop + mobile) -->
+    <div class="frame-strip" id="frame-strip" style="display:none">
       <div class="frame-strip-inner" id="frame-strip-inner"></div>
     </div>
 
@@ -162,18 +147,31 @@
 <div class="clip-editor">
   <div class="mob-sheet">
 
+    <!-- Playhead readout: current "Frame at" time (both viewports) -->
+    <div class="mob-playhead">
+      <span class="mob-playhead-label">Frame at</span>
+      <span class="mob-playhead-value" id="frame-time-value">0:00</span>
+    </div>
+
     <!-- Readout row: skip buttons flank start/dur/end -->
     <div class="mob-readout">
+      <button class="mob-skip-btn" onclick="mobSkip(-30)" title="Back 30s">⏮</button>
       <button class="mob-skip-btn" onclick="mobSkip(-10)" title="Back 10s">⏪</button>
       <span id="mob-time-start">0:00.00</span>
-      <span class="mob-dur" id="mob-time-dur">139.0s</span>
+      <span class="mob-dur" id="mob-time-dur">0.0s</span>
       <span id="mob-time-end">0:00.00</span>
       <button class="mob-skip-btn" onclick="mobSkip(10)" title="Forward 10s">⏩</button>
+      <button class="mob-skip-btn" onclick="mobSkip(30)" title="Forward 30s">⏭</button>
     </div>
 
     <!-- Read-only range indicator (no interaction, no aiming) -->
     <div class="mob-overview" id="mob-overview">
       <div class="mob-overview-fill" id="mob-overview-fill"></div>
+    </div>
+
+    <!-- Film strip toggle (opt-in thumbnail navigator — desktop + mobile) -->
+    <div class="mob-filmstrip-row">
+      <button class="mob-filmstrip-btn" id="btn-film-strip" onclick="toggleFilmStrip()">🗂 Film strip</button>
     </div>
 
     <!-- TWO HUGE mark buttons — the only selection surface -->
@@ -230,12 +228,12 @@
 
     <!-- Preset chips -->
     <div class="mob-presets">
+      <button class="mob-preset-btn" data-dur="0" onclick="mobPreset(0)">Free</button>
       <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
       <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
       <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
       <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
       <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
-      <button class="mob-preset-btn" data-dur="139" onclick="mobPreset(139)">139s</button>
     </div>
     </details>
 
@@ -279,8 +277,8 @@
 
 </main>
 
-<script src="static/app.js?v=43"></script>
-<script src="static/mobile.js?v=43"></script>
+<script src="static/app.js?v=47"></script>
+<script src="static/mobile.js?v=47"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");
