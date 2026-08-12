@@ -52,11 +52,6 @@ function _mobCacheDom() {
   _mobEls.progressText = document.getElementById("mob-clip-progress-text");
   _mobEls.status = document.getElementById("mob-clip-status");
   _mobEls.presetBtns = document.querySelectorAll(".mob-preset-btn");
-  // Desktop elements mirrored during download progress polling
-  _mobEls.desktopProgress = document.getElementById("clip-progress");
-  _mobEls.desktopProgressFill = document.getElementById("clip-progress-fill");
-  _mobEls.desktopProgressText = document.getElementById("clip-progress-text");
-  _mobEls.desktopStatus = document.getElementById("clip-status");
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -100,6 +95,7 @@ function initMobileDetail(item) {
 
   if (_mobEls.status) _mobEls.status.textContent = "";
   _mobRender();
+  if (_isMobile) { var f = document.getElementById("fine-tune"); if (f) f.open = true; }
 }
 
 /** Called from app.js goBack()/goHome(). Removes listeners, clears timers. */
@@ -337,11 +333,10 @@ function mobLoop() {
 
 function mobDownload() {
   _mobShowProgress();
-  _mobStartProgressPolling();
-  downloadClip(); // app.js flow; mirror-poll keeps mob progress in sync
+  downloadClip(); // app.js writes progress directly to #mob-clip-progress*
 }
 
-// ── Progress mirroring (desktop -> mobile) ─────────────────────────────
+// ── Progress display (app.js writes #mob-clip-progress* directly) ─────
 
 function _mobShowProgress() {
   if (_mobEls.progress) _mobEls.progress.style.display = "block";
@@ -349,33 +344,10 @@ function _mobShowProgress() {
   if (_mobEls.progressText) _mobEls.progressText.textContent = "Starting clip...";
 }
 
-function _mobStartProgressPolling() {
-  _mobStopProgressPolling();
-  _mobProgressTimer = setInterval(_mobPollProgress, 500);
-}
-
 function _mobStopProgressPolling() {
   if (_mobProgressTimer) {
     clearInterval(_mobProgressTimer);
     _mobProgressTimer = null;
-  }
-}
-
-function _mobPollProgress() {
-  var dp = _mobEls.desktopProgress;
-  if (!dp || dp.style.display === "none") {
-    _mobStopProgressPolling();
-    if (_mobEls.progress) _mobEls.progress.style.display = "none";
-    return;
-  }
-  if (_mobEls.progressFill && _mobEls.desktopProgressFill) {
-    _mobEls.progressFill.style.width = _mobEls.desktopProgressFill.style.width || "0%";
-  }
-  if (_mobEls.progressText && _mobEls.desktopProgressText) {
-    _mobEls.progressText.textContent = _mobEls.desktopProgressText.textContent || "";
-  }
-  if (_mobEls.status && _mobEls.desktopStatus) {
-    _mobEls.status.textContent = _mobEls.desktopStatus.textContent || "";
   }
 }
 
@@ -475,6 +447,26 @@ function _mobRender() {
     var ue = _mobEndSet ? "" : "none";
     if (ue !== _mobLast.ue) { _mobEls.btnUnsetEnd.style.display = ue; _mobLast.ue = ue; }
   }
+
+  // Desktop progressive disclosure: keep "✂ Fine-tune" collapsed until an edge is marked.
+  var ft = document.getElementById("fine-tune");
+  if (ft && !_isMobile) { ft.open = _mobStartSet || _mobEndSet; }
+
+  _mobRenderCaptionOpts();
+}
+
+// Mirror caption color/placement into the mobile Options buttons; show the
+// option rows only while captions are enabled. Reads app.js globals only.
+function _mobRenderCaptionOpts() {
+  var optColor = document.getElementById("mob-opt-caption-color");
+  var optPlacement = document.getElementById("mob-opt-caption-placement");
+  var btnColor = document.getElementById("mob-btn-caption-color");
+  var btnPlacement = document.getElementById("mob-btn-caption-placement");
+  var show = _captionsEnabled ? "" : "none";
+  if (optColor) optColor.style.display = show;
+  if (optPlacement) optPlacement.style.display = show;
+  if (btnColor) btnColor.textContent = (_captionColor === "white") ? "🎨 White" : "🎨 Yellow";
+  if (btnPlacement) btnPlacement.textContent = (_captionPosition === "bottom") ? "📍 Bottom" : "📍 Middle";
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────

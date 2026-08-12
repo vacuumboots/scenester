@@ -721,214 +721,6 @@ main {
   max-height: 480px;
 }
 
-/* ── Scrubber Section ──────────────────────────────────────────────── */
-
-.scrubber-section {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px;
-}
-
-.scrubber-header {
-  font-family: var(--font-serif);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.range-zoom-btn {
-  font-size: 14px;
-  padding: 2px 6px;
-  line-height: 1;
-  min-width: 32px;
-}
-.range-zoom-btn.active {
-  background: var(--gold);
-  color: #141414;
-}
-
-.time-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.time-box {
-  font-family: var(--font-mono);
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--gold);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 6px 14px;
-  min-width: 80px;
-  text-align: center;
-}
-
-.time-input {
-  outline: none;
-  cursor: text;
-}
-
-.time-input:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 6px rgba(196,150,59,0.3);
-}
-
-.time-input::selection {
-  background: var(--gold);
-  color: var(--bg);
-}
-
-.time-sep {
-  color: var(--text-dim);
-  font-size: 18px;
-}
-
-.time-dur {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--text-dim);
-}
-
-/* ── Range bar (interactive timeline with draggable handles) ───────── */
-
-.range-bar {
-  position: relative;
-  height: 20px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent calc(10% - 1px),
-      rgba(255,255,255,0.04) calc(10% - 1px),
-      rgba(255,255,255,0.04) 10%
-    ),
-    #161616;
-  border-radius: 4px;
-  margin: 14px 0 22px;  /* room for handles extending above/below */
-  cursor: pointer;
-  border: 1px solid #252525;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
-}
-
-.range-bar:hover {
-  border-color: #333;
-}
-
-.range-bar-fill {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  background: linear-gradient(180deg, rgba(196,150,59,0.55), rgba(196,150,59,0.25));
-  border-radius: 4px;
-  transition: left 0.08s ease, width 0.08s ease;
-  border: 1px solid rgba(196,150,59,0.3);
-  border-left: none;
-  border-right: none;
-}
-
-.range-bar.dragging .range-bar-fill,
-.range-bar.dragging .range-bar-marker {
-  transition: none !important;
-}
-
-.range-bar-marker {
-  position: absolute;
-  top: -6px;
-  width: 14px;
-  height: 32px;          /* 20px bar + 6px above + 6px below */
-  margin-left: -7px;
-  background: #e8e8e8;
-  border: 2px solid var(--gold);
-  border-radius: 7px;    /* pill shape */
-  cursor: grab;
-  z-index: 1;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-  user-select: none;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.2);
-}
-
-.range-bar-marker:hover {
-  transform: scale(1.15);
-  box-shadow: 0 1px 6px rgba(0,0,0,0.5), 0 0 14px rgba(196,150,59,0.45);
-  background: #fff;
-}
-
-.range-bar-marker.dragging {
-  cursor: grabbing;
-  transform: scale(1.12);
-  box-shadow: 0 1px 8px rgba(0,0,0,0.6), 0 0 20px rgba(196,150,59,0.65);
-  border-color: #d4a84b;
-  background: #fff;
-}
-
-.range-bar-marker-start {
-  border-radius: 7px 3px 3px 7px;
-}
-
-.range-bar-marker-end {
-  border-radius: 3px 7px 7px 3px;
-}
-
-/* Playhead — vertical line showing current preview position on timeline */
-.range-bar-playhead {
-  position: absolute;
-  top: -4px;
-  width: 2px;
-  height: calc(100% + 8px);
-  margin-left: -1px;
-  background: #fff;
-  pointer-events: none;
-  z-index: 2;
-  display: none;
-  box-shadow: 0 0 6px rgba(255,255,255,0.6);
-  transition: left 0.08s linear;
-}
-
-/* Mini overview bar — thin full-movie context bar visible when range is zoomed */
-.range-overview {
-  position: relative;
-  height: 6px;
-  background: #1a1a1a;
-  border-radius: 3px;
-  margin: 4px 0 0;
-  border: 1px solid #252525;
-}
-.range-overview-window {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  background: rgba(196, 150, 59, 0.35);
-  border-radius: 3px;
-  pointer-events: none;
-  transition: left 0.15s ease, width 0.15s ease;
-}
-
-/* ── Clip duration badge ─────────────────────────────────────────────── */
-
-.clip-duration {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--gold);
-  background: rgba(196,150,59,0.1);
-  padding: 3px 10px;
-  border-radius: var(--radius-sm);
-  margin-left: 8px;
-}
-
-.clip-duration.over-max {
-  color: var(--red);
-  background: rgba(201,107,107,0.12);
-}
-
 /* ── Frame strip hint ───────────────────────────────────────────────── */
 
 .strip-hint {
@@ -938,250 +730,7 @@ main {
   text-align: center;
 }
 
-.preset-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.preset-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 4px;
-}
-
-.preset-duration-btn.active {
-  background: var(--gold);
-  color: #0d0d0d;
-  border-color: var(--gold);
-  font-weight: 600;
-}
-
-/* ── Fine-tune sliders ─────────────────────────────────────────────── */
-
-.fine-tune-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  gap: 12px;
-}
-
-.fine-tune-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.fine-tune-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  min-width: 28px;
-}
-
-.fine-tune-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 140px;
-  height: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  outline: none;
-  cursor: pointer;
-}
-
-.fine-tune-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--gold);
-  border: 2px solid #0d0d0d;
-  cursor: pointer;
-  box-shadow: 0 0 6px rgba(196,150,59,0.35);
-}
-
-.fine-tune-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--gold);
-  border: 2px solid #0d0d0d;
-  cursor: pointer;
-  box-shadow: 0 0 6px rgba(196,150,59,0.35);
-}
-
-.fine-tune-value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-dim);
-  min-width: 36px;
-  text-align: center;
-}
-
-/* Desktop micro-scrubbers — 30s per-handle sliders (matches mobile) */
-.dt-micro {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 0 4px;
-}
-.dt-micro-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.dt-micro-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  min-width: 32px;
-}
-.dt-micro-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 6px;
-  background: #2a2a2a;
-  border-radius: 3px;
-  outline: none;
-  cursor: pointer;
-}
-.dt-micro-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--gold);
-  border: 2px solid #141414;
-  cursor: pointer;
-  box-shadow: 0 0 6px rgba(196,150,59,0.35);
-}
-.dt-micro-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--gold);
-  border: 2px solid #141414;
-  cursor: pointer;
-}
-.dt-micro-val {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text);
-  min-width: 52px;
-  text-align: right;
-}
-
-/* ── Mark Mode — the video is the scrubber (2026-08-03) ────────────── */
-.mark-mode {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 12px 0 4px;
-}
-
-.mark-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.btn-mark {
-  padding: 14px 10px;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  border-radius: var(--radius-sm);
-  min-height: 54px;
-  background: var(--panel);
-  border: 1.5px solid var(--border);
-  color: var(--text);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.btn-mark:active {
-  background: #1e1e1e;
-}
-
-.btn-mark-end {
-  border-color: var(--border-hover);
-  color: var(--text-dim);
-}
-
-.btn-mark.just-marked {
-  background: #242013;
-  border-color: var(--gold-dim);
-  color: var(--gold);
-}
-
-.mark-hint {
-  font-size: 13px;
-  color: var(--text-dim);
-  text-align: center;
-  line-height: 1.4;
-}
-
-/* ── Nudge buttons (replaced fine-tune sliders) ────────────────────── */
-.nudge-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.nudge-group {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.nudge-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  min-width: 34px;
-}
-
-.nudge-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  flex: 1;
-}
-
-.btn-nudge {
-  padding: 12px 8px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 8px;
-  min-height: 46px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.btn-nudge:active {
-  background: #1e1e1e;
-}
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
-
 
 /* ── Clip shortcut link ─────────────────────────────────────────── */
 
@@ -1295,48 +844,6 @@ main {
     display: none;
   }
 
-  /* Range bar — bigger touch target */
-  .range-bar {
-    height: 18px;
-    margin: 12px 0 20px;
-  }
-  .range-bar-marker {
-    width: 18px;
-    height: 30px;
-    margin-left: -9px;
-    border-radius: 9px;
-  }
-
-  /* Time display */
-  .time-box {
-    font-size: 16px;
-    padding: 5px 10px;
-    min-width: 64px;
-  }
-  .time-sep {
-    font-size: 14px;
-  }
-  .time-dur {
-    font-size: 12px;
-  }
-
-  /* Preset buttons — bigger tap targets */
-  .preset-buttons {
-    gap: 5px;
-  }
-  .preset-duration-btn {
-    padding: 7px 10px;
-    font-size: 13px;
-  }
-  .preset-sep {
-    display: none;
-  }
-
-  /* Social toggles — captions stays, options collapsible */
-  .social-toggles {
-    flex-direction: column;
-    gap: 4px;
-  }
   .caption-options {
     display: none;
     flex-wrap: wrap;
@@ -1373,13 +880,7 @@ main {
     padding: 4px 8px;
   }
 
-  /* Scrubber section */
-  .scrubber-section {
-    padding: 16px;
-  }
 }
-
-
 
 /* ── Progress Bar ──────────────────────────────────────────────────── */
 
@@ -1432,36 +933,6 @@ main {
   color: var(--text-muted);
   max-width: 400px;
   margin: 0 auto;
-}
-
-/* ── Social media toggles ──────────────────────────────────────────── */
-
-.social-toggles {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  justify-content: center;
-}
-
-.toggle-btn {
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  font-size: 13px;
-  padding: 6px 14px;
-}
-
-.toggle-btn.active {
-  background: var(--gold);
-  color: #0d0d0d;
-  border-color: var(--gold);
-  font-weight: 600;
-}
-
-.toggle-btn:not(.active) {
-  opacity: 0.5;
-}
-
-.toggle-btn:not(.active):hover {
-  opacity: 0.8;
 }
 
 .caption-option {
@@ -1604,7 +1075,7 @@ main {
 
 /* ── Mobile Clip Editor (bottom-sheet layout) ────────────────────────── */
 
-.mobile-clip-editor {
+.clip-editor {
   padding: 0;
 }
 
@@ -2028,5 +1499,53 @@ main {
   .mob-download-btn {
     min-height: 48px;
     font-size: 15px;
+  }
+}
+
+/* ── Desktop unified editor layout ────────────────────────────────────── */
+
+@media (min-width: 769px) {
+  .clip-editor {
+    max-width: 720px;
+    margin: 24px auto 0;
+  }
+
+  .mob-mark-btn {
+    min-height: 64px;
+    font-size: 18px;
+  }
+
+  .mob-ft-row {
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  }
+  .mob-ft-btn {
+    min-height: 44px;
+    min-width: 56px;
+  }
+
+  .fine-tune summary {
+    font-family: var(--font-serif);
+    cursor: pointer;
+    padding: 10px 12px;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    list-style: none;
+  }
+  .fine-tune summary::-webkit-details-marker {
+    display: none;
+  }
+  .fine-tune summary:hover {
+    border-color: var(--border-hover);
+    color: var(--gold);
+  }
+  .fine-tune[open] summary {
+    border-color: var(--border-hover);
+  }
+
+  #btn-film-strip.active {
+    background: var(--gold);
+    color: #141414;
+    border-color: var(--gold);
   }
 }

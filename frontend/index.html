@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/icon-192.png">
   <link rel="manifest" href="manifest.json">
   <title>Cliparr — Plex Clip Maker</title>
-  <link rel="stylesheet" href="static/style.css?v=42">
+  <link rel="stylesheet" href="static/style.css?v=43">
 </head>
 <body>
 
@@ -127,15 +127,6 @@
     <!-- Preview -->
     <div id="frame-preview" style="display:none">
 
-      <!-- Mark Mode (desktop) — compact version -->
-      <div class="mark-mode desktop-only" id="mark-mode">
-        <div class="mark-buttons">
-          <button class="btn btn-mark" id="btn-mark-start" onclick="markStart()">▶ Mark Start</button>
-          <button class="btn btn-mark btn-mark-end" id="btn-mark-end" onclick="markEnd()">■ Mark End</button>
-        </div>
-        <div class="mark-hint">Press play — tap <b>Mark Start</b> when the moment begins, tap <b>Mark End</b> when it's over.</div>
-      </div>
-
       <div id="preview-error" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
         <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
         <div>Video preview not available for this format.</div>
@@ -157,6 +148,7 @@
         <button class="btn btn-small video-size-btn" onclick="setVideoSize('large')" title="Large player">L</button>
         <span class="frame-time-sep">·</span>
         <input id="jump-time" type="text" placeholder="jump to..." size="8" title="Type time like 1:23 or 90s and press Enter">
+        <button class="btn btn-small" id="btn-film-strip" onclick="toggleFilmStrip()" title="Show film strip">🗂 Film strip</button>
       </div>
     </div>
 
@@ -166,109 +158,8 @@
       <div class="frame-strip-inner" id="frame-strip-inner"></div>
     </div>
 
-    <!-- DESKTOP scrubber section -->
-    <div class="scrubber-section desktop-only">
-      <div class="scrubber-header">
-        Clip Range
-        <button class="btn btn-tiny range-zoom-btn" id="btn-range-zoom" onclick="toggleRangeZoom()" title="Zoom to 10-minute view">🔍</button>
-      </div>
-
-      <div class="time-display">
-        <input class="time-box time-input" id="time-start-input" value="00:00" size="7" title="Start time (click to edit)">
-        <span class="time-sep">&rarr;</span>
-        <input class="time-box time-input" id="time-end-input" value="00:30" size="7" title="End time (click to edit)">
-        <span class="time-dur" id="time-duration">/ 0:00</span>
-        <span class="clip-duration" id="clip-duration">30s</span>
-      </div>
-
-      <div class="range-bar" id="range-bar">
-        <div class="range-bar-fill" id="range-bar-fill"></div>
-        <div class="range-bar-marker range-bar-marker-start" id="range-bar-marker-start" title="Drag to set clip start"></div>
-        <div class="range-bar-marker range-bar-marker-end" id="range-bar-marker-end" title="Drag to set clip end"></div>
-        <div class="range-bar-playhead" id="range-bar-playhead" title="Current preview position"></div>
-      </div>
-
-      <!-- Mini overview bar — full-movie context when range bar is zoomed -->
-      <div class="range-overview" id="range-overview" style="display:none">
-        <div class="range-overview-window" id="range-overview-window"></div>
-      </div>
-
-      <div class="nudge-row">
-        <div class="nudge-group">
-          <span class="nudge-label">Start</span>
-          <div class="nudge-buttons">
-            <button class="btn btn-nudge" onclick="nudgeStart(-5)">-5s</button>
-            <button class="btn btn-nudge" onclick="nudgeStart(-1)">-1s</button>
-            <button class="btn btn-nudge" onclick="nudgeStart(1)">+1s</button>
-            <button class="btn btn-nudge" onclick="nudgeStart(5)">+5s</button>
-          </div>
-        </div>
-        <div class="nudge-group">
-          <span class="nudge-label">End</span>
-          <div class="nudge-buttons">
-            <button class="btn btn-nudge" onclick="nudgeEnd(-5)">-5s</button>
-            <button class="btn btn-nudge" onclick="nudgeEnd(-1)">-1s</button>
-            <button class="btn btn-nudge" onclick="nudgeEnd(1)">+1s</button>
-            <button class="btn btn-nudge" onclick="nudgeEnd(5)">+5s</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Micro-scrubbers — 30s per-handle sliders for frame-precise selection -->
-      <div class="dt-micro" id="dt-micro">
-        <div class="dt-micro-row">
-          <span class="dt-micro-label">Start</span>
-          <input type="range" class="dt-micro-slider" id="dt-micro-start" min="0" max="30" value="15" step="0.04">
-          <span class="dt-micro-val" id="dt-micro-start-val">0:00.00</span>
-        </div>
-        <div class="dt-micro-row">
-          <span class="dt-micro-label">End</span>
-          <input type="range" class="dt-micro-slider" id="dt-micro-end" min="0" max="30" value="15" step="0.04">
-          <span class="dt-micro-val" id="dt-micro-end-val">0:30.00</span>
-        </div>
-      </div>
-
-      <div class="preset-buttons">
-        <button class="btn btn-small preset-duration-btn" data-duration="5" onclick="handlePreset('set-duration',5)">5s</button>
-        <button class="btn btn-small preset-duration-btn" data-duration="10" onclick="handlePreset('set-duration',10)">10s</button>
-        <button class="btn btn-small preset-duration-btn" data-duration="15" onclick="handlePreset('set-duration',15)">15s</button>
-        <button class="btn btn-small preset-duration-btn" data-duration="45" onclick="handlePreset('set-duration',45)">45s</button>
-        <button class="btn btn-small preset-duration-btn" data-duration="60" onclick="handlePreset('set-duration',60)">60s</button>
-        <button class="btn btn-small preset-duration-btn" data-duration="139" onclick="handlePreset('set-duration',139)">139s</button>
-        <span class="preset-sep"></span>
-        <button class="btn btn-small preset-duration-btn" id="btn-preset-free" onclick="handlePreset('unlock')">🔓 Free</button>
-      </div>
-
-      <button class="btn btn-primary btn-download" id="btn-download-clip" disabled>
-        &#11015; Download Clip
-      </button>
-      <div class="social-toggles" id="social-toggles" style="display:none">
-        <button class="btn btn-small toggle-btn" id="btn-captions" onclick="toggleCaptions()" title="Burn word-by-word captions from subtitle file">
-          💬 Captions
-        </button>
-        <div class="caption-options">
-          <button class="btn btn-small toggle-btn caption-option" id="btn-caption-color" onclick="toggleCaptionColor()" title="Caption font color: white or yellow" style="display:none">
-            🎨 White
-          </button>
-          <button class="btn btn-small toggle-btn caption-option" id="btn-caption-placement" onclick="toggleCaptionPosition()" title="Caption placement: bottom or middle of frame" style="display:none">
-            📍 Bottom
-          </button>
-        </div>
-        <button class="btn btn-small toggle-btn" id="btn-vertical" onclick="toggleVertical()" title="Crop to vertical 9:16 for TikTok/Reels/Shorts">
-          📱 Vertical
-        </button>
-      </div>
-      <div class="clip-progress" id="clip-progress" style="display:none">
-        <div class="progress-bar">
-          <div class="progress-fill" id="clip-progress-fill"></div>
-        </div>
-        <div class="progress-text" id="clip-progress-text">Encoding clip...</div>
-      </div>
-      <div class="clip-status" id="clip-status"></div>
-    </div>
-
 <!-- ── MOBILE bottom-sheet editor ────────────────────────────────── -->
-<div class="mobile-clip-editor mobile-only">
+<div class="clip-editor">
   <div class="mob-sheet">
 
     <!-- Readout row: skip buttons flank start/dur/end -->
@@ -309,6 +200,8 @@
       <button class="mob-unset-btn" id="mob-btn-unset-end" onclick="mobUnsetEnd()" style="display:none">✕ Unset End</button>
     </div>
 
+    <details class="fine-tune" id="fine-tune">
+      <summary>✂ Fine-tune</summary>
     <!-- Nudge rows: two EXPLICIT rows, never one ambiguous row -->
     <div class="mob-finetune">
       <div class="mob-ft-row">
@@ -344,6 +237,7 @@
       <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
       <button class="mob-preset-btn" data-dur="139" onclick="mobPreset(139)">139s</button>
     </div>
+    </details>
 
     <!-- Actions: loop + download -->
     <div class="mob-actions">
@@ -359,6 +253,12 @@
       <label class="mob-option" id="mob-opt-captions" style="display:none">
         <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
         💬 Burn captions
+      </label>
+      <label class="mob-option" id="mob-opt-caption-color" style="display:none">
+        <button type="button" class="btn btn-small" id="mob-btn-caption-color" onclick="toggleCaptionColor()">🎨 White</button>
+      </label>
+      <label class="mob-option" id="mob-opt-caption-placement" style="display:none">
+        <button type="button" class="btn btn-small" id="mob-btn-caption-placement" onclick="toggleCaptionPosition()">📍 Bottom</button>
       </label>
       <label class="mob-option">
         <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
@@ -379,8 +279,8 @@
 
 </main>
 
-<script src="static/app.js?v=42"></script>
-<script src="static/mobile.js?v=42"></script>
+<script src="static/app.js?v=43"></script>
+<script src="static/mobile.js?v=43"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");

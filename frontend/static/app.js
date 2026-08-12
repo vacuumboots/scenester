@@ -58,31 +58,18 @@ function getDom() {
     btnMuteToggle:  qs("#btn-mute-toggle"),
     frameStrip:      qs("#frame-strip"),
     frameStripInner: qs("#frame-strip-inner"),
-    // Range bar (visual only, no interaction)
-    rangeBar:          qs("#range-bar"),
-    rangeBarFill:      qs("#range-bar-fill"),
-    rangeBarMarkerStart: qs("#range-bar-marker-start"),
-    rangeBarMarkerEnd:   qs("#range-bar-marker-end"),
-    rangeBarPlayhead:   qs("#range-bar-playhead"),
-    timeStartInput: qs("#time-start-input"),
-    timeEndInput:   qs("#time-end-input"),
-    timeDuration: qs("#time-duration"),
-    clipDuration:  qs("#clip-duration"),
-    btnDownload:  qs("#btn-download-clip"),
-    clipStatus:   qs("#clip-status"),
-    clipProgress:      qs("#clip-progress"),
-    clipProgressFill:  qs("#clip-progress-fill"),
-    clipProgressText:  qs("#clip-progress-text"),
+    // Unified editor elements (single selection + download surface on both
+    // desktop and mobile; the old desktop-only #btn-download-clip / #clip-*
+    // / #social-toggles / time-input elements were removed in the de-clutter).
+    btnDownload:      qs("#mob-btn-download"),
+    clipStatus:       qs("#mob-clip-status"),
+    clipProgress:     qs("#mob-clip-progress"),
+    clipProgressFill: qs("#mob-clip-progress-fill"),
+    clipProgressText: qs("#mob-clip-progress-text"),
     // Clip gallery
     clipGallery:     qs("#clip-gallery"),
     clipGalleryGrid: qs("#clip-gallery-grid"),
     clipCount:       qs("#clip-count"),
-    // Social toggles
-    socialToggles: qs("#social-toggles"),
-    btnCaptions:   qs("#btn-captions"),
-    btnCaptionColor: qs("#btn-caption-color"),
-    btnCaptionPlacement: qs("#btn-caption-placement"),
-    btnVertical:   qs("#btn-vertical"),
   };
 }
 
@@ -96,28 +83,11 @@ var _sliderEnd = 139;
 // that the user navigated away (SPA history integration, v=35).
 var _navCounter = 0;
 
-// Range lock mode: when _rangeLocked is true, dragging either handle
-// slides the entire range as a unit, maintaining _lockedDuration.
-var _rangeLocked = false;
-var _lockedDuration = 30;
-
-// Range bar zoom: when active, the bar shows a 10-min window around the clip
-// for precise handle positioning (matches mobile Stage 2). ~1.2s/px on desktop.
-var _rangeZoomed = false;
-var _rangeViewMin = 0;
-var _rangeViewMax = 0;
-var _RANGE_ZOOM_SPAN = 600;  // 10 minutes
-
 // Social media options
 var _captionsEnabled = false;
 var _verticalEnabled = false;
 var _captionColor = "white";        // "white" or "yellow"
 var _captionPosition = "bottom";    // "bottom" or "middle"
-
-// Fine-tune sliders — ±30s window for precise handle positioning
-var _fineTuneStartActive = false;
-var _fineTuneEndActive = false;
-var _FINE_TUNE_WINDOW = 15;   // ±15s = 30s window (matches mobile micro-scrubbers)
 
 // Mobile detection
 var _isMobile = false;
@@ -305,7 +275,6 @@ function goHome() {
   _videoFailed = false;
   if (dom.previewError) dom.previewError.style.display = "none";
   if (dom.previewLoading) dom.previewLoading.style.display = "none";
-  if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
   renderLibrary();
   if (typeof destroyMobileDetail === 'function') destroyMobileDetail();
 }
@@ -369,7 +338,7 @@ function showDetailView() {
   loadVideoPreview(mediaId);
 
   // Build frame strip
-  buildFrameStrip(mediaId, durationS);
+  if (_filmStripEnabled) buildFrameStrip(mediaId, durationS);
 
   // Handle jump-to-clip offset from session banner
   if (window._jumpOffset != null) {
@@ -384,25 +353,17 @@ function showDetailView() {
   }
 
   updateTimeDisplay();
-  updateRangeBar();
   updateDownloadButton();
   updateStripRange();
   updateSocialToggles();
 
-  // Reset lock state for new item
-  _rangeLocked = false;
-  _rangeZoomed = false;
-  updatePresetButtons();
-  _updateZoomBtn();
-
   // Seek video to start position once ready
   seekVideoTo(_sliderStart);
-  if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
 
   if (dom.clipStatus) dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(durationS);
 
   // Init radical mobile timeline (two-thumb scrubber)
-  if (window.innerWidth <= 768 && typeof initMobileDetail === 'function') {
+  if (typeof initMobileDetail === 'function') {
     initMobileDetail(item);
   }
 
@@ -434,7 +395,6 @@ function goBack() {
   _videoFailed = false;
   if (dom.previewError) dom.previewError.style.display = "none";
   if (dom.previewLoading) dom.previewLoading.style.display = "none";
-  if (dom.rangeBarPlayhead) dom.rangeBarPlayhead.style.display = "none";
   renderLibrary(dom.search ? dom.search.value : "");
   if (typeof destroyMobileDetail === 'function') destroyMobileDetail();
 }
@@ -662,10 +622,6 @@ function loadVideoPreview(mediaId) {
     // mobile.js renders its own readouts via _mobRender.
     if (!_isMobile) {
       if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
-      if (dom.rangeBarPlayhead) {
-        dom.rangeBarPlayhead.style.display = "block";
-        dom.rangeBarPlayhead.style.left = sliderGetPct(ct) + "%";
-      }
     }
     // Loop within clip range when playing a clip preview
     if (_loopPlayback && ct >= _sliderEnd) {
@@ -685,10 +641,6 @@ function onPreviewError() {
 
 function seekVideoTo(t) {
   if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(t));
-  if (dom.rangeBarPlayhead) {
-    dom.rangeBarPlayhead.style.display = "block";
-    dom.rangeBarPlayhead.style.left = sliderGetPct(t) + "%";
-  }
   // readyState >= 1 means metadata is loaded — browser can seek, it'll buffer
   // data at the new position. Using >= 2 was too strict: during seeks,
   // readyState temporarily drops to 1, silently dropping rapid clicks.
@@ -827,6 +779,23 @@ var _stripClickTime = null;
 var _stripLongPressTimer = null;
 var _stripLongPressFired = false;
 var _lastTouchEndTime = 0;  // suppresses compatibility mouse events after touch
+// Film-strip opt-in toggle — hidden by default, shown on request.
+var _filmStripEnabled = false;
+function toggleFilmStrip() {
+  _filmStripEnabled = !_filmStripEnabled;
+  var btn = document.getElementById("btn-film-strip");
+  if (_filmStripEnabled) {
+    if (!_stripThumbs || !_stripThumbs.length) {
+      var it = state.currentItem;
+      buildFrameStrip((it && (it.media_id || it.id)) || "", state.mediaDuration);
+    }
+    if (dom.frameStrip) dom.frameStrip.style.display = "block";
+    if (btn) btn.classList.add("active");
+  } else {
+    if (dom.frameStrip) dom.frameStrip.style.display = "none";
+    if (btn) btn.classList.remove("active");
+  }
+}
 
 function initStripDrag() {
   if (!dom.frameStripInner) return;
@@ -835,34 +804,21 @@ function initStripDrag() {
     if (t == null) return;
     if (isEnd) {
       // Set end (desktop shift+click, mobile long-press)
-      if (_rangeLocked) {
-        setSliderEnd(t);
-        setSliderStart(Math.max(0, t - _lockedDuration));
-      } else {
-        setSliderEnd(t);
-      }
+      setSliderEnd(t);
     } else {
       // Set start (desktop click, mobile tap)
-      if (_rangeLocked) {
-        var ns = Math.max(0, t);
-        if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
-        setSliderStart(ns);
-        setSliderEnd(ns + _lockedDuration);
-      } else {
-        var dur = _sliderEnd - _sliderStart;
-        // Clamp so a click near the very end can't collapse the range to 0s
-        var ns = Math.max(0, Math.min(t, state.mediaDuration - 1));
-        setSliderStart(ns);
-        if (dur > 0) {
-          setSliderEnd(Math.min(state.mediaDuration, ns + dur));
-        }
+      var dur = _sliderEnd - _sliderStart;
+      // Clamp so a click near the very end can't collapse the range to 0s
+      var ns = Math.max(0, Math.min(t, state.mediaDuration - 1));
+      setSliderStart(ns);
+      if (dur > 0) {
+        setSliderEnd(Math.min(state.mediaDuration, ns + dur));
       }
     }
     seekVideoTo(_sliderStart);
     updateStripRange();
     if (dom.clipStatus) {
-      var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
-      dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
+      dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration);
     }
   }
 
@@ -949,6 +905,7 @@ function findNearestThumb(clientX) {
 // Highlight thumbnails in selected range
 function updateStripRange() {
   if (_isMobile) return;  // desktop-only strip visual; mobile has mob-overview
+  if (!dom.frameStripInner || !_stripThumbs || !_stripThumbs.length) return;
   for (var i = 0; i < _stripThumbs.length; i++) {
     var t = _stripThumbs[i];
     if (t.time >= _sliderStart && t.time <= _sliderEnd) {
@@ -974,222 +931,15 @@ function highlightFrameStrip(currentT) {
 
 function jumpToFrame(t) {
   // Slide the clip range to follow the jump point
-  if (_rangeLocked) {
-    var ns = Math.max(0, t);
-    if (ns + _lockedDuration > state.mediaDuration) ns = state.mediaDuration - _lockedDuration;
-    setSliderStart(ns);
-    setSliderEnd(ns + _lockedDuration);
-  } else {
-    var dur = _sliderEnd - _sliderStart;
-    var ns = Math.max(0, t);
-    setSliderStart(ns);
-    if (dur > 0) {
-      setSliderEnd(Math.min(state.mediaDuration, ns + dur));
-    }
+  var dur = _sliderEnd - _sliderStart;
+  var ns = Math.max(0, t);
+  setSliderStart(ns);
+  if (dur > 0) {
+    setSliderEnd(Math.min(state.mediaDuration, ns + dur));
   }
   seekVideoTo(t);
   highlightFrameStrip(t);
   updateStripRange();
-}
-
-// ── Range bar (visual timeline showing selected clip region) ──────────
-
-function sliderGetPct(t) {
-  if (_rangeZoomed) {
-    var span = _rangeViewMax - _rangeViewMin;
-    if (span <= 0) return 0;
-    return Math.max(0, Math.min(100, ((t - _rangeViewMin) / span) * 100));
-  }
-  return Math.max(0, Math.min(100, (t / state.mediaDuration) * 100));
-}
-
-function updateRangeBar() {
-  if (_isMobile) return;  // desktop-only visual; mobile has mob-overview
-  if (!dom.rangeBar) return;
-  var pctStart = sliderGetPct(_sliderStart);
-  var pctEnd = sliderGetPct(_sliderEnd);
-
-  if (dom.rangeBarFill) {
-    dom.rangeBarFill.style.left = pctStart + "%";
-    dom.rangeBarFill.style.width = (pctEnd - pctStart) + "%";
-  }
-  if (dom.rangeBarMarkerStart) dom.rangeBarMarkerStart.style.left = pctStart + "%";
-  if (dom.rangeBarMarkerEnd) dom.rangeBarMarkerEnd.style.left = pctEnd + "%";
-
-  // Mini overview bar — visible only when zoomed, shows full-movie context
-  var ov = document.getElementById("range-overview");
-  if (ov) {
-    ov.style.display = _rangeZoomed ? "block" : "none";
-    if (_rangeZoomed) {
-      var dur = state.mediaDuration || 1;
-      var ovWin = document.getElementById("range-overview-window");
-      if (ovWin) {
-        ovWin.style.left = (_rangeViewMin / dur * 100) + "%";
-        ovWin.style.width = ((_rangeViewMax - _rangeViewMin) / dur * 100) + "%";
-      }
-    }
-  }
-}
-
-// ── Range bar drag handles ──────────────────────────────────────────
-
-var _handleDrag = null;  // 'start' | 'end' | null
-var _dragGrabPct = 0;    // mouse pct at grab point
-var _dragHandlePct = 0;  // handle pct at grab point
-
-function initRangeBarHandles() {
-  if (!dom.rangeBar) return;
-
-  var bar = dom.rangeBar;
-
-  // Shared drag-start logic — called by both mousedown and touchstart.
-  // Caches bar rect at drag start so onMove never reflows.
-  function _startBarDrag(clientX, target) {
-    var barRect = bar.getBoundingClientRect();
-    var barLeft = barRect.left;
-    var barWidth = barRect.width;
-
-    var mousePct = Math.max(0, Math.min(100, ((clientX - barLeft) / barWidth) * 100));
-    var sec;
-    if (_rangeZoomed) {
-      var vSpan = _rangeViewMax - _rangeViewMin;
-      sec = _rangeViewMin + (mousePct / 100) * vSpan;
-    } else {
-      sec = (mousePct / 100) * state.mediaDuration;
-    }
-
-    if (target === dom.rangeBarMarkerStart || (target.closest && target.closest("#range-bar-marker-start"))) {
-      _handleDrag = "start";
-      _dragGrabPct = mousePct;
-      _dragHandlePct = sliderGetPct(_sliderStart);
-      seekVideoTo(_sliderStart);
-    } else if (target === dom.rangeBarMarkerEnd || (target.closest && target.closest("#range-bar-marker-end"))) {
-      _handleDrag = "end";
-      _dragGrabPct = mousePct;
-      _dragHandlePct = sliderGetPct(_sliderEnd);
-      seekVideoTo(_sliderEnd);
-    } else {
-      // Clicked on bar itself
-      if (_rangeLocked) {
-        // Locked: slide range to position at click (clamped to edges)
-        var newStart = Math.floor(sec);
-        if (newStart + _lockedDuration > state.mediaDuration) newStart = Math.max(0, state.mediaDuration - _lockedDuration);
-        setSliderStart(newStart);
-        setSliderEnd(newStart + _lockedDuration);
-        seekVideoTo(_sliderStart);
-        if (dom.clipStatus) {
-          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + " [locked " + _lockedDuration + "s]";
-        }
-        return;  // Immediate snap, no drag setup in locked mode
-      }
-      // Free mode: snap nearest handle
-      var distStart = Math.abs(_sliderStart - sec);
-      var distEnd = Math.abs(_sliderEnd - sec);
-      _handleDrag = distStart <= distEnd ? "start" : "end";
-      _dragGrabPct = mousePct;
-      _dragHandlePct = _handleDrag === "start" ? sliderGetPct(_sliderStart) : sliderGetPct(_sliderEnd);
-      // Apply immediately
-      applyDrag(mousePct);
-    }
-
-    dom.rangeBar.classList.add("dragging");
-    if (_handleDrag === "start") dom.rangeBarMarkerStart.classList.add("dragging");
-    else dom.rangeBarMarkerEnd.classList.add("dragging");
-
-    // Dynamic listeners — touch-aware onMove, cleanup for both families.
-    // Uses cached bar rect for zero-layout-thrash tracking.
-    function onMove(ev) {
-      if (!_handleDrag) return;
-      var cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      var movePct = Math.max(0, Math.min(100, ((cx - barLeft) / barWidth) * 100));
-      var delta = movePct - _dragGrabPct;
-      var newPct = _dragHandlePct + delta;
-      applyDrag(newPct);
-    }
-
-    function onUp() {
-      if (_handleDrag) {
-        dom.rangeBarMarkerStart.classList.remove("dragging");
-        dom.rangeBarMarkerEnd.classList.remove("dragging");
-        dom.rangeBar.classList.remove("dragging");
-        _handleDrag = null;
-        if (dom.clipStatus) {
-          var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
-          dom.clipStatus.textContent = "Ready — range: " + fmtTime(_sliderStart) + "–" + fmtTime(_sliderEnd) + " of " + fmtTime(state.mediaDuration) + mode;
-        }
-      }
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.removeEventListener("touchmove", onMove);
-      document.removeEventListener("touchend", onUp);
-    }
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    document.addEventListener("touchmove", onMove);
-    document.addEventListener("touchend", onUp);
-  }
-
-  bar.addEventListener("mousedown", function(e) {
-    // Ignore right-click and strip drags
-    if (e.button !== 0 || _stripDragActive) return;
-    _startBarDrag(e.clientX, e.target);
-    e.preventDefault();
-    e.stopPropagation();
-  });
-
-  bar.addEventListener("touchstart", function(e) {
-    if (_stripDragActive) return;
-    if (!e.cancelable) return;  // passive listener guard
-    _startBarDrag(e.touches[0].clientX, e.target);
-    e.preventDefault();
-    e.stopPropagation();
-  }, { passive: false });
-}
-
-function applyDrag(pct) {
-  var sec;
-  if (_rangeZoomed) {
-    var vSpan = _rangeViewMax - _rangeViewMin;
-    sec = _rangeViewMin + (pct / 100) * vSpan;
-  } else {
-    sec = Math.floor((pct / 100) * state.mediaDuration);
-  }
-
-  if (_rangeLocked) {
-    // Locked mode: dragging either handle slides the entire range,
-    // maintaining _lockedDuration. Both handles move together.
-    if (_handleDrag === "start") {
-      if (sec + _lockedDuration > state.mediaDuration) sec = state.mediaDuration - _lockedDuration;
-      if (sec < 0) sec = 0;
-      setSliderStart(sec);
-      setSliderEnd(sec + _lockedDuration);
-    } else if (_handleDrag === "end") {
-      var newStart = sec - _lockedDuration;
-      if (newStart < 0) { newStart = 0; sec = _lockedDuration; }
-      if (sec > state.mediaDuration) { sec = state.mediaDuration; newStart = sec - _lockedDuration; }
-      setSliderStart(newStart);
-      setSliderEnd(sec);
-    }
-    seekVideoTo(_sliderStart);
-  } else {
-    // Free mode: handles move independently
-    if (_handleDrag === "start") {
-      if (sec >= _sliderEnd - 1) sec = _sliderEnd - 1;
-      setSliderStart(sec);
-      seekVideoTo(_sliderStart);
-    } else if (_handleDrag === "end") {
-      if (sec <= _sliderStart + 1) sec = _sliderStart + 1;
-      setSliderEnd(sec);
-      seekVideoTo(_sliderEnd);
-    }
-  }
-
-  // Live feedback during drag
-  if (dom.clipStatus) {
-    var mode = _rangeLocked ? " [locked " + _lockedDuration + "s]" : "";
-    dom.clipStatus.textContent = "Range: " + fmtTime(_sliderStart) + " – " + fmtTime(_sliderEnd) + " (" + (_sliderEnd - _sliderStart) + "s)" + mode;
-  }
 }
 
 function updateTimeDisplay() {
@@ -1200,30 +950,11 @@ function updateTimeDisplay() {
   if (_sliderEnd > state.mediaDuration) _sliderEnd = Math.floor(state.mediaDuration);
   if (_sliderStart > state.mediaDuration) _sliderStart = Math.floor(state.mediaDuration);
   if (_sliderStart < 0) _sliderStart = 0;
-
-  // On mobile the desktop readouts are display:none — writing them on every
-  // timeupdate/seeked is main-thread style churn that janks page scrolling.
-  // mobile.js renders its own readouts (_mobRender). Constraints above still
-  // apply; only the DOM writes are skipped.
-  if (_isMobile) return;
-
-  if (dom.timeStartInput) dom.timeStartInput.value = fmtTime(_sliderStart);
-  if (dom.timeEndInput) dom.timeEndInput.value = fmtTime(_sliderEnd);
-  if (dom.timeDuration) dom.timeDuration.textContent = "/ " + fmtTime(state.mediaDuration);
-
-  var dur = _sliderEnd - _sliderStart;
-  if (dom.clipDuration) {
-    dom.clipDuration.textContent = dur + "s";
-  }
-
-  updateDownloadButton();
-  updateFineTuneSliders();
 }
 
 function setSliderStart(t) {
   _sliderStart = Math.max(0, Math.min(state.mediaDuration, Math.round(t * 100) / 100));
   updateTimeDisplay();
-  updateRangeBar();
   updateStripRange();
 }
 
@@ -1231,7 +962,6 @@ function setSliderEnd(t) {
   _sliderEnd = Math.max(0.01, Math.min(state.mediaDuration, Math.round(t * 100) / 100));
   if (_sliderEnd <= _sliderStart) _sliderStart = Math.max(0, _sliderEnd - 0.01);
   updateTimeDisplay();
-  updateRangeBar();
   updateStripRange();
 }
 
@@ -1263,209 +993,6 @@ function updateDownloadButton() {
   }
 }
 
-// ── Fine-tune sliders ────────────────────────────────────────────────────
-
-function initFineTuneSliders() {
-  var ss = document.getElementById("dt-micro-start");
-  var es = document.getElementById("dt-micro-end");
-  if (!ss || !es) return;
-
-  // Remove old listeners (idempotent via cloneNode)
-  var newSs = ss.cloneNode(true);
-  var newEs = es.cloneNode(true);
-  ss.parentNode.replaceChild(newSs, ss);
-  es.parentNode.replaceChild(newEs, es);
-
-  newSs.addEventListener("input", function () {
-    _fineTuneStartActive = true;
-    var v = parseFloat(this.value);
-    setSliderStart(Math.min(_sliderEnd - 0.04, v));
-    seekVideoTo(_sliderStart);
-    _updateFineTuneStartVal();
-  });
-  newSs.addEventListener("change", function () {
-    _fineTuneStartActive = false;
-    _updateFineTuneStartRange();
-  });
-
-  newEs.addEventListener("input", function () {
-    _fineTuneEndActive = true;
-    var v = parseFloat(this.value);
-    setSliderEnd(Math.max(_sliderStart + 0.04, v));
-    seekVideoTo(_sliderEnd);
-    _updateFineTuneEndVal();
-  });
-  newEs.addEventListener("change", function () {
-    _fineTuneEndActive = false;
-    _updateFineTuneEndRange();
-  });
-}
-
-function _updateFineTuneStartRange() {
-  if (_fineTuneStartActive) return;
-  var s = document.getElementById("dt-micro-start");
-  if (!s) return;
-  var dur = state.mediaDuration || 99999;
-  var lo = Math.max(0, _sliderStart - _FINE_TUNE_WINDOW);
-  var hi = Math.min(_sliderEnd - 0.04, _sliderStart + _FINE_TUNE_WINDOW);
-  if (hi < lo + 0.04) hi = lo + 0.04;
-  s.min = lo;
-  s.max = hi;
-  s.value = Math.max(lo, Math.min(hi, _sliderStart));
-  _updateFineTuneStartVal();
-}
-
-function _updateFineTuneEndRange() {
-  if (_fineTuneEndActive) return;
-  var s = document.getElementById("dt-micro-end");
-  if (!s) return;
-  var dur = state.mediaDuration || 99999;
-  var lo = Math.max(_sliderStart + 0.04, _sliderEnd - _FINE_TUNE_WINDOW);
-  var hi = Math.min(dur, _sliderEnd + _FINE_TUNE_WINDOW);
-  if (hi < lo + 0.04) hi = lo + 0.04;
-  s.min = lo;
-  s.max = hi;
-  s.value = Math.max(lo, Math.min(hi, _sliderEnd));
-  _updateFineTuneEndVal();
-}
-
-function _updateFineTuneStartVal() {
-  var el = document.getElementById("dt-micro-start-val");
-  if (el) el.textContent = fmtTime(_sliderStart);
-}
-
-function _updateFineTuneEndVal() {
-  var el = document.getElementById("dt-micro-end-val");
-  if (el) el.textContent = fmtTime(_sliderEnd);
-}
-
-function updateFineTuneSliders() {
-  // Skip during passive playback — DOM writes starve video decoder
-  var vid = document.getElementById("preview-video");
-  if (vid && !vid.paused) return;
-  _updateFineTuneStartRange();
-  _updateFineTuneEndRange();
-}
-
-// ── Mark Mode — the video is the scrubber ────────────────────────────────
-// No aiming, no dragging: play the video, tap MARK START when the moment
-// arrives, tap MARK END when it's over. Times come from the video player.
-
-function markStart() {
-  var vid = dom.previewVideo;
-  if (!vid || !isFinite(vid.currentTime)) return;
-  setSliderStart(vid.currentTime);
-  // Keep playing — user will tap MARK END when the moment finishes.
-  var msg = "Start marked at " + fmtTime(_sliderStart, true) + " — keep playing, tap Mark End when it's over.";
-  if (dom.clipStatus) dom.clipStatus.textContent = msg;
-  // Visual feedback: highlight the start button briefly
-  var b = document.getElementById("btn-mark-start");
-  if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
-}
-
-function markEnd() {
-  var vid = dom.previewVideo;
-  if (!vid || !isFinite(vid.currentTime)) return;
-  var t = vid.currentTime;
-  if (t <= _sliderStart) {
-    var msg = "Mark End is before Start — let the video play a bit longer.";
-    if (dom.clipStatus) dom.clipStatus.textContent = msg;
-    return;
-  }
-  setSliderEnd(t);
-  vid.pause();
-  var msg = "Clip ready: " + fmtTime(_sliderStart, true) + " – " + fmtTime(_sliderEnd, true) + " (" + (_sliderEnd - _sliderStart).toFixed(1) + "s).";
-  if (dom.clipStatus) dom.clipStatus.textContent = msg;
-  var b = document.getElementById("btn-mark-end");
-  if (b) { b.classList.add("just-marked"); setTimeout(function(){ b.classList.remove("just-marked"); }, 600); }
-  // No auto-loop — the video stays paused where the user ended it.
-  // The ▶ Clip button previews the selection when the user asks for it.
-}
-
-function nudgeStart(delta) {
-  setSliderStart(_sliderStart + delta);
-  seekVideoTo(_sliderStart);
-}
-
-function nudgeEnd(delta) {
-  setSliderEnd(_sliderEnd + delta);
-  seekVideoTo(_sliderEnd);
-}
-
-// ── Range Bar Zoom ────────────────────────────────────────────────────
-
-function toggleRangeZoom() {
-  if (!state.mediaDuration) return;
-  if (!_rangeZoomed) {
-    // Zoom in: center 10-min window on the clip range
-    var center = _sliderStart + (_sliderEnd - _sliderStart) / 2;
-    var half = _RANGE_ZOOM_SPAN / 2;
-    _rangeViewMin = Math.max(0, Math.min(state.mediaDuration - _RANGE_ZOOM_SPAN, center - half));
-    _rangeViewMax = _rangeViewMin + _RANGE_ZOOM_SPAN;
-    _rangeZoomed = true;
-  } else {
-    _rangeZoomed = false;
-  }
-  _updateZoomBtn();
-  updateRangeBar();
-}
-
-function _updateZoomBtn() {
-  var b = document.getElementById("btn-range-zoom");
-  if (!b) return;
-  b.textContent = _rangeZoomed ? "\u293A Full" : "\uD83D\uDD0D";
-  b.classList.toggle("active", _rangeZoomed);
-  b.title = _rangeZoomed ? "Back to full movie" : "Zoom to 10-minute view";
-}
-
-// ── Preset Buttons ─────────────────────────────────────────────────────
-
-function handlePreset(action, value) {
-  if (action === "shift-start") {
-    var ns = Math.max(0, _sliderStart + value);
-    if (_rangeLocked) {
-      // Locked: slide the entire window, keeping duration fixed
-      setSliderStart(ns);
-      setSliderEnd(Math.min(state.mediaDuration, ns + _lockedDuration));
-    } else {
-      var dur = _sliderEnd - _sliderStart;
-      setSliderStart(ns);
-      setSliderEnd(Math.min(state.mediaDuration, ns + Math.max(1, dur)));
-    }
-    seekVideoTo(_sliderStart);
-  } else if (action === "shift-end") {
-    var ne = Math.min(state.mediaDuration, _sliderEnd + value);
-    if (_rangeLocked) {
-      // Locked: slide the entire window
-      setSliderEnd(ne);
-      setSliderStart(Math.max(0, ne - _lockedDuration));
-    } else {
-      setSliderEnd(Math.max(_sliderStart + 1, ne));
-    }
-    seekVideoTo(_sliderEnd);
-  } else if (action === "set-duration") {
-    _rangeLocked = true;
-    _lockedDuration = value;
-    setSliderEnd(Math.min(state.mediaDuration, _sliderStart + value));
-    seekVideoTo(_sliderStart);
-    updatePresetButtons();
-  } else if (action === "unlock") {
-    _rangeLocked = false;
-    updatePresetButtons();
-  }
-}
-
-// Highlight the active preset button when range is locked.
-function updatePresetButtons() {
-  var btns = document.querySelectorAll(".preset-duration-btn");
-  for (var i = 0; i < btns.length; i++) {
-    var dur = parseInt(btns[i].getAttribute("data-duration"));
-    btns[i].classList.toggle("active", _rangeLocked && dur === _lockedDuration);
-  }
-  var freeBtn = document.getElementById("btn-preset-free");
-  if (freeBtn) freeBtn.classList.toggle("active", !_rangeLocked);
-}
-
 // ── Social media toggles ────────────────────────────────────────────────
 
 function toggleCaptions() {
@@ -1489,68 +1016,26 @@ function toggleCaptionPosition() {
 }
 
 function updateToggleButtons() {
-  if (dom.btnCaptions) {
-    dom.btnCaptions.classList.toggle("active", _captionsEnabled);
-    dom.btnCaptions.textContent = _captionsEnabled ? "💬 Captions ON" : "💬 Captions";
-
-  // Show/hide collapsible caption options on mobile
-  var capOpts = document.querySelector(".caption-options");
-  if (capOpts) capOpts.classList.toggle("visible", _captionsEnabled);
-  }
-  if (dom.btnCaptionColor) {
-    var showColor = _captionsEnabled;
-    dom.btnCaptionColor.style.display = showColor ? "" : "none";
-    if (showColor) {
-      dom.btnCaptionColor.textContent = _captionColor === "white" ? "🎨 White" : "🎨 Yellow";
-      dom.btnCaptionColor.classList.toggle("active", _captionColor !== "white");
-    }
-  }
-  if (dom.btnCaptionPlacement) {
-    var showPlace = _captionsEnabled;
-    dom.btnCaptionPlacement.style.display = showPlace ? "" : "none";
-    if (showPlace) {
-      dom.btnCaptionPlacement.textContent = _captionPosition === "bottom" ? "📍 Bottom" : "📍 Middle";
-      dom.btnCaptionPlacement.classList.toggle("active", _captionPosition !== "bottom");
-    }
-  }
-  if (dom.btnVertical) {
-    dom.btnVertical.classList.toggle("active", _verticalEnabled);
-    dom.btnVertical.textContent = _verticalEnabled ? "📱 Vertical ON" : "📱 Vertical";
-  }
-  updateDownloadButton();
-  updateFineTuneSliders();
-  // Sync mobile checkboxes
+  // Sync the unified editor's option checkboxes
   var mcc = document.getElementById("mob-chk-captions");
   if (mcc) mcc.checked = _captionsEnabled;
   var mcv = document.getElementById("mob-chk-vertical");
   if (mcv) mcv.checked = _verticalEnabled;
+  // Sync caption color/placement option buttons (logic lives in mobile.js)
+  if (typeof _mobRenderCaptionOpts === "function") _mobRenderCaptionOpts();
+  updateDownloadButton();
 }
 
 function updateSocialToggles() {
-  if (!dom.socialToggles) return;
   var item = state.currentItem;
-  // Show toggles when a media item is selected
-  if (item && dom.detailView && dom.detailView.style.display !== "none") {
-    dom.socialToggles.style.display = "flex";
-    // Captions toggle only if subtitle file exists
-    if (dom.btnCaptions) {
-      if (item.subtitle_path) {
-        dom.btnCaptions.style.display = "";
-        dom.btnCaptions.title = "Burn word-by-word captions from subtitle file";
-      } else {
-        dom.btnCaptions.style.display = "none";
-        _captionsEnabled = false;
-      }
-    }
-  } else {
-    dom.socialToggles.style.display = "none";
-  }
-  updateToggleButtons();
-  // Sync mobile options visibility
+  var inDetail = item && dom.detailView && dom.detailView.style.display !== "none";
+  // Captions option only when a subtitle file exists for this item
+  if (item && !item.subtitle_path) _captionsEnabled = false;
   var mobOpts = document.getElementById("mob-options");
-  if (mobOpts) mobOpts.style.display = (item && dom.detailView && dom.detailView.style.display !== "none") ? "" : "none";
+  if (mobOpts) mobOpts.style.display = inDetail ? "" : "none";
   var mobCaptions = document.getElementById("mob-opt-captions");
   if (mobCaptions) mobCaptions.style.display = (item && item.subtitle_path) ? "" : "none";
+  updateToggleButtons();
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────
@@ -1558,7 +1043,7 @@ function updateSocialToggles() {
 var _clipPollTimer = null;
 
 async function downloadClip() {
-  if (!dom || !dom.btnDownload) return;
+  if (!dom) return;
 
   if (!state.currentItem) {
     if (dom.clipStatus) dom.clipStatus.textContent = "No item selected";
@@ -1831,15 +1316,6 @@ function init() {
   // Frame strip drag-to-select
   initStripDrag();
 
-  // Range bar drag handles
-  initRangeBarHandles();
-
-  // Fine-tune sliders
-  initFineTuneSliders();
-
-  // Play/pause button state tracking
-  initPlayStateTracking();
-
   // Keyboard shortcuts
   document.addEventListener("keydown", function(e) {
     // Escape to go back
@@ -1851,6 +1327,9 @@ function init() {
     if (!dom.detailView || dom.detailView.style.display === "none") return;
     // Don't capture when typing in inputs
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if ((e.key === "i" || e.key === "I") && typeof mobMarkStart === "function") { e.preventDefault(); mobMarkStart(); return; }
+    if ((e.key === "o" || e.key === "O") && typeof mobMarkEnd === "function") { e.preventDefault(); mobMarkEnd(); return; }
+    if (e.key === " ") { e.preventDefault(); var vid = dom.previewVideo; if (vid) { if (vid.paused) vid.play(); else vid.pause(); } return; }
 
     var start = _sliderStart;
     var step = e.shiftKey ? 10 : 1;
@@ -1904,31 +1383,6 @@ function init() {
       }
     });
   }
-
-  // Editable time inputs: Enter or blur applies the value
-  function wireTimeInput(inputEl, isStart) {
-    if (!inputEl) return;
-    function apply() {
-      var secs = parseTimeInput(inputEl.value.trim());
-      if (secs !== null && secs >= 0 && secs <= state.mediaDuration) {
-        if (isStart) {
-          setSliderStart(secs);
-          seekVideoTo(_sliderStart);
-        } else {
-          setSliderEnd(secs);
-        }
-      } else {
-        // Reset to current value on invalid input
-        updateTimeDisplay();
-      }
-    }
-    inputEl.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") { e.preventDefault(); apply(); inputEl.blur(); }
-    });
-    inputEl.addEventListener("blur", apply);
-  }
-  wireTimeInput(dom.timeStartInput, true);
-  wireTimeInput(dom.timeEndInput, false);
 }
 
 // ── Auth: Plex OAuth PIN flow ───────────────────────────────────────────
