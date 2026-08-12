@@ -388,8 +388,8 @@ var _mobLast = null;
 function _mobRender() {
   var unselected = !_mobStartSet && !_mobEndSet;
   var dur = unselected ? 0 : (_sliderEnd - _sliderStart);
-  var s = unselected ? "0:00.00" : fmtTime(_sliderStart, true);
-  var e = unselected ? "0:00.00" : fmtTime(_sliderEnd, true);
+  var s = unselected ? "0:00" : fmtTime(_sliderStart);
+  var e = unselected ? "0:00" : fmtTime(_sliderEnd);
   var d = unselected ? "free" : (dur.toFixed(1) + "s");
 
   if (!_mobLast) {

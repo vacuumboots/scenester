@@ -66,8 +66,11 @@ def _slugify(text: str) -> str:
 def _clip_basename(meta: dict, start_sec: float, end_sec: float) -> str:
     """Build a human-friendly clip filename without extension.
 
-    Movies:    Movie_Title_5307-5337
-    Episodes:  Show_Title_S01E03_5307-5337
+    Sub-second precision is kept to one decimal so distinct clips never
+    collide (same-integer-second ranges produce different filenames).
+
+    Movies:    Movie_Title_5307.2-5337.4
+    Episodes:  Show_Title_S01E03_5307.2-5337.4
     """
     title = _slugify(meta.get("title", "Unknown"))
     if meta.get("type") == "episode":
@@ -77,8 +80,8 @@ def _clip_basename(meta: dict, start_sec: float, end_sec: float) -> str:
         prefix = f"{show}_{title}_S{s}E{e}" if show else f"{title}_S{s}E{e}"
     else:
         prefix = title
-    start = int(start_sec)
-    end = int(end_sec)
+    start = f"{start_sec:.1f}"
+    end = f"{end_sec:.1f}"
     return f"{prefix}_{start}-{end}"
 
 # ── Subtitle utilities ────────────────────────────────────────────────────

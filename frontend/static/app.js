@@ -85,19 +85,23 @@ var _captionPosition = "bottom";    // "bottom" or "middle"
 var _isMobile = false;
 function isMobile() { return _isMobile; }
 
+// Transient seek target for jump-to-clip — consumed by onloadedmetadata.
+var _pendingSeek = null;
+
 // ── Formatting ─────────────────────────────────────────────────────────
 
-function fmtTime(seconds, precise) {
+function fmtTime(seconds) {
   if (seconds == null || isNaN(seconds)) return "0:00";
-  // Round to 2dp BEFORE splitting minutes/seconds so boundary values
-  // roll over correctly (59.999s -> 1:00.00, not 0:60.00).
-  var s = Math.max(0, Math.round(seconds * 100) / 100);
-  var m = Math.floor(s / 60);
-  var sec = s % 60;
-  if (precise) {
-    return m + ":" + sec.toFixed(2).padStart(5, "0");
+  // Whole-second point-in-time readout: M:SS under an hour, H:MM:SS at or
+  // over (never bare m:ss, never sub-second). Durations use fmtDuration.
+  var s = Math.max(0, Math.floor(seconds));
+  var h = Math.floor(s / 3600);
+  var m = Math.floor((s % 3600) / 60);
+  var sec = Math.floor(s % 60);
+  if (h > 0) {
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
   }
-  return m + ":" + String(Math.floor(sec)).padStart(2, "0");
+  return m + ":" + String(sec).padStart(2, "0");
 }
 
 function fmtDuration(ms) {
@@ -331,16 +335,18 @@ function showDetailView() {
   // Build frame strip
   if (_filmStripEnabled) buildFrameStrip(mediaId, durationS);
 
-  // Handle jump-to-clip offset from session banner
+  // Handle jump-to-clip offset from the session banner. The offset is
+  // transient intent, NOT selection state: the clip range stays FREE (both
+  // edges unset — initMobileDetail below resets them), we only seek the
+  // playhead to the paused position. A direct seek here would no-op (video
+  // metadata isn't loaded yet), so stash the offset in _pendingSeek for
+  // loadVideoPreview's onloadedmetadata to consume.
+  _sliderStart = 0;
+  _sliderEnd = 0;
   if (window._jumpOffset != null) {
-    var offset = window._jumpOffset;
-    _sliderStart = Math.max(0, Math.floor(offset - 5));
-    _sliderEnd = Math.min(durationS, Math.floor(offset + 25));
+    _pendingSeek = window._jumpOffset;
     window._jumpOffset = null;
     window._jumpDuration = null;
-  } else {
-    _sliderStart = 0;
-    _sliderEnd = Math.floor(durationS);
   }
 
   updateTimeDisplay();
@@ -551,6 +557,7 @@ function loadVideoPreview(mediaId) {
   _videoReady = false;
   _videoFailed = false;
   _loopPlayback = false;
+  _pendingSeek = null;
 
   if (!dom.previewVideo) return;
   var vid = dom.previewVideo;
@@ -574,7 +581,8 @@ function loadVideoPreview(mediaId) {
     _videoReady = true;
     if (dom.previewLoading) dom.previewLoading.style.display = "none";
     if (dom.previewError) dom.previewError.style.display = "none";
-    vid.currentTime = _sliderStart;
+    vid.currentTime = (_pendingSeek != null) ? _pendingSeek : _sliderStart;
+    _pendingSeek = null;
     // Always clear stale subtitle tracks (belt & braces — loadVideoPreview
     // already cleared before setting src). A track left from a previous
     // movie renders its cues over the new one. Must be AFTER metadata
@@ -934,7 +942,7 @@ async function downloadClip() {
     }
 
     var startData = await startResp.json();
-    filename = startData.filename;
+    var filename = startData.filename;
 
     // 2) Poll until done
     var result = await pollClipStatus(filename);
