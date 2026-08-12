@@ -1,8 +1,8 @@
 /**
  * Cliparr — Frontend Application
  *
- * Vanilla JS app handling library browsing, now-playing banner,
- * proxy generation UX, scrubber controls, and clip downloads.
+ * Vanilla JS app handling library browsing, the now-playing banner,
+ * the unified mark-from-playhead clip editor, and clip downloads.
  */
 
 
@@ -450,7 +450,7 @@ function jumpToClip(session) {
 }
 
 async function quickClip() {
-  // Clip 30s directly from the current session — no proxy needed
+  // Clip 30s directly from the current session
   if (!_currentSession) return;
 
   var mediaId = _currentSession.media_id;

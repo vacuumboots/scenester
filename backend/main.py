@@ -1,8 +1,8 @@
 """
 Cliparr — FastAPI backend.
 
-Serves the frontend SPA and provides API routes for browsing Plex,
-generating low-res proxy previews, and creating frame-accurate ffmpeg clips.
+Serves the frontend SPA and provides API routes for browsing Plex and
+creating frame-accurate ffmpeg clips (VAAPI-accelerated).
 """
 
 import asyncio
@@ -380,7 +380,7 @@ async def stream_media(media_id: int):
     HTML5 video seeking.
 
     The browser's native <video> element handles seeking via HTTP Range
-    requests — no ffmpeg proxy generation needed for preview.
+    requests directly against the original file.
     """
     try:
         meta = await plex.get_metadata(media_id)
