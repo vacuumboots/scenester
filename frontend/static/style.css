@@ -1380,8 +1380,34 @@ main {
 
 @media (min-width: 769px) {
   .clip-editor {
-    max-width: 720px;
-    margin: 24px auto 0;
+    /* Full content width — matches the video player above. */
+    margin: 24px 0 0;
+  }
+
+  /* Desktop: a full-width card, not a bottom sheet. */
+  .mob-sheet {
+    border-radius: var(--radius);
+    margin-top: 0;
+    padding: 20px 24px 28px;
+    box-shadow: var(--shadow);
+  }
+  .mob-sheet::before {
+    display: none; /* no drag handle on desktop */
+  }
+
+  /* Center oversized controls in a comfortable column while the card and
+     the range bar keep spanning the full width. */
+  .mob-filmstrip-row,
+  .mob-mark-buttons,
+  .mob-frame-snaps,
+  .mob-unset-buttons,
+  .mob-finetune,
+  .mob-presets,
+  .mob-actions {
+    max-width: 900px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .mob-mark-btn {
