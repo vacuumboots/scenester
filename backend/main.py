@@ -471,6 +471,26 @@ async def serve_subtitle(media_id: int):
 
 clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 
+_CLIP_JOB_RETENTION_SECONDS = 3600
+
+
+def _prune_clip_jobs() -> None:
+    """Drop completed clip_jobs entries older than the retention window.
+
+    Keeps the in-memory dict bounded over a long-running server. Only removes
+    jobs that are done; in-flight jobs are never touched. The status endpoint
+    already tolerates missing keys, so a pruned entry simply reads as "not
+    found" until the clip file is re-requested.
+    """
+    cutoff = time.time() - _CLIP_JOB_RETENTION_SECONDS
+    stale = [
+        name
+        for name, job in clip_jobs.items()
+        if job.get("done") and job.get("started_at", 0) < cutoff
+    ]
+    for name in stale:
+        clip_jobs.pop(name, None)
+
 # ── Hardware-accelerated clipping (VAAPI) ──────────────────────────────
 # The host is a Haswell iGPU (i965 driver): H264/MPEG2/VC1 HW decode,
 # H264 Main-profile HW encode. No HEVC/VP9/AV1 HW decode — those fall
@@ -554,7 +574,7 @@ def _build_clip_cmd(
     return cmd
 
 
-async def _run_ffmpeg_clip(
+async def _clip_impl(
     filename: str,
     file_path: str,
     start_sec: float,
@@ -566,13 +586,13 @@ async def _run_ffmpeg_clip(
     caption_color: str = "white",
     caption_position: str = "bottom",
 ):
-    """Run ffmpeg to generate a clip, updating progress in clip_jobs.
+    """Build and run the ffmpeg command for one clip, writing clip_jobs.
 
     Optionally embeds metadata, burns in word-chunked captions from an SRT
-    file, and crops to vertical 9:16 for social media.
+    file, and crops to vertical 9:16 for social media. Exceptions are NOT
+    caged here — _run_ffmpeg_clip wraps this call.
     """
     output_path = CLIPS_DIR / filename
-    clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
 
     tmp_srt: Path | None = None
     vf_chain: list[str] = []
@@ -706,10 +726,38 @@ async def _run_ffmpeg_clip(
         except OSError:
             pass
 
+    started = clip_jobs[filename].get("started_at", time.time())
     if rc == 0 and output_path.exists() and output_path.stat().st_size > 0:
-        clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
+        clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None, "started_at": started}
     else:
-        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {rc}"}
+        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {rc}", "started_at": started}
+
+
+async def _run_ffmpeg_clip(
+    filename: str,
+    file_path: str,
+    start_sec: float,
+    duration: float,
+    meta: dict | None = None,
+    subtitle_path: str | None = None,
+    vertical: bool = False,
+    words_per_chunk: int = 3,
+    caption_color: str = "white",
+    caption_position: str = "bottom",
+):
+    """Run a clip and mark clip_jobs done on completion OR unexpected error.
+
+    The try/except ensures a failed run (e.g. ffmpeg missing) marks the job
+    done-with-error so the client's poll terminates instead of timing out.
+    """
+    clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
+    try:
+        await _clip_impl(
+            filename, file_path, start_sec, duration, meta, subtitle_path,
+            vertical, words_per_chunk, caption_color, caption_position,
+        )
+    except Exception as e:
+        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": str(e), "started_at": time.time()}
 
 
 @app.post("/api/clip")
@@ -721,6 +769,8 @@ async def create_clip(req: ClipRequest):
     duration = req.end_sec - req.start_sec
     if duration <= 0:
         raise HTTPException(status_code=400, detail="End must be after start")
+
+    _prune_clip_jobs()
 
     try:
         meta = await plex.get_metadata(req.media_id)
@@ -748,7 +798,7 @@ async def create_clip(req: ClipRequest):
     # Check if already complete
     output_path = CLIPS_DIR / filename
     if output_path.exists():
-        clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None}
+        clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None, "started_at": time.time()}
         return {"status": "ready", "filename": filename}
 
     # Start generation in background

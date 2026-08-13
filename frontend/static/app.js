@@ -927,7 +927,7 @@ async function downloadClip() {
       a.click();
       document.body.removeChild(a);
 
-      if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + filename + " (" + Math.round(result.duration || (endSec - startSec)) + "s)";
+      if (dom.clipStatus) dom.clipStatus.textContent = "Downloaded " + filename + " (" + Math.round(endSec - startSec) + "s)";
       loadClipGallery();
     } else {
       throw new Error(result.error || "Unknown error");
@@ -958,7 +958,7 @@ function pollClipStatus(filename) {
             // Done — resolve with the result
             if (dom.clipProgressFill) dom.clipProgressFill.style.width = "100%";
             if (dom.clipProgressText) dom.clipProgressText.textContent = "Done!";
-            resolve({ done: true, error: null, duration: null, filename: filename });
+            resolve({ done: true, error: null, filename: filename });
             return;
           }
 
@@ -1115,7 +1115,7 @@ function init() {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     if ((e.key === "i" || e.key === "I") && typeof mobMarkStart === "function") { e.preventDefault(); mobMarkStart(); return; }
     if ((e.key === "o" || e.key === "O") && typeof mobMarkEnd === "function") { e.preventDefault(); mobMarkEnd(); return; }
-    if (e.key === " ") { e.preventDefault(); var vid = dom.previewVideo; if (vid) { if (vid.paused) vid.play(); else vid.pause(); } return; }
+    if (e.key === " ") { if (e.target.tagName === "BUTTON") return; e.preventDefault(); var vid = dom.previewVideo; if (vid) { if (vid.paused) vid.play(); else vid.pause(); } return; }
 
     var start = _sliderStart;
     var step = e.shiftKey ? 10 : 1;

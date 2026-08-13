@@ -192,3 +192,35 @@ def test_chunk_sorts_by_start_time():
 
 def test_chunk_skips_empty_entries():
     assert main.chunk_srt_for_social([{"start": 0.0, "end": 1.0, "text": "   "}]) == ""
+
+
+# ── robustness (Phase 5): clip_jobs pruning + exception cage ───────────────
+
+
+def test_prune_clip_jobs_removes_only_done_stale_entries():
+    import time
+
+    main.clip_jobs.clear()
+    now = time.time()
+    main.clip_jobs["old_done"] = {"progress": 1.0, "done": True, "started_at": now - 7200}
+    main.clip_jobs["recent_done"] = {"progress": 1.0, "done": True, "started_at": now}
+    main.clip_jobs["in_flight"] = {"progress": 0.5, "done": False, "started_at": now - 7200}
+    main._prune_clip_jobs()
+    assert "old_done" not in main.clip_jobs
+    assert "recent_done" in main.clip_jobs
+    assert "in_flight" in main.clip_jobs
+
+
+def test_run_ffmpeg_clip_cages_unexpected_exception(monkeypatch):
+    import asyncio
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("ffmpeg binary missing")
+
+    monkeypatch.setattr(main, "_clip_impl", boom)
+    main.clip_jobs.clear()
+    asyncio.run(main._run_ffmpeg_clip("test_cage.mp4", "/nonexistent/input.mkv", 0.0, 1.0))
+    job = main.clip_jobs["test_cage.mp4"]
+    assert job["done"] is True
+    assert job["error"] == "ffmpeg binary missing"
+    assert job["progress"] == 0.0

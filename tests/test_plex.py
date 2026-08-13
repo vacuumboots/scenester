@@ -109,3 +109,20 @@ def test_find_subtitle_returns_none_on_listdir_error(tmp_path, monkeypatch):
 
     monkeypatch.setattr(os, "listdir", boom)
     assert plex._find_subtitle_path(str(media)) is None
+
+
+def test_translate_path_configurable_prefix(monkeypatch):
+    # Phase 5: PLEX_MEDIA_SRC / PLEX_MEDIA_DST override the hardcoded mapping.
+    monkeypatch.setattr(plex, "PLEX_MEDIA_SRC", "/srv/plex")
+    monkeypatch.setattr(plex, "PLEX_MEDIA_DST", "/videos")
+    mc = {"Media": [{"height": 1080, "Part": [{"file": "/srv/plex/movies/Film.mkv"}]}]}
+    assert plex._translate_path(mc) == "/videos/movies/Film.mkv"
+
+
+def test_set_token_writes_0600_permissions(tmp_path, monkeypatch):
+    # Phase 5: the persisted token is not world-readable.
+    monkeypatch.setattr(plex, "_token", None)
+    token_file = tmp_path / "plex_token.json"
+    monkeypatch.setattr(plex, "TOKEN_FILE", token_file)
+    plex.set_token("sekrit")
+    assert token_file.stat().st_mode & 0o777 == 0o600

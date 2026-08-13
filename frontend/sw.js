@@ -28,9 +28,9 @@ self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
 
-  // API: never serve stale
+  // API: network-only — never cached, never served from cache
   if (url.pathname.includes("/api/")) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    e.respondWith(fetch(e.request));
     return;
   }
 

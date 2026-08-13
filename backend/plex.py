@@ -22,6 +22,11 @@ import httpx
 PLEX_URL = os.getenv("PLEX_URL", "http://host.docker.internal:32400")
 PLEX_TV = "https://plex.tv"
 
+# Media path translation: Plex's internal path prefix → the container's
+# bind-mount prefix. Override via env when the layout differs.
+PLEX_MEDIA_SRC = os.getenv("PLEX_MEDIA_SRC", "/data/media")
+PLEX_MEDIA_DST = os.getenv("PLEX_MEDIA_DST", "/media")
+
 # Token persistence
 TOKEN_FILE = Path(os.getenv("CLIPARR_DATA_DIR", "/data")) / "plex_token.json"
 CLIENT_ID_FILE = Path(os.getenv("CLIPARR_DATA_DIR", "/data")) / "client_id.json"
@@ -62,6 +67,7 @@ def set_token(t: str) -> None:
     try:
         TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
         TOKEN_FILE.write_text(json.dumps({"token": t}))
+        os.chmod(TOKEN_FILE, 0o600)
     except Exception:
         pass  # Non-fatal — still have it in memory
 
@@ -102,6 +108,7 @@ def _load_client_id() -> str:
     try:
         CLIENT_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
         CLIENT_ID_FILE.write_text(json.dumps({"client_id": _client_id}))
+        os.chmod(CLIENT_ID_FILE, 0o600)
     except Exception:
         pass
     return _client_id
@@ -255,9 +262,9 @@ def _translate_path(mc: dict) -> str:
     # Prefer 1080p or lower; pick smallest height that's >= 720
     for fp, h in candidates:
         if 720 <= h <= 1080:
-            return fp.replace("/data/media", "/media", 1)
+            return fp.replace(PLEX_MEDIA_SRC, PLEX_MEDIA_DST, 1)
     # Fall back to any height (e.g. 4K-only content)
-    return candidates[0][0].replace("/data/media", "/media", 1)
+    return candidates[0][0].replace(PLEX_MEDIA_SRC, PLEX_MEDIA_DST, 1)
 
 
 # ── Plex API ──────────────────────────────────────────────────────────────
