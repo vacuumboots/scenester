@@ -1,5 +1,7 @@
 # Cliparr
 
+## Proudly vibecoded with Deepseek 🐋
+
 Cliparr clips movies from your Plex library. Browse, scrub a live video preview,
 mark a range with two buttons, and download frame-accurate 1080p clips.
 
