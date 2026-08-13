@@ -1376,38 +1376,16 @@ main {
   }
 }
 
-/* ── Desktop unified editor layout ────────────────────────────────────── */
-
+/* ── Desktop (≥769px): shared editor polish ──────────────────────────── */
 @media (min-width: 769px) {
-  .clip-editor {
-    /* Full content width — matches the video player above. */
-    margin: 24px 0 0;
-  }
-
-  /* Desktop: a full-width card, not a bottom sheet. */
+  /* The editor is a card on every desktop size — no bottom-sheet chrome. */
   .mob-sheet {
     border-radius: var(--radius);
     margin-top: 0;
-    padding: 20px 24px 28px;
     box-shadow: var(--shadow);
   }
   .mob-sheet::before {
     display: none; /* no drag handle on desktop */
-  }
-
-  /* Center oversized controls in a comfortable column while the card and
-     the range bar keep spanning the full width. */
-  .mob-filmstrip-row,
-  .mob-mark-buttons,
-  .mob-frame-snaps,
-  .mob-unset-buttons,
-  .mob-finetune,
-  .mob-presets,
-  .mob-actions {
-    max-width: 900px;
-    width: 100%;
-    margin-left: auto;
-    margin-right: auto;
   }
 
   .mob-mark-btn {
@@ -1441,5 +1419,63 @@ main {
   }
   .fine-tune[open] summary {
     border-color: var(--border-hover);
+  }
+}
+
+/* ── Tablet / landscape phone (769–899px): full-width stacked card ───── */
+@media (min-width: 769px) and (max-width: 899px) {
+  .clip-editor {
+    margin: 24px 0 0;
+  }
+  .mob-sheet {
+    padding: 20px 24px 28px;
+  }
+
+  /* Center oversized controls in a comfortable column while the card and
+     the range bar keep spanning the full width. */
+  .mob-filmstrip-row,
+  .mob-mark-buttons,
+  .mob-frame-snaps,
+  .mob-unset-buttons,
+  .mob-finetune,
+  .mob-presets,
+  .mob-actions {
+    max-width: 900px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* ── Desktop monitors (≥900px): two-pane — video left, editor right ──── */
+@media (min-width: 900px) {
+  #detail-view {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-areas:
+      "back     back"
+      "target   target"
+      "banner   banner"
+      "video    editor"
+      "status   status"
+      "strip    strip";
+    column-gap: 20px;
+    align-items: start;
+  }
+  #btn-back      { grid-area: back; }
+  .target-card   { grid-area: target; }
+  .error-banner  { grid-area: banner; margin-bottom: 16px; }
+  #preview-video { grid-area: video; }
+  .clip-editor   { grid-area: editor; }
+  #frame-preview { grid-area: status; }
+  #frame-strip   { grid-area: strip; margin-top: 16px; }
+
+  /* The video is the hero — let it fill the left pane up to the viewport. */
+  .preview-video-shared {
+    max-height: calc(100vh - 260px);
+  }
+
+  .mob-sheet {
+    padding: 16px 16px 20px;
   }
 }
