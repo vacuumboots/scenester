@@ -77,6 +77,9 @@ docker run -d --name cliparr \
   without it Plex API calls fail.
 - `--device /dev/dri/renderD128` enables VAAPI hardware clipping. Omit it (or
   set `CLIPARR_DISABLE_VAAPI=1`) to force the libx264 fallback.
+- Prefer pulling a prebuilt image over building? `docker pull
+  ghcr.io/vacuumboots/cliparr:latest` — the image is rebuilt automatically on
+  every push to `main` (see section 3).
 
 ### 3. Run with Docker Compose (alternative)
 
@@ -85,7 +88,8 @@ docker run -d --name cliparr \
 ```yaml
 services:
   cliparr:
-    build: .   # or: image: cliparr:latest  (if you build with docker build first)
+    image: ghcr.io/vacuumboots/cliparr:latest   # prebuilt — rebuilt on every push to main
+    # build: .   # alternative: build from source instead of pulling
     container_name: cliparr
     restart: unless-stopped
     ports:
@@ -105,8 +109,9 @@ services:
 docker compose up -d
 ```
 
-`extra_hosts` is the compose spelling of `--add-host`; `build: .` rebuilds the
-image on demand, or swap in `image:` if you build separately.
+`extra_hosts` is the compose spelling of `--add-host`; `image:` pulls the
+prebuilt image from GitHub Container Registry, and `build: .` is the
+build-from-source alternative.
 
 ### 4. Serve behind a reverse proxy (optional)
 
