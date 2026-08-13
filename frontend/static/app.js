@@ -300,7 +300,7 @@ function showDetailView() {
   if (!item) return;
 
   if (dom.libraryView) dom.libraryView.style.display = "none";
-  if (dom.detailView) dom.detailView.style.display = "";
+  if (dom.detailView) dom.detailView.style.display = "block";
 
   // Landing position: the library grid is huge (100k+ px), so swapping
   // views clamps the old scrollTop to the much shorter detail view —
