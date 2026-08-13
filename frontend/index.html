@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Cliparr</title>
-  <link rel="stylesheet" href="static/style.css?v=54">
+  <link rel="stylesheet" href="static/style.css?v=55">
 </head>
 <body>
 
@@ -264,6 +264,12 @@
         <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
         📱 Vertical 9:16
       </label>
+      <label class="mob-option">🎞 Format
+        <select id="mob-sel-format" onchange="toggleFormat()" style="margin-left:auto">
+          <option value="mp4">MP4</option>
+          <option value="gif">GIF</option>
+        </select>
+      </label>
     </details>
 
     <!-- Progress + status (IDs stable — downloadClip mirroring relies on them) -->
@@ -279,8 +285,8 @@
 
 </main>
 
-<script src="static/app.js?v=49"></script>
-<script src="static/mobile.js?v=50"></script>
+<script src="static/app.js?v=50"></script>
+<script src="static/mobile.js?v=51"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");

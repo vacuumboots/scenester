@@ -226,6 +226,7 @@ class ClipRequest(BaseModel):
     words_per_chunk: int = 3
     caption_color: str = "white"   # "white" or "yellow"
     caption_position: str = "bottom"  # "bottom" or "middle"
+    format: str = "mp4"  # "mp4" or "gif"
 
 
 # ── Static frontend ──────────────────────────────────────────────────────
@@ -585,6 +586,7 @@ async def _clip_impl(
     words_per_chunk: int = 3,
     caption_color: str = "white",
     caption_position: str = "bottom",
+    fmt: str = "mp4",
 ):
     """Build and run the ffmpeg command for one clip, writing clip_jobs.
 
@@ -671,7 +673,7 @@ async def _clip_impl(
     # Tier 2:           CPU decode (HEVC/VP9/AV1) + HW encode.
     # Tier 3 (fallback): libx264 — used when /dev/dri is absent OR a VAAPI
     #                    run fails (the clip must never silently break).
-    use_vaapi = _vaapi_available()
+    use_vaapi = fmt != "gif" and _vaapi_available()
     hw_decode = False
     if use_vaapi:
         codec = _probe_video_codec(file_path)
@@ -704,6 +706,41 @@ async def _clip_impl(
                     clip_jobs[filename]["progress"] = pct
         await proc.wait()
         return proc.returncode if proc.returncode is not None else 1
+
+    if fmt == "gif":
+        # ── GIF output: standalone palette pipeline, no VAAPI ─────────
+        # Scale chain first (adapted for GIF), then subtitles, then
+        # fps + palettegen/paletteuse.
+        gif_scale = "scale=480:-2"
+        if vertical:
+            gif_scale = "crop=ih*9/16:ih:(iw-ow)/2:0,scale=480:-2"
+        gif_chain = [gif_scale] + vf_chain[1:]
+        gif_vf = ",".join(gif_chain) + ",fps=15,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+        gif_cmd = [
+            "ffmpeg", "-y", "-v", "error",
+            "-ss", str(start_sec), "-t", str(duration),
+            "-i", file_path,
+            "-vf", gif_vf,
+            "-loop", "0",
+            "-map", "0:v:0",
+            "-progress", "pipe:2",
+            str(output_path),
+        ]
+        rc = await _run_async(gif_cmd)
+
+        # Clean up temp SRT
+        if tmp_srt and tmp_srt.exists():
+            try:
+                tmp_srt.unlink()
+            except OSError:
+                pass
+
+        started = clip_jobs[filename].get("started_at", time.time())
+        if rc == 0 and output_path.exists() and output_path.stat().st_size > 0:
+            clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None, "started_at": started}
+        else:
+            clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {rc}", "started_at": started}
+        return
 
     cmd = _build_clip_cmd(
         file_path, start_sec, duration, str(output_path), vf, meta_args,
@@ -744,6 +781,7 @@ async def _run_ffmpeg_clip(
     words_per_chunk: int = 3,
     caption_color: str = "white",
     caption_position: str = "bottom",
+    fmt: str = "mp4",
 ):
     """Run a clip and mark clip_jobs done on completion OR unexpected error.
 
@@ -754,7 +792,7 @@ async def _run_ffmpeg_clip(
     try:
         await _clip_impl(
             filename, file_path, start_sec, duration, meta, subtitle_path,
-            vertical, words_per_chunk, caption_color, caption_position,
+            vertical, words_per_chunk, caption_color, caption_position, fmt,
         )
     except Exception as e:
         clip_jobs[filename] = {"progress": 0.0, "done": True, "error": str(e), "started_at": time.time()}
@@ -769,6 +807,8 @@ async def create_clip(req: ClipRequest):
     duration = req.end_sec - req.start_sec
     if duration <= 0:
         raise HTTPException(status_code=400, detail="End must be after start")
+    if req.format not in ("mp4", "gif"):
+        raise HTTPException(status_code=400, detail="Invalid format")
 
     _prune_clip_jobs()
 
@@ -789,7 +829,8 @@ async def create_clip(req: ClipRequest):
         if not subtitle_path or not os.path.isfile(subtitle_path):
             raise HTTPException(status_code=400, detail="No subtitle file found for this media")
 
-    filename = f"{_clip_basename(meta, req.start_sec, req.end_sec)}.mp4"
+    ext = "gif" if req.format == "gif" else "mp4"
+    filename = f"{_clip_basename(meta, req.start_sec, req.end_sec)}.{ext}"
 
     # Check if already running
     if filename in clip_jobs and not clip_jobs[filename].get("done"):
@@ -809,6 +850,7 @@ async def create_clip(req: ClipRequest):
         words_per_chunk=req.words_per_chunk,
         caption_color=req.caption_color,
         caption_position=req.caption_position,
+        fmt=req.format,
     ))
     return {"status": "started", "filename": filename, "duration": duration}
 
@@ -839,15 +881,16 @@ async def clip_status(filename: str):
 @app.get("/api/download/{filename}")
 async def download(filename: str):
     """Serve a generated clip for download."""
-    # Sanitize: prevent path traversal, only allow .mp4 files
-    if ".." in filename or "/" in filename or not filename.endswith(".mp4"):
+    # Sanitize: prevent path traversal, only allow .mp4/.gif files
+    if ".." in filename or "/" in filename or not (filename.endswith(".mp4") or filename.endswith(".gif")):
         raise HTTPException(status_code=400, detail="Invalid filename")
     file_path = CLIPS_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Clip not found")
+    media_type = "image/gif" if filename.endswith(".gif") else "video/mp4"
     return FileResponse(
         file_path,
-        media_type="video/mp4",
+        media_type=media_type,
         filename=filename,
     )
 
@@ -858,7 +901,11 @@ async def download(filename: str):
 async def list_clips():
     """List all generated clips, newest first (skip zero-byte files from failed encodes)."""
     clips = []
-    for f in sorted(CLIPS_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+    files = sorted(
+        list(CLIPS_DIR.glob("*.mp4")) + list(CLIPS_DIR.glob("*.gif")),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    for f in files:
         size = f.stat().st_size
         if size == 0:
             continue
@@ -875,7 +922,7 @@ async def list_clips():
 @app.delete("/api/clips/{filename}")
 async def delete_clip(filename: str):
     """Delete a generated clip."""
-    if ".." in filename or "/" in filename or not filename.endswith(".mp4"):
+    if ".." in filename or "/" in filename or not (filename.endswith(".mp4") or filename.endswith(".gif")):
         raise HTTPException(status_code=400, detail="Invalid filename")
     file_path = CLIPS_DIR / filename
     if not file_path.exists():

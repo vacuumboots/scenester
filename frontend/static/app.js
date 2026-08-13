@@ -80,6 +80,7 @@ var _captionsEnabled = false;
 var _verticalEnabled = false;
 var _captionColor = "white";        // "white" or "yellow"
 var _captionPosition = "bottom";    // "bottom" or "middle"
+var _clipFormat = "mp4";            // "mp4" or "gif"
 
 // Mobile detection
 var _isMobile = false;
@@ -816,6 +817,7 @@ function updateDownloadButton() {
       parts.push(capDetails);
     }
     if (_verticalEnabled) parts.push("vertical");
+    if (_clipFormat === "gif") parts.push("gif");
     if (parts.length) label = "⬇ Download Clip (" + parts.join(" + ") + ")";
     dom.btnDownload.textContent = label;
   }
@@ -843,12 +845,20 @@ function toggleCaptionPosition() {
   updateToggleButtons();
 }
 
+function toggleFormat() {
+  var sel = document.getElementById("mob-sel-format");
+  if (sel) _clipFormat = sel.value;
+  updateToggleButtons();
+}
+
 function updateToggleButtons() {
   // Sync the unified editor's option checkboxes
   var mcc = document.getElementById("mob-chk-captions");
   if (mcc) mcc.checked = _captionsEnabled;
   var mcv = document.getElementById("mob-chk-vertical");
   if (mcv) mcv.checked = _verticalEnabled;
+  var mf = document.getElementById("mob-sel-format");
+  if (mf) mf.value = _clipFormat;
   // Sync caption color/placement option buttons (logic lives in mobile.js)
   if (typeof _mobRenderCaptionOpts === "function") _mobRenderCaptionOpts();
   updateDownloadButton();
@@ -897,14 +907,14 @@ async function downloadClip() {
   // Progress UI (unified #mob-clip-progress* — dom.clipProgress* re-point there)
   if (dom.clipProgress) dom.clipProgress.style.display = "block";
   if (dom.clipProgressFill) dom.clipProgressFill.style.width = "0%";
-  if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting clip " + fmtTime(startSec) + "-" + fmtTime(endSec) + "...";
+  if (dom.clipProgressText) dom.clipProgressText.textContent = "Starting " + (_clipFormat === "gif" ? "GIF " : "clip ") + fmtTime(startSec) + "-" + fmtTime(endSec) + "...";
 
   try {
     // 1) Start clip generation (returns immediately)
     var startResp = await fetch("api/clip", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ media_id: mediaId, start_sec: startSec, end_sec: endSec, captions: _captionsEnabled, vertical: _verticalEnabled, caption_color: _captionColor, caption_position: _captionPosition }),
+      body: JSON.stringify({ media_id: mediaId, start_sec: startSec, end_sec: endSec, captions: _captionsEnabled, vertical: _verticalEnabled, caption_color: _captionColor, caption_position: _captionPosition, format: _clipFormat }),
     });
 
     if (!startResp.ok) {
@@ -964,7 +974,7 @@ function pollClipStatus(filename) {
 
           // Update progress
           var pct = Math.round(status.progress * 100);
-          var text = "Encoding clip... " + pct + "%";
+          var text = "Encoding " + (_clipFormat === "gif" ? "GIF" : "clip") + "... " + pct + "%";
           if (status.eta_seconds != null && status.eta_seconds > 0) {
             var mins = Math.floor(status.eta_seconds / 60);
             var secs = status.eta_seconds % 60;
@@ -1006,7 +1016,9 @@ async function loadClipGallery() {
       var c = clips[i];
       var sizeMB = (c.size / 1048576).toFixed(1);
       html += '<div class="clip-card">' +
-        '<video src="api/download/' + c.filename + '" controls preload="metadata"></video>' +
+        (c.filename.slice(-4).toLowerCase() === ".gif"
+          ? '<img src="api/download/' + c.filename + '" class="clip-gif" alt="">'
+          : '<video src="api/download/' + c.filename + '" controls preload="metadata"></video>') +
         '<div class="clip-card-info">' +
           '<span class="clip-card-name" title="' + c.filename + '">' + c.filename + ' (' + sizeMB + 'MB)</span>' +
           '<div class="clip-card-actions">' +

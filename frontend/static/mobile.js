@@ -427,6 +427,7 @@ function _mobRender() {
       var parts = [];
       if (_captionsEnabled) parts.push("captions");
       if (_verticalEnabled) parts.push("vertical");
+      if (_clipFormat === "gif") parts.push("gif");
       if (parts.length) dlLabel = "⬇ Download Clip (" + parts.join(" + ") + ")";
     }
     if (dlDisabled !== _mobLast.dlDisabled) {
