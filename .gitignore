@@ -10,3 +10,4 @@ __pycache__/
 .hermes/
 HANDOFF.md
 CHANGELOG.md
+gitignore_human_handoff/
