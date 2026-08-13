@@ -7,17 +7,19 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Cliparr">
-  <link rel="apple-touch-icon" href="static/icon-192.png">
+  <link rel="icon" type="image/x-icon" href="static/trans.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/trans.png">
+  <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Cliparr</title>
-  <link rel="stylesheet" href="static/style.css?v=49">
+  <link rel="stylesheet" href="static/style.css?v=53">
 </head>
 <body>
 
 <!-- ── Login overlay (OAuth PIN flow) ──────────────────────────────── -->
 <div class="login-overlay" id="login-overlay">
   <div class="login-card">
-    <div class="login-logo">Cliparr</div>
+    <div class="login-logo"><img src="static/trans.png" alt="" class="login-logo-img"><span class="login-wordmark"><span class="brand-clip">Clip</span><span class="brand-arr">arr</span></span></div>
     <div class="login-sub">Plex Clip Maker</div>
 
     <!-- Step 1: Connect button -->
@@ -52,7 +54,7 @@
 
 <header>
   <div class="header-inner">
-    <h1>Cliparr</h1>
+    <h1><img src="static/trans.png" alt="" class="header-logo"><span class="wordmark"><span class="brand-clip">Clip</span><span class="brand-arr">arr</span></span></h1>
     <div class="search-row">
       <input id="search" type="text" placeholder="Search library..." autocomplete="off">
       <select id="sort-by">
