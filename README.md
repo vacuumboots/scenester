@@ -18,6 +18,8 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 
 - **Video-first preview** — direct media streaming with byte-range seeking; the
   native `<video>` controls are the only scrubber.
+- **Mobile-friendly** — the full editing workflow works in portrait and
+  landscape on phones, not just desktop.
 - **Unified mark-from-playhead editor** — one selection model on desktop and
   mobile: play to a moment and tap **Set Start**, play on and tap **Set End**.
   Unset buttons free an edge to ride the playhead again.
@@ -27,6 +29,13 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 - **Looped clip preview** — 🔁 Loop auditions the selected range before download.
 - **Opt-in film strip** — a navigation-only thumbnail strip (🗂 toggle): tap a
   frame to move the playhead. It never marks clip edges.
+- **MP4 or GIF output** — pick the format in the editor; GIFs go through a
+  palette-optimized ffmpeg pipeline for small, crisp loops.
+- **Optional caption burning** — .srt files found alongside the media (e.g.
+  `Movie.en.srt`) can be burned in as bold word-chunked captions, right from
+  the editor.
+- **Optional 9:16 vertical export** — center-cropped 1080×1920, framed for
+  TikTok / Reels / Shorts.
 - **Plex OAuth login** — PIN flow via plex.tv, or set `PLEX_TOKEN`.
 - **Human-readable filenames** — `Inception_5307.2-5337.4.mp4` (one-decimal
   sub-second precision, so distinct clips never collide).
