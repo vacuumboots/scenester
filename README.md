@@ -5,6 +5,15 @@
 Cliparr clips movies from your Plex library. Browse, scrub a live video preview,
 mark a range with two buttons, and download frame-accurate 1080p clips.
 
+<p align="center">
+  <img src="screenshots/library-desktop.jpg" alt="Cliparr movie library on desktop" width="62%">
+  <img src="screenshots/editor-desktop.jpg" alt="Clip editor on desktop" width="36%">
+</p>
+<p align="center">
+  <img src="screenshots/library-mobile.jpg" alt="Cliparr movie library on mobile" width="180">
+  <img src="screenshots/editor-mobile.jpg" alt="Clip editor on mobile" width="180">
+</p>
+
 ## Features
 
 - **Video-first preview** — direct media streaming with byte-range seeking; the
@@ -69,7 +78,37 @@ docker run -d --name cliparr \
 - `--device /dev/dri/renderD128` enables VAAPI hardware clipping. Omit it (or
   set `CLIPARR_DISABLE_VAAPI=1`) to force the libx264 fallback.
 
-### 3. Serve behind a reverse proxy (optional)
+### 3. Run with Docker Compose (alternative)
+
+`compose.yaml` equivalent of the `docker run` above:
+
+```yaml
+services:
+  cliparr:
+    build: .   # or: image: cliparr:latest  (if you build with docker build first)
+    container_name: cliparr
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # required on Linux
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128   # VAAPI; omit for libx264 fallback
+    volumes:
+      - /path/to/your/media:/media:ro
+      - /path/to/clips:/tmp/clips
+      - /path/to/data:/data
+```
+
+```bash
+docker compose up -d
+```
+
+`extra_hosts` is the compose spelling of `--add-host`; `build: .` rebuilds the
+image on demand, or swap in `image:` if you build separately.
+
+### 4. Serve behind a reverse proxy (optional)
 
 Caddy example:
 
