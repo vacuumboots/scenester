@@ -6,6 +6,7 @@ __pycache__/
 .DS_Store
 ._*
 
-# Hermes agent internals
+# Local-only working docs — kept for dev reference, not part of the public repo
 .hermes/
 HANDOFF.md
+CHANGELOG.md
