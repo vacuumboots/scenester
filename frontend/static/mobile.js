@@ -469,9 +469,11 @@ function _mobRender() {
     if (ue !== _mobLast.ue) { _mobEls.btnUnsetEnd.style.display = ue; _mobLast.ue = ue; }
   }
 
-  // Desktop progressive disclosure: keep "✂ Fine-tune" collapsed until an edge is marked.
+  // Desktop progressive disclosure: auto-open "✂ Fine-tune" when an edge is
+  // marked, but never force-close it — force-closing fights the user's manual
+  // toggle (the "opens and shuts" bug when _mobRender runs on every timeupdate).
   var ft = document.getElementById("fine-tune");
-  if (ft && !_isMobile) { ft.open = _mobStartSet || _mobEndSet; }
+  if (ft && !_isMobile && (_mobStartSet || _mobEndSet)) { ft.open = true; }
 
   _mobRenderCaptionOpts();
 }
