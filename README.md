@@ -176,10 +176,35 @@ your network layer), not in the app itself.
 
 ## Tech Stack
 
-- **Backend:** Python 3.12, FastAPI, httpx, ffmpeg (CLI, raw argument lists)
-- **Frontend:** Vanilla JS, HTML, CSS — no frameworks, no build step
-- **Container:** Docker, two-stage build (alpine → python:3.12-slim)
-- **Reverse proxy:** Caddy (or Traefik / nginx)
+- **Backend** — Python 3.12 · FastAPI · uvicorn · httpx
+  - Clipping runs **server-side via ffmpeg** (raw CLI argument lists, no
+    Python bindings): output seeking for frame accuracy, `libx264` encoding,
+    and a palette-optimized GIF pipeline (`fps=15`, `palettegen`/`paletteuse`)
+    — clips come out identical regardless of your browser or device.
+  - **VAAPI hardware acceleration** on Intel iGPUs (decode + scale + encode,
+    with per-codec tiers and a transparent libx264 fallback) — a 60s clip
+    drops from ~111s to ~11s on a Haswell i5.
+  - Subtitle burning parses `.srt` files (UTF-8/Latin-1), chunks them into
+    word groups for a "dynamic captions" look, and renders via ffmpeg's
+    `subtitles=` filter with ASS styling.
+  - Plex integration through the official HTTP API: library, metadata,
+    sessions (the now-playing banner), and OAuth PIN login.
+- **Frontend** — vanilla HTML/CSS/JS, no framework, no build step
+  - Single-page app with one shared mark-from-playhead editor for desktop
+    and mobile; direct media streaming over HTTP Range requests (native
+    `<video>` controls — no custom scrubber).
+  - PWA manifest + service worker so the shell loads fast on phones.
+- **Container** — two-stage Docker build (alpine frontend copy →
+  python:3.12-slim with ffmpeg + VAAPI drivers). Prebuilt images are
+  published to GHCR by GitHub Actions on every push (`latest`, `sha-*`, and
+  `v*` tags) — no need to build anything yourself.
+- **CI** — GitHub Actions: pytest suite (35 tests) + a `node --check`
+  syntax gate on the frontend JS.
+- **Storage** — no database. Configuration comes from environment
+  variables; Plex OAuth tokens persist to a `/data` volume; clips are plain
+  files on disk, served back for download.
+- **Reverse proxy** — works behind any proxy that strips a path prefix
+  (Caddy, Traefik, nginx); the frontend uses relative URLs throughout.
 
 ## Development
 
