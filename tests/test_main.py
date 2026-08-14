@@ -5,8 +5,6 @@ a path passed to it). The tests lock in *current* behavior so future refactors
 don't silently change clip naming, subtitle parsing, or the video MIME map.
 """
 
-import pytest
-
 import main
 
 

@@ -19,9 +19,6 @@ const state = {
 function qs(sel, parent) {
   return (parent || document).querySelector(sel);
 }
-function qsa(sel, parent) {
-  return (parent || document).querySelectorAll(sel);
-}
 
 function getDom() {
   return {
@@ -84,7 +81,6 @@ var _clipFormat = "mp4";            // "mp4" or "gif"
 
 // Mobile detection
 var _isMobile = false;
-function isMobile() { return _isMobile; }
 
 // Transient seek target for jump-to-clip — consumed by onloadedmetadata.
 var _pendingSeek = null;
@@ -598,7 +594,6 @@ function loadVideoPreview(mediaId) {
         track.srclang = "en";
         track.src = "api/subtitle/" + mediaId;
         track.default = true;
-        track.onload = function() { console.log("Subtitle track loaded"); };
         track.onerror = function() { console.warn("Subtitle track failed to load"); };
         vid.appendChild(track);
         // Force-show: default=true only auto-shows a track at resource-fetch

@@ -7,8 +7,6 @@ behavior — version preference, path translation, and subtitle discovery.
 
 import os
 
-import pytest
-
 import plex
 
 
