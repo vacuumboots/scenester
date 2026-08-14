@@ -900,6 +900,19 @@ main {
   }
 }
 
+@media (min-width: 1600px) {
+  /* Large screens (1080p / 4K): the 480px cap left the preview a small
+     window in the middle of the screen. Widen the app column and let the
+     video run tall; the viewport cap keeps it from dominating a shorter
+     panel. Mobile and small laptops are untouched. */
+  main {
+    max-width: 1800px;
+  }
+  .preview-video-shared {
+    max-height: 80vh;
+  }
+}
+
 /* ── Mobile Clip Editor (bottom-sheet layout) ────────────────────────── */
 
 .clip-editor {
