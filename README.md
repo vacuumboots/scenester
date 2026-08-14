@@ -1,16 +1,16 @@
-# Cliparr
+# Cutarr
 
 ## Proudly vibecoded with Deepseek 🐋
 
-Cliparr clips movies from your Plex library. Browse, scrub a live video preview,
+Cutarr clips movies from your Plex library. Browse, scrub a live video preview,
 mark a range with two buttons, and download frame-accurate 1080p clips.
 
 <p align="center">
-  <img src="screenshots/library-desktop.jpg" alt="Cliparr movie library on desktop" width="62%">
+  <img src="screenshots/library-desktop.jpg" alt="Cutarr movie library on desktop" width="62%">
   <img src="screenshots/editor-desktop.jpg" alt="Clip editor on desktop" width="36%">
 </p>
 <p align="center">
-  <img src="screenshots/library-mobile.jpg" alt="Cliparr movie library on mobile" width="180">
+  <img src="screenshots/library-mobile.jpg" alt="Cutarr movie library on mobile" width="180">
   <img src="screenshots/editor-mobile.jpg" alt="Clip editor on mobile" width="180">
 </p>
 
@@ -69,8 +69,8 @@ PLEX_URL=http://host.docker.internal:32400
 ### 2. Build and run
 
 ```bash
-docker build -t cliparr .
-docker run -d --name cliparr \
+docker build -t cutarr .
+docker run -d --name cutarr \
   --add-host=host.docker.internal:host-gateway \
   --device /dev/dri/renderD128 \
   -p 8096:8096 \
@@ -79,7 +79,7 @@ docker run -d --name cliparr \
   -v /path/to/data:/data \
   --env-file .env \
   --restart unless-stopped \
-  cliparr
+  cutarr
 ```
 
 - `--add-host=host.docker.internal:host-gateway` is **required on Linux** —
@@ -87,7 +87,7 @@ docker run -d --name cliparr \
 - `--device /dev/dri/renderD128` enables VAAPI hardware clipping. Omit it (or
   set `CLIPARR_DISABLE_VAAPI=1`) to force the libx264 fallback.
 - Prefer pulling a prebuilt image over building? `docker pull
-  ghcr.io/vacuumboots/cliparr:latest` — the image is rebuilt automatically on
+  ghcr.io/vacuumboots/cutarr:latest` — the image is rebuilt automatically on
   every push to `main` (see section 3).
 
 ### 3. Run with Docker Compose (alternative)
@@ -96,10 +96,10 @@ docker run -d --name cliparr \
 
 ```yaml
 services:
-  cliparr:
-    image: ghcr.io/vacuumboots/cliparr:latest   # prebuilt — rebuilt on every push to main
+  cutarr:
+    image: ghcr.io/vacuumboots/cutarr:latest   # prebuilt — rebuilt on every push to main
     # build: .   # alternative: build from source instead of pulling
-    container_name: cliparr
+    container_name: cutarr
     restart: unless-stopped
     ports:
       - "8096:8096"
@@ -127,13 +127,13 @@ build-from-source alternative.
 Caddy example:
 
 ```
-handle_path /cliparr/* {
+handle_path /cutarr/* {
     reverse_proxy localhost:8096
 }
 ```
 
 Traefik or nginx work the same way — any reverse proxy that strips the
-`/cliparr` path prefix.
+`/cutarr` path prefix.
 
 ## Usage
 
@@ -158,13 +158,13 @@ Traefik or nginx work the same way — any reverse proxy that strips the
 
 ## Security
 
-Cliparr is designed to run on a **private home network behind a reverse proxy**
+Cutarr is designed to run on a **private home network behind a reverse proxy**
 (Caddy, Traefik, or nginx). Within that trust boundary the API is
 unauthenticated — OAuth exists only to obtain a Plex token for library access,
-not to gate Cliparr's own endpoints.
+not to gate Cutarr's own endpoints.
 
 Do **not** expose the container port (8096) directly to the internet. Put
-authentication or access control in front of Cliparr at the reverse proxy (or
+authentication or access control in front of Cutarr at the reverse proxy (or
 your network layer), not in the app itself.
 
 ## Tech Stack
@@ -198,7 +198,7 @@ a `node --check` syntax gate on the frontend JS.
 
 ## VAAPI-accelerated clipping
 
-Cliparr hardware-accelerates clip generation on Intel iGPUs via ffmpeg's VAAPI
+Cutarr hardware-accelerates clip generation on Intel iGPUs via ffmpeg's VAAPI
 support, with a transparent software fallback:
 
 - **Tier 1** — GPU decode + scale + encode (h264/mpeg2/vc1 sources)

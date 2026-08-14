@@ -1,5 +1,5 @@
 """
-Plex API client for Cliparr.
+Plex API client for Cutarr.
 
 Talks to the Plex server to fetch library metadata, active sessions,
 thumbnails, and media file paths. Paths are translated from Plex's
@@ -130,7 +130,7 @@ def _plex_tv_headers() -> dict:
     return {
         "Accept": "application/json",
         "X-Plex-Client-Identifier": _load_client_id(),
-        "X-Plex-Product": "Cliparr",
+        "X-Plex-Product": "Cutarr",
         "X-Plex-Version": "1.0",
     }
 

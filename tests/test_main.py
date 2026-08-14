@@ -1,4 +1,4 @@
-"""Characterization tests for Cliparr's pure backend helpers in ``main.py``.
+"""Characterization tests for Cutarr's pure backend helpers in ``main.py``.
 
 These functions are synchronous and side-effect-free (``parse_srt`` only reads
 a path passed to it). The tests lock in *current* behavior so future refactors
