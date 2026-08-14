@@ -47,29 +47,70 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 
 ## Setup
 
-### Prerequisites
+*New to Docker? You don't need to understand it. Cutarr ships as a
+ready-made package — "pulling" just means downloading it, and the commands
+below do everything else. You need three things: Docker installed, a Plex
+server, and a folder on the same machine containing your media files.*
 
-- Docker
-- A Plex server on your local network
-- Media files mounted as a Docker volume
+### 1. Get the app (one time)
 
-### 1. Configure
+```bash
+docker pull ghcr.io/vacuumboots/cutarr:latest
+```
+
+That's the whole app, downloaded. (Using Docker Compose in step 3? Skip
+this — Compose downloads it automatically.)
+
+### 2. Configure
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Open `.env` and set your Plex server address:
 
 ```
 PLEX_URL=http://host.docker.internal:32400
-# PLEX_TOKEN=...   (optional — OAuth login is preferred)
+# PLEX_TOKEN=...   (optional — the in-app "Connect to Plex" login is easier)
 ```
 
-### 2. Build and run
+### 3. Run (recommended: Docker Compose)
+
+Save this as `compose.yaml` next to your `.env`. Change the three
+`/path/to/...` lines to your real folders — the first one must be the
+folder your Plex library lives in:
+
+```yaml
+services:
+  cutarr:
+    image: ghcr.io/vacuumboots/cutarr:latest
+    container_name: cutarr
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # required on Linux — just leave it
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128   # Intel GPU = much faster clips; delete if it errors
+    volumes:
+      - /path/to/your/media:/media:ro   # your movies (read-only)
+      - /path/to/clips:/tmp/clips       # where finished clips are saved
+      - /path/to/data:/data             # app settings + login (survives restarts)
+```
 
 ```bash
-docker build -t cutarr .
+docker compose up -d
+```
+
+Compose downloads the app if needed and starts it. That's it.
+
+### 4. No Docker Compose? One command instead
+
+Prefer no config file? This single command does the same thing — the three
+`-v` lines are your three folders from above:
+
+```bash
 docker run -d --name cutarr \
   --add-host=host.docker.internal:host-gateway \
   --device /dev/dri/renderD128 \
@@ -79,52 +120,18 @@ docker run -d --name cutarr \
   -v /path/to/data:/data \
   --env-file .env \
   --restart unless-stopped \
-  cutarr
+  ghcr.io/vacuumboots/cutarr:latest
 ```
 
-- `--add-host=host.docker.internal:host-gateway` is **required on Linux** —
-  without it Plex API calls fail.
-- `--device /dev/dri/renderD128` enables VAAPI hardware clipping. Omit it (or
-  set `CLIPARR_DISABLE_VAAPI=1`) to force the libx264 fallback.
-- Prefer pulling a prebuilt image over building? `docker pull
-  ghcr.io/vacuumboots/cutarr:latest` — the image is rebuilt automatically on
-  every push to `main` (see section 3).
+### 5. Open it
 
-### 3. Run with Docker Compose (alternative)
+Browse to `http://localhost:8096` (or the IP of the machine running
+Docker) and sign in with your Plex account.
 
-`compose.yaml` equivalent of the `docker run` above:
+### Optional: put it behind a reverse proxy
 
-```yaml
-services:
-  cutarr:
-    image: ghcr.io/vacuumboots/cutarr:latest   # prebuilt — rebuilt on every push to main
-    # build: .   # alternative: build from source instead of pulling
-    container_name: cutarr
-    restart: unless-stopped
-    ports:
-      - "8096:8096"
-    env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"   # required on Linux
-    devices:
-      - /dev/dri/renderD128:/dev/dri/renderD128   # VAAPI; omit for libx264 fallback
-    volumes:
-      - /path/to/your/media:/media:ro
-      - /path/to/clips:/tmp/clips
-      - /path/to/data:/data
-```
-
-```bash
-docker compose up -d
-```
-
-`extra_hosts` is the compose spelling of `--add-host`; `image:` pulls the
-prebuilt image from GitHub Container Registry, and `build: .` is the
-build-from-source alternative.
-
-### 4. Serve behind a reverse proxy (optional)
-
-Caddy example:
+Any proxy that strips the `/cutarr` path prefix works (Caddy, Traefik,
+nginx). Caddy example:
 
 ```
 handle_path /cutarr/* {
@@ -132,8 +139,8 @@ handle_path /cutarr/* {
 }
 ```
 
-Traefik or nginx work the same way — any reverse proxy that strips the
-`/cutarr` path prefix.
+*For developers: `docker build -t cutarr .` builds from source instead of
+pulling — see [Development](#development).*
 
 ## Usage
 
@@ -176,7 +183,16 @@ your network layer), not in the app itself.
 
 ## Development
 
-Run the backend locally without Docker (the frontend needs no build step):
+Want to build the Docker image from source instead of pulling it?
+
+```bash
+docker build -t cutarr .
+```
+
+Then run it with the compose file from [Setup](#setup) (swap the `image:`
+line for `build: .`), or the `docker run` command.
+
+To run the backend locally without Docker (the frontend needs no build step):
 
 ```bash
 pip install -r backend/requirements.txt -r backend/requirements-dev.txt
