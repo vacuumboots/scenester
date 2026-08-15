@@ -290,8 +290,24 @@ function mobSkip(delta) {
 // ── Nudge rows ─────────────────────────────────────────────────────────
 
 function mobNudgeStart(delta) {
-  var ns = Math.max(0, Math.min(_sliderEnd - 0.04, _sliderStart + delta));
-  setSliderStart(ns);
+  var dur = _sliderEnd - _sliderStart;
+  var locked = _mobActivePreset > 0 && _mobStartSet && _mobEndSet && dur > 0;
+  if (locked) {
+    // Preset lock: slide the WHOLE window so the locked duration is kept —
+    // nudging the start moves the end along with it.
+    var ns = Math.max(0, Math.min(state.mediaDuration - dur, _sliderStart + delta));
+    setSliderStart(ns);
+    setSliderEnd(ns + dur);
+    _mobRefreshSnap("end"); // the end slid too — refresh its frame
+  } else {
+    // Free mode: only the start moves. A PINNED end is a hard boundary; an
+    // unpinned (playhead-riding) end leaves the start free to move forward —
+    // the end re-anchors to the playhead on the seek below. This is what
+    // makes +1f/+5s/+10s/+30s work right after Set Start (previously they
+    // were clamped to _sliderEnd - 0.04 == the start, so they did nothing).
+    var maxS = _mobEndSet ? (_sliderEnd - 0.04) : state.mediaDuration;
+    setSliderStart(Math.max(0, Math.min(maxS, _sliderStart + delta)));
+  }
   _mobStartSet = true;
   _mobSyncBrowse();
   seekVideoTo(_sliderStart);
@@ -300,8 +316,21 @@ function mobNudgeStart(delta) {
 }
 
 function mobNudgeEnd(delta) {
-  var ne = Math.max(_sliderStart + 0.04, Math.min(state.mediaDuration, _sliderEnd + delta));
-  setSliderEnd(ne);
+  var dur = _sliderEnd - _sliderStart;
+  var locked = _mobActivePreset > 0 && _mobStartSet && _mobEndSet && dur > 0;
+  if (locked) {
+    // Preset lock: slide the whole window (the start moves with the end).
+    var ns = Math.max(0, Math.min(state.mediaDuration - dur, _sliderStart + delta));
+    setSliderStart(ns);
+    setSliderEnd(ns + dur);
+    _mobRefreshSnap("start"); // the start slid too — refresh its frame
+  } else {
+    // Free mode: only the end moves. A PINNED start is a hard floor; an
+    // unpinned (playhead-riding) start leaves the end free to move back —
+    // symmetric with the start row (the start re-anchors on the seek below).
+    var minE = _mobStartSet ? (_sliderStart + 0.04) : 0;
+    setSliderEnd(Math.max(minE, Math.min(state.mediaDuration, _sliderEnd + delta)));
+  }
   _mobEndSet = true;
   _mobSyncBrowse();
   seekVideoTo(_sliderEnd);
