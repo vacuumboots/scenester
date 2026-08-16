@@ -1,4 +1,4 @@
-"""Pytest bootstrap for Cutarr.
+"""Pytest bootstrap for Scenester.
 
 The backend modules use flat imports (`import plex`), not package imports, so
 the tests need `backend/` on `sys.path`. This conftest lives at the repo root

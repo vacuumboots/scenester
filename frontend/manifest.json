@@ -1,7 +1,7 @@
 {
-  "id": "cutarr",
-  "name": "Cutarr — Plex Clip Maker",
-  "short_name": "Cutarr",
+  "id": "scenester",
+  "name": "Scenester — Plex Clip Maker",
+  "short_name": "Scenester",
   "description": "Plex clip maker — browse, scrub, mark, download",
   "start_url": ".",
   "scope": ".",

@@ -1,16 +1,16 @@
-# Cutarr
+# Scenester
 
 ## Proudly vibecoded with Deepseek 🐋
 
-Cutarr clips movies from your Plex library. Browse, scrub a live video preview,
+Scenester clips movies from your Plex library. Browse, scrub a live video preview,
 mark a range with two buttons, and download frame-accurate 1080p clips.
 
 <p align="center">
-  <img src="screenshots/library-desktop.jpg" alt="Cutarr movie library on desktop" width="62%">
+  <img src="screenshots/library-desktop.jpg" alt="Scenester movie library on desktop" width="62%">
   <img src="screenshots/editor-desktop.jpg" alt="Clip editor on desktop" width="36%">
 </p>
 <p align="center">
-  <img src="screenshots/library-mobile.jpg" alt="Cutarr movie library on mobile" width="180">
+  <img src="screenshots/library-mobile.jpg" alt="Scenester movie library on mobile" width="180">
   <img src="screenshots/editor-mobile.jpg" alt="Clip editor on mobile" width="180">
 </p>
 
@@ -47,7 +47,7 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 
 ## Setup
 
-*New to Docker? You don't need to understand it. Cutarr ships as a
+*New to Docker? You don't need to understand it. Scenester ships as a
 ready-made package — "pulling" just means downloading it, and the commands
 below do everything else. You need three things: Docker installed, a Plex
 server, and a folder on the same machine containing your media files.*
@@ -55,7 +55,7 @@ server, and a folder on the same machine containing your media files.*
 ### 1. Get the app (one time)
 
 ```bash
-docker pull ghcr.io/vacuumboots/cutarr:latest
+docker pull ghcr.io/vacuumboots/scenester:latest
 ```
 
 That's the whole app, downloaded. (Using Docker Compose in step 3? Skip
@@ -82,9 +82,9 @@ folder your Plex library lives in:
 
 ```yaml
 services:
-  cutarr:
-    image: ghcr.io/vacuumboots/cutarr:latest
-    container_name: cutarr
+  scenester:
+    image: ghcr.io/vacuumboots/scenester:latest
+    container_name: scenester
     restart: unless-stopped
     ports:
       - "8096:8096"
@@ -111,7 +111,7 @@ Prefer no config file? This single command does the same thing — the three
 `-v` lines are your three folders from above:
 
 ```bash
-docker run -d --name cutarr \
+docker run -d --name scenester \
   --add-host=host.docker.internal:host-gateway \
   --device /dev/dri/renderD128 \
   -p 8096:8096 \
@@ -120,7 +120,7 @@ docker run -d --name cutarr \
   -v /path/to/data:/data \
   --env-file .env \
   --restart unless-stopped \
-  ghcr.io/vacuumboots/cutarr:latest
+  ghcr.io/vacuumboots/scenester:latest
 ```
 
 ### 5. Open it
@@ -130,16 +130,16 @@ Docker) and sign in with your Plex account.
 
 ### Optional: put it behind a reverse proxy
 
-Any proxy that strips the `/cutarr` path prefix works (Caddy, Traefik,
+Any proxy that strips the `/scenester` path prefix works (Caddy, Traefik,
 nginx). Caddy example:
 
 ```
-handle_path /cutarr/* {
+handle_path /scenester/* {
     reverse_proxy localhost:8096
 }
 ```
 
-*For developers: `docker build -t cutarr .` builds from source instead of
+*For developers: `docker build -t scenester .` builds from source instead of
 pulling — see [Development](#development).*
 
 ## Usage
@@ -165,13 +165,13 @@ pulling — see [Development](#development).*
 
 ## Security
 
-Cutarr is designed to run on a **private home network behind a reverse proxy**
+Scenester is designed to run on a **private home network behind a reverse proxy**
 (Caddy, Traefik, or nginx). Within that trust boundary the API is
 unauthenticated — OAuth exists only to obtain a Plex token for library access,
-not to gate Cutarr's own endpoints.
+not to gate Scenester's own endpoints.
 
 Do **not** expose the container port (8096) directly to the internet. Put
-authentication or access control in front of Cutarr at the reverse proxy (or
+authentication or access control in front of Scenester at the reverse proxy (or
 your network layer), not in the app itself.
 
 ## Tech Stack
@@ -211,7 +211,7 @@ your network layer), not in the app itself.
 Want to build the Docker image from source instead of pulling it?
 
 ```bash
-docker build -t cutarr .
+docker build -t scenester .
 ```
 
 Then run it with the compose file from [Setup](#setup) (swap the `image:`
@@ -239,7 +239,7 @@ a `node --check` syntax gate on the frontend JS.
 
 ## VAAPI-accelerated clipping
 
-Cutarr hardware-accelerates clip generation on Intel iGPUs via ffmpeg's VAAPI
+Scenester hardware-accelerates clip generation on Intel iGPUs via ffmpeg's VAAPI
 support, with a transparent software fallback:
 
 - **Tier 1** — GPU decode + scale + encode (h264/mpeg2/vc1 sources)

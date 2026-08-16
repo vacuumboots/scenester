@@ -1,5 +1,5 @@
 /**
- * Cutarr — Frontend Application
+ * Scenester — Frontend Application
  *
  * Vanilla JS app handling library browsing, the now-playing banner,
  * the unified mark-from-playhead clip editor, and clip downloads.
@@ -1050,7 +1050,7 @@ function init() {
   dom = getDom();
 
   // ── SPA history: keep back-swipe / back-button INSIDE the app ──
-  // Cutarr is a single page with JS-swapped views. Without history
+  // Scenester is a single page with JS-swapped views. Without history
   // entries, a phone's edge-swipe-back (iOS) or back button pops the ONE
   // real entry and navigates away from the site entirely. Seed two in-app
   // "home" entries, push a "detail" entry when a movie opens, and intercept

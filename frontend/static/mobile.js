@@ -1,5 +1,5 @@
 /**
- * Cutarr — Mobile Mark-From-Playhead Module
+ * Scenester — Mobile Mark-From-Playhead Module
  *
  * Minimal mobile clip editor: native video controls are the only scrubber.
  * Two huge buttons mark clip edges from video.currentTime. The range follows

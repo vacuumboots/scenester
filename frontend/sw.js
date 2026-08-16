@@ -5,7 +5,7 @@
 // Served from the APP ROOT (not /static/) so its scope covers the whole app
 // at both the Caddy /cliparr/ URL and the direct :8096 URL. All shell paths
 // are derived from self.registration.scope — never hardcode the prefix.
-const CACHE = "cutarr-v4";
+const CACHE = "scenester-v1";
 
 self.addEventListener("install", e => {
   const scope = self.registration.scope;           // "/" or "/cliparr/"

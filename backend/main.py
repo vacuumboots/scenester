@@ -1,5 +1,5 @@
 """
-Cutarr — FastAPI backend.
+Scenester — FastAPI backend.
 
 Serves the frontend SPA and provides API routes for browsing Plex and
 creating frame-accurate ffmpeg clips (VAAPI-accelerated).
@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 import plex
 
-app = FastAPI(title="Cutarr")
+app = FastAPI(title="Scenester")
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -666,7 +666,7 @@ async def _clip_impl(
             meta_args.extend(["-metadata", f"title={title}"])
         if meta.get("year"):
             meta_args.extend(["-metadata", f"date={meta['year']}"])
-        meta_args.extend(["-metadata", "comment=Clipped with Cutarr"])
+        meta_args.extend(["-metadata", "comment=Clipped with Scenester"])
 
     # ── Encoder selection: VAAPI tiers with libx264 fallback ──────────
     # Tier 1 (fastest): HW decode + scale_vaapi + h264_vaapi — all on GPU.

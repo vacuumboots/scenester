@@ -1,4 +1,4 @@
-"""Characterization tests for Cutarr's pure Plex helpers in ``plex.py``.
+"""Characterization tests for Scenester's pure Plex helpers in ``plex.py``.
 
 ``_translate_path`` and ``_find_subtitle_path`` are synchronous and pure (they
 touch the filesystem only where a real path is passed). Tests lock in current
