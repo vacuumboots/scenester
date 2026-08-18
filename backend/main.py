@@ -496,7 +496,10 @@ _quote_index: list[dict] | None = None
 _quote_index_ts: float = 0.0
 _quote_index_lock = asyncio.Lock()
 _QUOTE_INDEX_TTL_SECONDS = 3600
-_QUOTE_MAX_MATCHES = 50
+# Safety ceiling only: the real result set is unbounded (per-movie cap
+# keeps it diverse), but a pathological query ("the", "a") must not ship
+# a multi-MB response. The frontend shows a refine note when hit.
+_QUOTE_MAX_MATCHES = 1000
 _QUOTE_LINES_PER_MOVIE = 3
 
 
@@ -621,7 +624,11 @@ async def search_quotes(q: str = ""):
     index = await _get_quote_index()
     if index is None:
         raise HTTPException(status_code=502, detail="Subtitle index unavailable")
-    return {"matches": _search_quote_index(index, q)}
+    matches = _search_quote_index(index, q)
+    return {
+        "matches": matches,
+        "truncated": len(matches) >= _QUOTE_MAX_MATCHES,
+    }
 
 
 # ── API: Clip generation ─────────────────────────────────────────────────

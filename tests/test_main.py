@@ -320,6 +320,16 @@ def test_quote_search_caps_at_limit():
     assert len(matches) == 3
 
 
+def test_quote_search_returns_all_when_under_cap():
+    index = [
+        {"media_id": i, "title": "T", "year": 0,
+         "lines": [(0.0, 1.0, "the word")]}
+        for i in range(10)
+    ]
+    matches = main._search_quote_index(index, "word")
+    assert len(matches) == 10
+
+
 def test_quote_search_escapes_regex_specials():
     idx = [{"media_id": 1, "title": "T", "year": 0, "lines": [
         (0.0, 1.0, "a+b is the answer"),

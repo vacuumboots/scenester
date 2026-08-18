@@ -1414,6 +1414,12 @@ main {
   color: var(--text-dim);
 }
 
+.quote-note {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .quote-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

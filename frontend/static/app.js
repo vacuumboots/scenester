@@ -1097,7 +1097,7 @@ function fetchQuoteResults(query) {
     .then(function(r) { return r.ok ? r.json() : { matches: [] }; })
     .then(function(data) {
       if (_lastQuoteQuery !== query) return;   // stale response
-      renderQuoteResults(box, data.matches || [], query);
+      renderQuoteResults(box, data.matches || [], query, !!data.truncated);
     })
     .catch(function() {
       if (_lastQuoteQuery !== query) return;
@@ -1105,14 +1105,17 @@ function fetchQuoteResults(query) {
     });
 }
 
-function renderQuoteResults(box, matches, query) {
+function renderQuoteResults(box, matches, query, truncated) {
   box.style.display = "block";
   if (!matches.length) {
     box.innerHTML = "<div class='empty-state'><div class='empty-text'>No lines match \"" + escHtml(query) + "\"</div>"
       + "<div class='empty-sub'>Lines mode searches subtitle text in every movie.</div></div>";
     return;
   }
-  var html = "<div class='results-header'>Lines matching \"" + escHtml(query) + "\" <span class='result-count'>" + matches.length + "</span></div>"
+  var note = truncated
+    ? " <span class='quote-note'>(first " + matches.length + " — refine your search)</span>"
+    : "";
+  var html = "<div class='results-header'>Lines matching \"" + escHtml(query) + "\" <span class='result-count'>" + matches.length + "</span>" + note + "</div>"
     + "<div class='quote-grid'>";
   for (var i = 0; i < matches.length; i++) {
     var m = matches[i];
