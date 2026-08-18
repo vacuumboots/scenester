@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Scenester</title>
-  <link rel="stylesheet" href="static/style.css?v=63">
+  <link rel="stylesheet" href="static/style.css?v=64">
 </head>
 <body>
 
@@ -118,11 +118,12 @@
 
   <!-- Detail view (hidden until item selected) -->
   <div id="detail-view" style="display:none">
-    <button class="btn btn-back" id="btn-back">&larr; Back to Library</button>
 
-    <div class="target-card">
-      <div class="target-name" id="detail-title"></div>
-      <div class="target-meta" id="detail-meta"></div>
+    <!-- Compact editor title area: navigation + title + meta -->
+    <div class="detail-header">
+      <button class="btn-back" id="btn-back">&larr; Library</button>
+      <h2 class="detail-title" id="detail-title"></h2>
+      <div class="detail-meta" id="detail-meta"></div>
     </div>
 
     <!-- Error banner -->
@@ -130,165 +131,183 @@
       <span id="error-message"></span>
     </div>
 
-    <!-- Shared video player — positioned by CSS for desktop vs mobile -->
-    <video id="preview-video" preload="metadata" playsinline controls
-           class="preview-video-shared"></video>
+    <!-- Player card: full-width video + attached thumbnail timeline -->
+    <div class="player-card">
 
-    <!-- Preview -->
-    <div id="frame-preview" style="display:none">
+      <!-- Shared video player — positioned by CSS for desktop vs mobile -->
+      <video id="preview-video" preload="metadata" playsinline controls
+             class="preview-video-shared"></video>
 
-      <div id="preview-error" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
-        <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
-        <div>Video preview not available for this format.</div>
-        <div style="font-size:13px; margin-top:8px;">Use the frame strip below to navigate.</div>
+      <!-- Loading / error overlays (absolute over the player) -->
+      <div id="frame-preview" style="display:none">
+        <div id="preview-error" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
+          <div style="font-size:48px; margin-bottom:12px;">⚠️</div>
+          <div>Video preview not available for this format.</div>
+          <div style="font-size:13px; margin-top:8px;">Use the frame strip below to navigate.</div>
+        </div>
+        <div id="preview-loading" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
+          Loading preview...
+        </div>
       </div>
-      <div id="preview-loading" style="display:none; text-align:center; padding:40px; color:var(--text-dim);">
-        Loading preview...
+
+      <!-- Thumbnail timeline — opt-in navigator, attached to the player -->
+      <div class="frame-strip" id="frame-strip" style="display:none">
+        <div class="frame-strip-inner" id="frame-strip-inner"></div>
+      </div>
+      <div class="timeline-bar">
+        <span class="timeline-hint">Click a frame to jump the playhead</span>
+        <button class="film-strip-chip" id="btn-film-strip" onclick="toggleFilmStrip()">🗂 Film strip</button>
       </div>
     </div>
 
-    <!-- Frame strip — opt-in thumbnail navigator (desktop + mobile) -->
-    <div class="frame-strip" id="frame-strip" style="display:none">
-      <div class="frame-strip-inner" id="frame-strip-inner"></div>
-    </div>
-
-<!-- ── MOBILE bottom-sheet editor ────────────────────────────────── -->
+<!-- ── Clip editor (unified mark-from-playhead editor, both viewports) ─ -->
 <div class="clip-editor">
   <div class="mob-sheet">
 
-    <!-- Playhead readout: current "Frame at" time (both viewports) -->
-    <div class="mob-playhead">
-      <span class="mob-playhead-label">Frame at</span>
-      <span class="mob-playhead-value" id="frame-time-value">0:00</span>
-    </div>
-
-    <!-- Readout row: skip buttons flank start/dur/end -->
-    <div class="mob-readout">
-      <button class="mob-skip-btn" onclick="mobSkip(-30)" title="Back 30s">⏮</button>
-      <button class="mob-skip-btn" onclick="mobSkip(-10)" title="Back 10s">⏪</button>
-      <span id="mob-time-start">0:00</span>
-      <span class="mob-dur" id="mob-time-dur">0.0s</span>
-      <span id="mob-time-end">0:00</span>
-      <button class="mob-skip-btn" onclick="mobSkip(10)" title="Forward 10s">⏩</button>
-      <button class="mob-skip-btn" onclick="mobSkip(30)" title="Forward 30s">⏭</button>
-    </div>
-
-    <!-- Read-only range indicator (no interaction, no aiming) -->
-    <div class="mob-overview" id="mob-overview">
-      <div class="mob-overview-fill" id="mob-overview-fill"></div>
-    </div>
-
-    <!-- Film strip toggle (opt-in thumbnail navigator — desktop + mobile) -->
-    <div class="mob-filmstrip-row">
-      <button class="mob-filmstrip-btn" id="btn-film-strip" onclick="toggleFilmStrip()">🗂 Film strip</button>
-    </div>
-
-    <!-- TWO HUGE mark buttons — the only selection surface -->
-    <div class="mob-mark-buttons">
-      <button class="mob-mark-btn" id="mob-btn-start" onclick="mobMarkStart()">▶ Set Start</button>
-      <button class="mob-mark-btn mob-mark-btn-end" id="mob-btn-end" onclick="mobMarkEnd()">■ Set End</button>
-    </div>
-
-    <!-- Frame snapshots: the exact frame at each marked edge (tap to jump) -->
-    <div class="mob-frame-snaps">
-      <div class="mob-snap" id="mob-snap-start" style="display:none">
-        <img id="mob-snap-start-img" alt="Start frame" onclick="mobJumpToSnap('start')">
-        <span class="mob-snap-label">IN</span>
+    <!-- POSITION: playhead readout + fine navigation + range overview -->
+    <section class="edit-group edit-position">
+      <div class="edit-group-head">
+        <span class="edit-label">Position</span>
       </div>
-      <div class="mob-snap" id="mob-snap-end" style="display:none">
-        <img id="mob-snap-end-img" alt="End frame" onclick="mobJumpToSnap('end')">
-        <span class="mob-snap-label">OUT</span>
+      <div class="mob-playhead">
+        <span class="mob-playhead-label">Frame at</span>
+        <span class="mob-playhead-value" id="frame-time-value">0:00</span>
       </div>
-    </div>
+      <div class="mob-readout">
+        <button class="mob-skip-btn" onclick="mobSkip(-30)" title="Back 30s">⏮</button>
+        <button class="mob-skip-btn" onclick="mobSkip(-10)" title="Back 10s">⏪</button>
+        <span id="mob-time-start">0:00</span>
+        <span class="mob-dur" id="mob-time-dur">0.0s</span>
+        <span id="mob-time-end">0:00</span>
+        <button class="mob-skip-btn" onclick="mobSkip(10)" title="Forward 10s">⏩</button>
+        <button class="mob-skip-btn" onclick="mobSkip(30)" title="Forward 30s">⏭</button>
+      </div>
+      <div class="mob-overview" id="mob-overview">
+        <div class="mob-overview-fill" id="mob-overview-fill"></div>
+      </div>
+    </section>
 
-    <!-- Unset — appears contextually when an edge is pinned -->
-    <div class="mob-unset-buttons">
-      <button class="mob-unset-btn" id="mob-btn-unset-start" onclick="mobUnsetStart()" style="display:none">✕ Unset Start</button>
-      <button class="mob-unset-btn" id="mob-btn-unset-end" onclick="mobUnsetEnd()" style="display:none">✕ Unset End</button>
-    </div>
+    <!-- CLIP RANGE: the primary editing operation -->
+    <section class="edit-group edit-range">
+      <div class="edit-group-head">
+        <span class="edit-label">Clip range</span>
+      </div>
 
+      <!-- TWO mark buttons — the primary selection surface -->
+      <div class="mob-mark-buttons">
+        <button class="mob-mark-btn" id="mob-btn-start" onclick="mobMarkStart()">▶ Set Start</button>
+        <button class="mob-mark-btn mob-mark-btn-end" id="mob-btn-end" onclick="mobMarkEnd()">■ Set End</button>
+      </div>
+
+      <!-- Resulting range, shown once both edges are set -->
+      <div class="range-summary" id="range-summary">Set Start and End to define the clip</div>
+
+      <!-- Frame snapshots: the exact frame at each marked edge (tap to jump) -->
+      <div class="mob-frame-snaps">
+        <div class="mob-snap" id="mob-snap-start" style="display:none">
+          <img id="mob-snap-start-img" alt="Start frame" onclick="mobJumpToSnap('start')">
+          <span class="mob-snap-label">IN</span>
+        </div>
+        <div class="mob-snap" id="mob-snap-end" style="display:none">
+          <img id="mob-snap-end-img" alt="End frame" onclick="mobJumpToSnap('end')">
+          <span class="mob-snap-label">OUT</span>
+        </div>
+      </div>
+
+      <!-- Unset — appears contextually when an edge is pinned -->
+      <div class="mob-unset-buttons">
+        <button class="mob-unset-btn" id="mob-btn-unset-start" onclick="mobUnsetStart()" style="display:none">✕ Unset Start</button>
+        <button class="mob-unset-btn" id="mob-btn-unset-end" onclick="mobUnsetEnd()" style="display:none">✕ Unset End</button>
+      </div>
+
+      <!-- Duration presets — one segmented setting -->
+      <div class="edit-duration">
+        <span class="edit-label">Duration</span>
+        <div class="mob-presets">
+          <button class="mob-preset-btn" data-dur="0" onclick="mobPreset(0)">Free</button>
+          <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
+          <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
+          <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
+          <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
+          <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINE-TUNE: compact nudge rows, START / END -->
     <details class="fine-tune" id="fine-tune">
       <summary>✂ Fine-tune</summary>
-    <!-- Nudge rows: two EXPLICIT rows, never one ambiguous row -->
-    <div class="mob-finetune">
-      <div class="mob-ft-row">
-        <span class="mob-ft-label">Start</span>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(-30)">−30s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(-10)">−10s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(-5)">−5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(-0.04)">−1f</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(0.04)">+1f</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(5)">+5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(10)">+10s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeStart(30)">+30s</button>
+      <div class="mob-finetune">
+        <div class="mob-ft-row">
+          <span class="mob-ft-label">Start</span>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(-30)">−30s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(-10)">−10s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(-5)">−5s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(-0.04)">−1f</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(0.04)">+1f</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(5)">+5s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(10)">+10s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeStart(30)">+30s</button>
+        </div>
+        <div class="mob-ft-row">
+          <span class="mob-ft-label">End</span>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(-30)">−30s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(-10)">−10s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(-5)">−5s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(-0.04)">−1f</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(0.04)">+1f</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(5)">+5s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(10)">+10s</button>
+          <button class="mob-ft-btn" onclick="mobNudgeEnd(30)">+30s</button>
+        </div>
       </div>
-      <div class="mob-ft-row">
-        <span class="mob-ft-label">End</span>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(-30)">−30s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(-10)">−10s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(-5)">−5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(-0.04)">−1f</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(0.04)">+1f</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(5)">+5s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(10)">+10s</button>
-        <button class="mob-ft-btn" onclick="mobNudgeEnd(30)">+30s</button>
-      </div>
-    </div>
-
-    <!-- Preset chips -->
-    <div class="mob-presets">
-      <button class="mob-preset-btn" data-dur="0" onclick="mobPreset(0)">Free</button>
-      <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
-      <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
-      <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
-      <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
-      <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
-    </div>
     </details>
 
-    <!-- Caption lines: tap a line to mark the clip range around it -->
-    <details class="mob-lines" id="mob-lines" style="display:none">
-      <summary>💬 Lines</summary>
-      <div class="mob-lines-search-row">
-        <input type="search" id="mob-lines-search" placeholder="Search lines..." autocomplete="off" oninput="mobFilterLines(this.value)">
-        <span class="mob-lines-count" id="mob-lines-count"></span>
-      </div>
-      <div class="mob-lines-list" id="mob-lines-list"></div>
-      <div class="mob-lines-empty" id="mob-lines-empty" style="display:none">No matching lines</div>
-    </details>
+    <!-- LINES + EXPORT OPTIONS: side-by-side on desktop -->
+    <div class="edit-side">
 
-    <!-- Actions: loop + download -->
+      <!-- Caption lines: click a line to mark the clip range around it -->
+      <details class="mob-lines" id="mob-lines" style="display:none">
+        <summary>💬 Lines</summary>
+        <div class="mob-lines-search-row">
+          <input type="search" id="mob-lines-search" placeholder="Search lines..." autocomplete="off" oninput="mobFilterLines(this.value)">
+          <span class="mob-lines-count" id="mob-lines-count"></span>
+        </div>
+        <div class="mob-lines-list" id="mob-lines-list"></div>
+        <div class="mob-lines-empty" id="mob-lines-empty" style="display:none">No matching lines</div>
+      </details>
+
+      <!-- Export options -->
+      <details class="mob-options" id="mob-options">
+        <summary>Export options</summary>
+        <label class="mob-option" id="mob-opt-captions" style="display:none">
+          <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
+          💬 Burn captions
+        </label>
+        <label class="mob-option" id="mob-opt-caption-color" style="display:none">
+          <button type="button" class="btn btn-small" id="mob-btn-caption-color" onclick="toggleCaptionColor()">🎨 White</button>
+        </label>
+        <label class="mob-option" id="mob-opt-caption-placement" style="display:none">
+          <button type="button" class="btn btn-small" id="mob-btn-caption-placement" onclick="toggleCaptionPosition()">📍 Bottom</button>
+        </label>
+        <label class="mob-option">
+          <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
+          📱 Vertical 9:16
+        </label>
+        <label class="mob-option">🎞 Format
+          <select id="mob-sel-format" onchange="toggleFormat()" style="margin-left:auto">
+            <option value="mp4">MP4</option>
+            <option value="gif">GIF</option>
+          </select>
+        </label>
+      </details>
+    </div>
+
+    <!-- Actions: loop (secondary) + set clip (primary) -->
     <div class="mob-actions">
       <button class="mob-loop-btn" id="mob-btn-loop" onclick="mobLoop()">🔁 Loop</button>
-      <button class="mob-download-btn" id="mob-btn-download" onclick="mobDownload()" disabled>
-        ⬇ Download Clip
-      </button>
+      <button class="mob-download-btn" id="mob-btn-download" onclick="mobDownload()" disabled>⚠ Set a clip range</button>
     </div>
-
-    <!-- Options -->
-    <details class="mob-options" id="mob-options">
-      <summary>Options</summary>
-      <label class="mob-option" id="mob-opt-captions" style="display:none">
-        <input type="checkbox" id="mob-chk-captions" onchange="toggleCaptions()">
-        💬 Burn captions
-      </label>
-      <label class="mob-option" id="mob-opt-caption-color" style="display:none">
-        <button type="button" class="btn btn-small" id="mob-btn-caption-color" onclick="toggleCaptionColor()">🎨 White</button>
-      </label>
-      <label class="mob-option" id="mob-opt-caption-placement" style="display:none">
-        <button type="button" class="btn btn-small" id="mob-btn-caption-placement" onclick="toggleCaptionPosition()">📍 Bottom</button>
-      </label>
-      <label class="mob-option">
-        <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
-        📱 Vertical 9:16
-      </label>
-      <label class="mob-option">🎞 Format
-        <select id="mob-sel-format" onchange="toggleFormat()" style="margin-left:auto">
-          <option value="mp4">MP4</option>
-          <option value="gif">GIF</option>
-        </select>
-      </label>
-    </details>
 
     <!-- Progress + status (IDs stable — downloadClip mirroring relies on them) -->
     <div class="clip-progress" id="mob-clip-progress" style="display:none">
@@ -303,8 +322,8 @@
 
 </main>
 
-<script src="static/app.js?v=63"></script>
-<script src="static/mobile.js?v=63"></script>
+<script src="static/app.js?v=64"></script>
+<script src="static/mobile.js?v=64"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");

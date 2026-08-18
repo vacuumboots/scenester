@@ -323,7 +323,7 @@ function showDetailView() {
   state.mediaDuration = durationS;
 
   // Show frame preview area
-  if (dom.framePreview) dom.framePreview.style.display = "block";
+  if (dom.framePreview) dom.framePreview.style.display = "";
   if (dom.clipProgress) dom.clipProgress.style.display = "none";
   if (dom.clipStatus) dom.clipStatus.textContent = "";
 
@@ -627,6 +627,8 @@ function loadVideoPreview(mediaId) {
     // Current "Frame at" readout (now shared desktop+mobile — lives in the
     // unified clip editor).
     if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
+    // Keep the timeline's playhead marker on the nearest thumbnail
+    updateStripPosition();
     // Loop within clip range when playing a clip preview
     if (_loopPlayback && ct >= _sliderEnd) {
       vid.currentTime = _sliderStart;
@@ -795,6 +797,24 @@ function updateStripRange() {
   }
 }
 
+// Highlight the thumbnail nearest the playhead (white ring = where the
+// playhead is now, distinct from gold = the selected clip range).
+function updateStripPosition() {
+  if (!dom.frameStrip || dom.frameStrip.style.display === "none") return;
+  if (!dom.frameStripInner || !_stripThumbs || !_stripThumbs.length) return;
+  var ct = dom.previewVideo ? dom.previewVideo.currentTime : _sliderStart;
+  var best = 0;
+  var bestD = Infinity;
+  for (var i = 0; i < _stripThumbs.length; i++) {
+    var d = Math.abs(_stripThumbs[i].time - ct);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  for (var j = 0; j < _stripThumbs.length; j++) {
+    if (j === best) _stripThumbs[j].el.classList.add("current");
+    else _stripThumbs[j].el.classList.remove("current");
+  }
+}
+
 
 function updateTimeDisplay() {
   // Enforce constraints FIRST, then display.
@@ -829,7 +849,7 @@ function updateDownloadButton() {
     dom.btnDownload.textContent = "⚠ Set a clip range";
   } else {
     dom.btnDownload.disabled = false;
-    var label = "⬇ Download Clip";
+    var label = "⬇ Set Clip";
     var parts = [];
     if (_captionsEnabled) {
       var capDetails = "captions";
@@ -843,7 +863,7 @@ function updateDownloadButton() {
     }
     if (_verticalEnabled) parts.push("vertical");
     if (_clipFormat === "gif") parts.push("gif");
-    if (parts.length) label = "⬇ Download Clip (" + parts.join(" + ") + ")";
+    if (parts.length) label = "⬇ Set Clip (" + parts.join(" + ") + ")";
     dom.btnDownload.textContent = label;
   }
 }
@@ -1256,7 +1276,7 @@ async function downloadClip() {
     if (dom.clipStatus) dom.clipStatus.textContent = "Error: " + err.message;
   } finally {
     if (dom.clipProgress) dom.clipProgress.style.display = "none";
-    if (dom.btnDownload) { dom.btnDownload.disabled = false; dom.btnDownload.textContent = "\u{1F4E5} Download Clip"; }
+    if (dom.btnDownload) { dom.btnDownload.disabled = false; dom.btnDownload.textContent = "\u{1F4E5} Set Clip"; }
   }
 }
 

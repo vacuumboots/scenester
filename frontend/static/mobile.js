@@ -51,6 +51,7 @@ function _mobCacheDom() {
   _mobEls.progressText = document.getElementById("mob-clip-progress-text");
   _mobEls.status = document.getElementById("mob-clip-status");
   _mobEls.presetBtns = document.querySelectorAll(".mob-preset-btn");
+  _mobEls.rangeSummary = document.getElementById("range-summary");
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -420,7 +421,21 @@ function _mobRender() {
   if (!_mobLast) {
     _mobLast = { start: "", end: "", dur: "", ovL: null, ovW: null,
                  dl: null, dlDisabled: null, preset: -1, loop: null,
-                 us: null, ue: null };
+                 us: null, ue: null, rs: null };
+  }
+
+  // Range summary: the resulting clip shown once both edges are set
+  if (_mobEls.rangeSummary) {
+    var rs;
+    if (unselected) {
+      rs = "Set Start and End to define the clip";
+    } else {
+      rs = fmtTime(_sliderStart) + " → " + fmtTime(_sliderEnd) + " · " + dur.toFixed(1) + "s";
+    }
+    if (rs !== _mobLast.rs) {
+      _mobEls.rangeSummary.textContent = rs;
+      _mobLast.rs = rs;
+    }
   }
 
   if (_mobEls.timeStart && s !== _mobLast.start) {
@@ -458,12 +473,12 @@ function _mobRender() {
       dlLabel = "⚠ Set a clip range";
     } else {
       dlDisabled = false;
-      dlLabel = "⬇ Download Clip";
+      dlLabel = "⬇ Set Clip";
       var parts = [];
       if (_captionsEnabled) parts.push("captions");
       if (_verticalEnabled) parts.push("vertical");
       if (_clipFormat === "gif") parts.push("gif");
-      if (parts.length) dlLabel = "⬇ Download Clip (" + parts.join(" + ") + ")";
+      if (parts.length) dlLabel = "⬇ Set Clip (" + parts.join(" + ") + ")";
     }
     if (dlDisabled !== _mobLast.dlDisabled) {
       _mobEls.btnDownload.disabled = dlDisabled;
