@@ -231,17 +231,18 @@ def _sample_quote_index():
     return [
         {"media_id": 1, "title": "Inception", "year": 2010,
          "lines": [
-             {"start": 10.0, "end": 12.0, "text": "You mustn't be afraid to dream a little bigger."},
-             {"start": 20.0, "end": 22.0, "text": "What is the most resilient parasite?"},
+             (10.0, 12.0, "You mustn't be afraid to dream a little bigger."),
+             (20.0, 22.0, "What is the most resilient parasite?"),
          ]},
         {"media_id": 2, "title": "The Matrix", "year": 1999,
          "lines": [
-             {"start": 5.0, "end": 8.0, "text": "Wake up, Neo."},
+             (5.0, 8.0, "Wake up, Neo."),
+             (9.0, 12.0, "There is no spoon."),
          ]},
     ]
 
 
-def test_quote_search_finds_substring():
+def test_quote_search_finds_word():
     matches = main._search_quote_index(_sample_quote_index(), "resilient")
     assert len(matches) == 1
     assert matches[0]["media_id"] == 1
@@ -259,9 +260,45 @@ def test_quote_search_case_insensitive():
 
 
 def test_quote_search_spans_movies():
-    matches = main._search_quote_index(_sample_quote_index(), "o")
-    assert len(matches) == 3
+    matches = main._search_quote_index(_sample_quote_index(), "is")
+    assert len(matches) == 2
     assert {m["media_id"] for m in matches} == {1, 2}
+
+
+def test_quote_search_word_boundaries():
+    idx = [{"media_id": 1, "title": "T", "year": 0, "lines": [
+        (0.0, 1.0, "Any indications of abuse?"),
+        (1.0, 2.0, "The cat sat."),
+        (2.0, 3.0, "Scared of the dark."),
+    ]}]
+    # "cat" as a word matches "The cat sat." — and never "indications"
+    cat = main._search_quote_index(idx, "cat")
+    assert len(cat) == 1
+    assert cat[0]["text"] == "The cat sat."
+    # "red" must not match inside "Scared"
+    assert main._search_quote_index(idx, "red") == []
+
+
+def test_quote_search_phrase_keeps_adjacency():
+    idx = [{"media_id": 1, "title": "T", "year": 0, "lines": [
+        (0.0, 2.0, "Let's do it again."),
+        (2.0, 4.0, "Do you think it will happen again?"),
+    ]}]
+    hits = main._search_quote_index(idx, "do it again")
+    assert len(hits) == 1
+    assert hits[0]["text"] == "Let's do it again."
+
+
+def test_quote_search_limits_per_movie():
+    idx = [
+        {"media_id": 1, "title": "A", "year": 0,
+         "lines": [(float(i), float(i + 1), "the word") for i in range(5)]},
+        {"media_id": 2, "title": "B", "year": 0,
+         "lines": [(float(i), float(i + 1), "the word") for i in range(5)]},
+    ]
+    matches = main._search_quote_index(idx, "word", cap=50, per_movie=3)
+    assert len(matches) == 6          # 3 from each movie, not 10
+    assert [m["media_id"] for m in matches] == [1, 1, 1, 2, 2, 2]
 
 
 def test_quote_search_empty_query_returns_nothing():
@@ -276,8 +313,17 @@ def test_quote_search_no_match():
 def test_quote_search_caps_at_limit():
     index = [
         {"media_id": i, "title": "T", "year": 0,
-         "lines": [{"start": 0.0, "end": 1.0, "text": "the quick brown fox"}]}
+         "lines": [(0.0, 1.0, "the quick brown fox")]}
         for i in range(10)
     ]
     matches = main._search_quote_index(index, "the", cap=3)
     assert len(matches) == 3
+
+
+def test_quote_search_escapes_regex_specials():
+    idx = [{"media_id": 1, "title": "T", "year": 0, "lines": [
+        (0.0, 1.0, "a+b is the answer"),
+        (1.0, 2.0, "8 1/2 is a film"),
+    ]}]
+    assert len(main._search_quote_index(idx, "a+b")) == 1
+    assert len(main._search_quote_index(idx, "8 1/2")) == 1

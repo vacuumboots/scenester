@@ -494,15 +494,18 @@ async def serve_subtitle(media_id: int):
 
 _quote_index: list[dict] | None = None
 _quote_index_ts: float = 0.0
-_QUOTE_INDEX_TTL_SECONDS = 600
+_quote_index_lock = asyncio.Lock()
+_QUOTE_INDEX_TTL_SECONDS = 3600
 _QUOTE_MAX_MATCHES = 50
+_QUOTE_LINES_PER_MOVIE = 3
 
 
 async def _build_quote_index() -> list[dict]:
     """Parse every movie's subtitle file once; the result is cached.
 
-    Each entry: {media_id, title, year, lines} where lines is the raw
-    parse_srt output. Movies without an SRT are skipped entirely.
+    Each entry: {media_id, title, year, lines} where lines is a list of
+    (start, end, text) tuples (cheaper than dicts at ~1.2M lines).
+    Movies without an SRT are skipped entirely.
     """
     items = await plex.get_library_sections()
     index: list[dict] = []
@@ -520,37 +523,93 @@ async def _build_quote_index() -> list[dict]:
             "media_id": item["media_id"],
             "title": item["title"],
             "year": item.get("year") or "",
-            "lines": lines,
+            "lines": [(l["start"], l["end"], l["text"]) for l in lines],
         })
     return index
 
 
-async def _get_quote_index() -> list[dict]:
+async def _refresh_quote_index() -> None:
+    """Rebuild the index if it is stale. Lock-guarded; on failure the
+    previous index (or None) is kept so a transient Plex error never
+    wipes a working index."""
     global _quote_index, _quote_index_ts
-    now = time.time()
-    if _quote_index is None or now - _quote_index_ts > _QUOTE_INDEX_TTL_SECONDS:
-        _quote_index = await _build_quote_index()
-        _quote_index_ts = now
+    async with _quote_index_lock:
+        if _quote_index is not None and time.time() - _quote_index_ts < _QUOTE_INDEX_TTL_SECONDS:
+            return
+        try:
+            idx = await _build_quote_index()
+        except Exception:
+            return
+        _quote_index, _quote_index_ts = idx, time.time()
+
+
+async def _get_quote_index() -> list[dict] | None:
+    """Return the cached index; never block a search on a rebuild.
+
+    A stale-but-present index is served immediately while the rebuild runs
+    in the background. Only the very first search of a process (index is
+    None) waits for the ~15s build. Returns None only if a cold build fails.
+    """
+    global _quote_index
+    if _quote_index is not None and time.time() - _quote_index_ts < _QUOTE_INDEX_TTL_SECONDS:
+        return _quote_index
+    if _quote_index is not None:
+        asyncio.create_task(_refresh_quote_index())
+        return _quote_index
+    await _refresh_quote_index()
     return _quote_index
 
 
-def _search_quote_index(index: list[dict], query: str, cap: int = _QUOTE_MAX_MATCHES) -> list[dict]:
-    """Case-insensitive substring search over a prebuilt quote index."""
-    q = (query or "").strip().lower()
+def _quote_pattern(query: str) -> re.Pattern | None:
+    """Compile a word-boundary-aware pattern for a quote query.
+    The whole query is matched with word boundaries on either end (when it
+    starts/ends with a word character): "cat" finds "the cat" but not
+    "indications", and phrases keep their adjacency.
+    """
+    q = (query or "").strip()
     if not q:
+        return None
+    pat = re.escape(q)
+    if q[0].isalnum() or q[0] == "_":
+        pat = r"\b" + pat
+    if q[-1].isalnum() or q[-1] == "_":
+        pat = pat + r"\b"
+    try:
+        return re.compile(pat, re.IGNORECASE)
+    except re.error:
+        return None
+
+
+def _search_quote_index(
+    index: list[dict],
+    query: str,
+    cap: int = _QUOTE_MAX_MATCHES,
+    per_movie: int = _QUOTE_LINES_PER_MOVIE,
+) -> list[dict]:
+    """Search a prebuilt quote index for a phrase.
+    Word-boundary matching (see _quote_pattern), with at most `per_movie`
+    hits per movie so the result set spans the library instead of one
+    alphabetically-early title eating the whole cap.
+    """
+    rx = _quote_pattern(query)
+    if rx is None:
         return []
     matches: list[dict] = []
     for movie in index:
-        for line in movie["lines"]:
-            if q in line["text"].lower():
+        per = 0
+        for start, end, text in movie["lines"]:
+            if per >= per_movie:
+                break
+            if rx.search(text):
                 matches.append({
                     "media_id": movie["media_id"],
                     "title": movie["title"],
                     "year": movie["year"],
-                    "start": line["start"],
-                    "end": line["end"],
-                    "text": line["text"],
+                    "start": start,
+                    "end": end,
+                    "text": text,
                 })
+                per += 1
                 if len(matches) >= cap:
                     return matches
     return matches
@@ -560,6 +619,8 @@ def _search_quote_index(index: list[dict], query: str, cap: int = _QUOTE_MAX_MAT
 async def search_quotes(q: str = ""):
     """Search subtitle lines across every movie in the library."""
     index = await _get_quote_index()
+    if index is None:
+        raise HTTPException(status_code=502, detail="Subtitle index unavailable")
     return {"matches": _search_quote_index(index, q)}
 
 
