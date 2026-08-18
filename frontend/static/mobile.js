@@ -154,6 +154,12 @@ function _mobOnTimeUpdate() {
     setSliderStart(ns);
   }
   // Both pinned: anchored, nothing to do.
+  // Caption-line follow: keep the active line highlighted while scrubbing
+  // (no-op when no lines are loaded — app.js globals).
+  if (_captionLines && _captionLines.length) {
+    var li = _findLineAt(ct);
+    if (li !== _activeLineIdx) _setActiveLine(li, false);
+  }
   _mobRender();
 }
 

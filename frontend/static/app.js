@@ -607,6 +607,8 @@ function loadVideoPreview(mediaId) {
         console.warn("Failed to add subtitle track:", e);
       }
     }
+    // Caption-line selection panel (self-hides when no subtitles exist)
+    loadCaptionLines(mediaId);
   };
 
   vid.onerror = function() {
@@ -869,6 +871,111 @@ function updateSocialToggles() {
   var mobCaptions = document.getElementById("mob-opt-captions");
   if (mobCaptions) mobCaptions.style.display = (item && item.subtitle_path) ? "" : "none";
   updateToggleButtons();
+}
+
+// ── Caption-line selection (tap a line to clip it) ────────────────────
+
+var _captionLines = [];
+var _activeLineIdx = -1;
+
+/** Fetch parsed subtitle lines once per media load; render the Lines panel. */
+function loadCaptionLines(mediaId) {
+  var panel = document.getElementById("mob-lines");
+  var list = document.getElementById("mob-lines-list");
+  _captionLines = [];
+  _activeLineIdx = -1;
+  if (!panel || !list) return;
+  if (!(state.currentItem && state.currentItem.subtitle_path)) {
+    panel.style.display = "none";
+    list.innerHTML = "";
+    return;
+  }
+  fetch("api/subtitle/lines/" + mediaId)
+    .then(function(r) { return r.ok ? r.json() : { lines: [] }; })
+    .then(function(data) {
+      _captionLines = data.lines || [];
+      if (!_captionLines.length) {
+        panel.style.display = "none";
+        list.innerHTML = "";
+        return;
+      }
+      list.innerHTML = "";
+      for (var i = 0; i < _captionLines.length; i++) {
+        (function(idx) {
+          var line = _captionLines[idx];
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "mob-line-btn";
+          btn.title = fmtTime(Math.floor(line.start)) + " - " + fmtTime(Math.ceil(line.end));
+          btn.innerHTML = "<span class=\"mob-line-time\">" + fmtTime(Math.floor(line.start)) + "</span>"
+            + "<span class=\"mob-line-text\">" + escHtml(line.text) + "</span>";
+          btn.addEventListener("click", function() { selectCaptionLine(idx); });
+          list.appendChild(btn);
+        })(i);
+      }
+      panel.style.display = "";
+    })
+    .catch(function() {
+      panel.style.display = "none";
+      list.innerHTML = "";
+    });
+}
+
+/** Tap a line: mark the range around it, seek to it, arm caption burn. */
+function selectCaptionLine(idx) {
+  var line = _captionLines[idx];
+  if (!line) return;
+  // Deactivate any duration preset chip — the line defines the range now.
+  if (typeof _mobActivePreset !== "undefined") _mobActivePreset = 0;
+  if (typeof mobMarkStartAt === "function") mobMarkStartAt(line.start);
+  if (typeof mobMarkEndAt === "function") mobMarkEndAt(line.end);
+  seekVideoTo(line.start);
+  // A line clip is a caption clip — arm the burn checkbox (user can uncheck).
+  if (!_captionsEnabled) {
+    _captionsEnabled = true;
+    updateToggleButtons();
+  }
+  var panel = document.getElementById("mob-lines");
+  if (panel && !panel.open) panel.open = true;
+  _setActiveLine(idx, true);
+  if (typeof _mobRender === "function") _mobRender();
+}
+
+/** Highlight the active line; scroll=true only for explicit taps. */
+function _setActiveLine(idx, scroll) {
+  if (idx === _activeLineIdx) {
+    if (scroll && idx >= 0) _scrollLineIntoView(idx);
+    return;
+  }
+  var list = document.getElementById("mob-lines-list");
+  if (!list) return;
+  var prev = _activeLineIdx;
+  _activeLineIdx = idx;
+  var els = list.children;
+  if (prev >= 0 && prev < els.length) els[prev].classList.remove("active");
+  if (idx >= 0 && idx < els.length) {
+    els[idx].classList.add("active");
+    if (scroll) _scrollLineIntoView(idx);
+  }
+}
+
+function _scrollLineIntoView(idx) {
+  var list = document.getElementById("mob-lines-list");
+  if (!list) return;
+  var el = list.children[idx];
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+}
+
+/** Binary search: last line whose start <= t, and end >= t. */
+function _findLineAt(t) {
+  var lo = 0, hi = _captionLines.length - 1, found = -1;
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    if (_captionLines[mid].start <= t) { found = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  if (found >= 0 && _captionLines[found].end >= t) return found;
+  return -1;
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────

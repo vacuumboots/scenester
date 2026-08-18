@@ -433,6 +433,27 @@ async def stream_media(media_id: int):
 # ── API: Subtitles ──────────────────────────────────────────────────────
 
 
+@app.get("/api/subtitle/lines/{media_id}")
+async def subtitle_lines(media_id: int):
+    """Return parsed subtitle lines as JSON for caption-line selection.
+
+    Same .srt discovery as serve_subtitle, but as [{start, end, text}]
+    with times in seconds, so the frontend can offer tap-to-mark clip
+    selection around a spoken line.
+    """
+    try:
+        meta = await plex.get_metadata(media_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    subtitle_path = meta.get("subtitle_path")
+    if not subtitle_path or not os.path.isfile(subtitle_path):
+        return {"lines": []}
+    return {"lines": parse_srt(subtitle_path)}
+
+
 @app.get("/api/subtitle/{media_id}")
 async def serve_subtitle(media_id: int):
     """Serve the subtitle file as WebVTT for browser <track> support.

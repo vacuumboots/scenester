@@ -1267,6 +1267,77 @@ main {
   font-weight: 700;
 }
 
+/* ── Caption lines (tap a line to clip it) ──────────────────────────── */
+
+.mob-lines {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.mob-lines summary {
+  padding: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-lines-list {
+  max-height: 28vh;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mob-line-btn {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 12px;  /* ≥44px touch target */
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-line-btn:hover {
+  background: rgba(196, 150, 59, 0.08);
+}
+
+.mob-line-btn:active {
+  background: rgba(196, 150, 59, 0.15);
+}
+
+.mob-line-btn.active {
+  background: rgba(196, 150, 59, 0.18);
+  border-left-color: var(--gold);
+}
+
+.mob-line-time {
+  flex-shrink: 0;
+  min-width: 46px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.mob-line-text {
+  overflow-wrap: anywhere;
+}
+
 /* ── Actions: loop (secondary) + download (primary gold) ────────────── */
 
 .mob-actions {
