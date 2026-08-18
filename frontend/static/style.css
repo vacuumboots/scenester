@@ -1310,6 +1310,7 @@ main {
   font-size: 14px;
   line-height: 1.35;
   cursor: pointer;
+  touch-action: manipulation;  /* double-tap = dblclick, not page zoom */
   -webkit-tap-highlight-color: transparent;
 }
 

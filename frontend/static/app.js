@@ -956,6 +956,7 @@ function _renderLineList() {
       btn.innerHTML = "<span class=\"mob-line-time\">" + fmtTime(Math.floor(line.start)) + "</span>"
         + "<span class=\"mob-line-text\">" + escHtml(line.text) + "</span>";
       btn.addEventListener("click", function() { selectCaptionLine(fullIdx); });
+      btn.addEventListener("dblclick", function() { dblSelectCaptionLine(fullIdx); });
       list.appendChild(btn);
     })(_filteredIdx[i]);
   }
@@ -1002,6 +1003,23 @@ function selectCaptionLine(idx) {
   if (panel && !panel.open) panel.open = true;
   _setActiveLine(idx, true);
   if (typeof _mobRender === "function") _mobRender();
+}
+
+/** Double-click a line: select it, force loop playback, jump to the video. */
+function dblSelectCaptionLine(idx) {
+  selectCaptionLine(idx);
+  // Loop must turn ON even if already looping — playClip toggles, so pause
+  // first to leave its toggle state on the "off" side.
+  var vid = document.getElementById("preview-video");
+  if (vid && !vid.paused) vid.pause();
+  if (typeof mobLoop === "function") mobLoop();
+  // Bring the video (top of the page) into view.
+  if (vid && vid.scrollIntoView) {
+    vid.scrollIntoView({ block: "start", behavior: "smooth" });
+  } else {
+    var mainEl = document.getElementById("main");
+    if (mainEl) mainEl.scrollTop = 0;
+  }
 }
 
 /** Highlight the active line; scroll=true only for explicit taps. */
