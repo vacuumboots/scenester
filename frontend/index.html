@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Scenester</title>
-  <link rel="stylesheet" href="static/style.css?v=59">
+  <link rel="stylesheet" href="static/style.css?v=60">
 </head>
 <body>
 
@@ -56,6 +56,10 @@
   <div class="header-inner">
     <h1><img src="static/trans.png" alt="" class="header-logo"><span class="wordmark"><span class="brand-clip">Scene</span><span class="brand-arr">ster</span></span></h1>
     <div class="search-row">
+      <div class="search-mode" id="search-mode">
+        <button type="button" class="search-mode-btn active" data-mode="title" onclick="setSearchMode('title')">Titles</button>
+        <button type="button" class="search-mode-btn" data-mode="quote" onclick="setSearchMode('quote')">Lines</button>
+      </div>
       <input id="search" type="text" placeholder="Search library..." autocomplete="off">
       <select id="sort-by">
         <option value="title">Sort: Title</option>
@@ -101,6 +105,9 @@
       <div class="empty-text">Nothing here yet</div>
       <div class="empty-sub">Add media to your Plex library and it will show up here.</div>
     </div>
+
+    <!-- Quote search results (Lines mode) -->
+    <div class="quote-results" id="quote-results" style="display:none"></div>
 
     <!-- Clip Gallery -->
     <div class="clip-gallery" id="clip-gallery" style="display:none">
@@ -296,8 +303,8 @@
 
 </main>
 
-<script src="static/app.js?v=59"></script>
-<script src="static/mobile.js?v=59"></script>
+<script src="static/app.js?v=60"></script>
+<script src="static/mobile.js?v=60"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");

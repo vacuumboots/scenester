@@ -1376,6 +1376,122 @@ main {
   font-size: 13px;
 }
 
+/* ── Search mode toggle (Titles / Lines) ────────────────────────────── */
+
+.search-mode {
+  display: flex;
+  gap: 3px;
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+.search-mode-btn {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.search-mode-btn.active {
+  background: var(--gold);
+  color: #111;
+  font-weight: 700;
+}
+
+/* ── Quote search results (Lines mode) ──────────────────────────────── */
+
+.quote-status {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.quote-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.quote-card {
+  display: flex;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.quote-card:hover,
+.quote-card:active {
+  border-color: var(--gold);
+}
+
+.quote-thumb {
+  width: 72px;
+  height: 108px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #222;
+  flex-shrink: 0;
+}
+
+.quote-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quote-title {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.quote-year {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.quote-time {
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.quote-text {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .search-mode-btn {
+    min-height: 34px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+  .quote-card {
+    padding: 8px;
+  }
+  .quote-thumb {
+    width: 56px;
+    height: 84px;
+  }
+}
+
 /* ── Actions: loop (secondary) + download (primary gold) ────────────── */
 
 .mob-actions {

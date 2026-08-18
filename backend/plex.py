@@ -301,6 +301,7 @@ async def _get_section_items(section_id: int) -> list[dict]:
             "media_id": int(mc.get("ratingKey", 0)),
             "type": mc.get("type", "movie"),
             "duration": mc.get("duration", 0),  # ms
+            "file_path": _translate_path(mc),   # container path ('' if no playable part)
         }
         if item["type"] == "episode":
             item["show_title"] = mc.get("grandparentTitle", "")

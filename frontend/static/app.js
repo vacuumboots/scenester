@@ -271,6 +271,8 @@ function goHome() {
   if (dom.previewError) dom.previewError.style.display = "none";
   if (dom.previewLoading) dom.previewLoading.style.display = "none";
   renderLibrary();
+  if (typeof hideQuoteResults === "function") hideQuoteResults();
+  if (typeof setSearchMode === "function") setSearchMode("title");
   if (typeof destroyMobileDetail === 'function') destroyMobileDetail();
 }
 
@@ -896,6 +898,7 @@ function loadCaptionLines(mediaId) {
   if (!(state.currentItem && state.currentItem.subtitle_path)) {
     panel.style.display = "none";
     list.innerHTML = "";
+    __pendingQuote = null;
     return;
   }
   fetch("api/subtitle/lines/" + mediaId)
@@ -905,15 +908,35 @@ function loadCaptionLines(mediaId) {
       if (!_captionLines.length) {
         panel.style.display = "none";
         list.innerHTML = "";
+        __pendingQuote = null;
         return;
       }
       for (var i = 0; i < _captionLines.length; i++) _filteredIdx.push(i);
       _renderLineList();
       panel.style.display = "";
+      // A quote-search tap hands us the exact line to mark once loaded.
+      if (__pendingQuote && __pendingQuote.media_id === mediaId) {
+        var pq = __pendingQuote;
+        __pendingQuote = null;
+        var best = -1;
+        for (var k = 0; k < _captionLines.length; k++) {
+          if (Math.abs(_captionLines[k].start - pq.start) < 0.3 &&
+              Math.abs(_captionLines[k].end - pq.end) < 0.3) { best = k; break; }
+        }
+        if (best < 0) {
+          var bestDist = Infinity;
+          for (var j = 0; j < _captionLines.length; j++) {
+            var d = Math.abs(_captionLines[j].start - pq.start);
+            if (d < bestDist) { bestDist = d; best = j; }
+          }
+        }
+        if (best >= 0) selectCaptionLine(best);
+      }
     })
     .catch(function() {
       panel.style.display = "none";
       list.innerHTML = "";
+      __pendingQuote = null;
     });
 }
 
@@ -1019,6 +1042,101 @@ function _findLineAt(t) {
   }
   if (found >= 0 && _captionLines[found].end >= t) return found;
   return -1;
+}
+
+// ── Quote search (subtitle lines across the whole library) ────────────
+
+var _searchMode = "title";
+var _quoteTimer = null;
+var _lastQuoteQuery = "";
+var __pendingQuote = null;   // {media_id, start, end} handed to loadCaptionLines
+
+function setSearchMode(mode) {
+  if (mode !== "quote") mode = "title";
+  _searchMode = mode;
+  var btns = document.querySelectorAll(".search-mode-btn");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle("active", btns[i].dataset.mode === mode);
+  }
+  var sort = document.getElementById("sort-by");
+  var s = dom.search;
+  if (mode === "quote") {
+    if (s) s.placeholder = "Search lines in every movie...";
+    if (sort) sort.style.display = "none";
+    runQuoteSearch(s ? s.value : "");
+  } else {
+    if (s) s.placeholder = "Search library...";
+    if (sort) sort.style.display = "";
+    hideQuoteResults();
+    renderLibrary(s ? s.value : "");
+  }
+}
+
+function hideQuoteResults() {
+  var box = document.getElementById("quote-results");
+  if (box) box.style.display = "none";
+  if (dom.libraryGrid) dom.libraryGrid.style.display = "";
+  if (dom.emptyState) dom.emptyState.style.display = "none";
+}
+
+function runQuoteSearch(q) {
+  _lastQuoteQuery = (q || "").trim();
+  clearTimeout(_quoteTimer);
+  _quoteTimer = setTimeout(function() { fetchQuoteResults(_lastQuoteQuery); }, 250);
+}
+
+function fetchQuoteResults(query) {
+  var box = document.getElementById("quote-results");
+  if (!box) return;
+  if (!query) { hideQuoteResults(); return; }
+  if (dom.libraryGrid) dom.libraryGrid.style.display = "none";
+  if (dom.emptyState) dom.emptyState.style.display = "none";
+  box.style.display = "block";
+  box.innerHTML = "<div class='quote-status'>Searching lines...</div>";
+  fetch("api/quotes?q=" + encodeURIComponent(query))
+    .then(function(r) { return r.ok ? r.json() : { matches: [] }; })
+    .then(function(data) {
+      if (_lastQuoteQuery !== query) return;   // stale response
+      renderQuoteResults(box, data.matches || [], query);
+    })
+    .catch(function() {
+      if (_lastQuoteQuery !== query) return;
+      box.innerHTML = "<div class='empty-state'><div class='empty-text'>Search failed</div><div class='empty-sub'>Is Plex reachable?</div></div>";
+    });
+}
+
+function renderQuoteResults(box, matches, query) {
+  box.style.display = "block";
+  if (!matches.length) {
+    box.innerHTML = "<div class='empty-state'><div class='empty-text'>No lines match \"" + escHtml(query) + "\"</div>"
+      + "<div class='empty-sub'>Lines mode searches subtitle text in every movie.</div></div>";
+    return;
+  }
+  var html = "<div class='results-header'>Lines matching \"" + escHtml(query) + "\" <span class='result-count'>" + matches.length + "</span></div>"
+    + "<div class='quote-grid'>";
+  for (var i = 0; i < matches.length; i++) {
+    var m = matches[i];
+    html += "<div class='quote-card' data-mid='" + m.media_id + "' data-start='" + m.start + "' data-end='" + m.end + "' onclick='openQuoteMatch(this)'>"
+      + "<img class='quote-thumb' src='api/thumb/" + m.media_id + "' alt='' loading='lazy'>"
+      + "<div class='quote-body'>"
+      + "<div class='quote-title'>" + escHtml(m.title) + (m.year ? " <span class='quote-year'>" + escHtml(m.year) + "</span>" : "") + "</div>"
+      + "<div class='quote-time'>" + fmtTime(Math.floor(m.start)) + "</div>"
+      + "<div class='quote-text'>" + escHtml(m.text) + "</div>"
+      + "</div></div>";
+  }
+  html += "</div>";
+  box.innerHTML = html;
+}
+
+function openQuoteMatch(el) {
+  var mid = parseInt(el.getAttribute("data-mid"), 10);
+  var start = parseFloat(el.getAttribute("data-start"));
+  var end = parseFloat(el.getAttribute("data-end"));
+  if (!mid || isNaN(start) || isNaN(end)) return;
+  // Hand the exact line to the detail view; loadCaptionLines applies it
+  // once that movie's lines are fetched.
+  __pendingQuote = { media_id: mid, start: start, end: end };
+  selectItem(mid);
 }
 
 // ── Clip Download ──────────────────────────────────────────────────────
@@ -1238,8 +1356,15 @@ function init() {
     titleEl.addEventListener("click", goHome);
   }
 
-  // Search
-  if (dom.search) dom.search.addEventListener("input", function() { renderLibrary(dom.search.value); });
+  // Search (Titles mode filters the grid; Lines mode searches subtitles)
+  if (dom.search) dom.search.addEventListener("input", function() {
+    if (_searchMode === "quote") {
+      runQuoteSearch(dom.search.value);
+    } else {
+      renderLibrary(dom.search.value);
+      hideQuoteResults();
+    }
+  });
 
   // Sort
   var sortSelect = qs("#sort-by");

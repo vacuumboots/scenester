@@ -489,6 +489,80 @@ async def serve_subtitle(media_id: int):
 
     return Response(content=vtt, media_type="text/vtt")
 
+
+# ── Quote search (subtitle lines across the whole library) ──────────────
+
+_quote_index: list[dict] | None = None
+_quote_index_ts: float = 0.0
+_QUOTE_INDEX_TTL_SECONDS = 600
+_QUOTE_MAX_MATCHES = 50
+
+
+async def _build_quote_index() -> list[dict]:
+    """Parse every movie's subtitle file once; the result is cached.
+
+    Each entry: {media_id, title, year, lines} where lines is the raw
+    parse_srt output. Movies without an SRT are skipped entirely.
+    """
+    items = await plex.get_library_sections()
+    index: list[dict] = []
+    for item in items:
+        fp = item.get("file_path") or ""
+        if not fp:
+            continue
+        sub_path = plex._find_subtitle_path(fp)
+        if not sub_path:
+            continue
+        lines = parse_srt(sub_path)
+        if not lines:
+            continue
+        index.append({
+            "media_id": item["media_id"],
+            "title": item["title"],
+            "year": item.get("year") or "",
+            "lines": lines,
+        })
+    return index
+
+
+async def _get_quote_index() -> list[dict]:
+    global _quote_index, _quote_index_ts
+    now = time.time()
+    if _quote_index is None or now - _quote_index_ts > _QUOTE_INDEX_TTL_SECONDS:
+        _quote_index = await _build_quote_index()
+        _quote_index_ts = now
+    return _quote_index
+
+
+def _search_quote_index(index: list[dict], query: str, cap: int = _QUOTE_MAX_MATCHES) -> list[dict]:
+    """Case-insensitive substring search over a prebuilt quote index."""
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    matches: list[dict] = []
+    for movie in index:
+        for line in movie["lines"]:
+            if q in line["text"].lower():
+                matches.append({
+                    "media_id": movie["media_id"],
+                    "title": movie["title"],
+                    "year": movie["year"],
+                    "start": line["start"],
+                    "end": line["end"],
+                    "text": line["text"],
+                })
+                if len(matches) >= cap:
+                    return matches
+    return matches
+
+
+@app.get("/api/quotes")
+async def search_quotes(q: str = ""):
+    """Search subtitle lines across every movie in the library."""
+    index = await _get_quote_index()
+    return {"matches": _search_quote_index(index, q)}
+
+
 # ── API: Clip generation ─────────────────────────────────────────────────
 
 clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}

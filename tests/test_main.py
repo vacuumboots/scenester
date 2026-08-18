@@ -222,3 +222,62 @@ def test_run_ffmpeg_clip_cages_unexpected_exception(monkeypatch):
     assert job["done"] is True
     assert job["error"] == "ffmpeg binary missing"
     assert job["progress"] == 0.0
+
+
+# ── quote search: _search_quote_index ───────────────────────────────────────
+
+
+def _sample_quote_index():
+    return [
+        {"media_id": 1, "title": "Inception", "year": 2010,
+         "lines": [
+             {"start": 10.0, "end": 12.0, "text": "You mustn't be afraid to dream a little bigger."},
+             {"start": 20.0, "end": 22.0, "text": "What is the most resilient parasite?"},
+         ]},
+        {"media_id": 2, "title": "The Matrix", "year": 1999,
+         "lines": [
+             {"start": 5.0, "end": 8.0, "text": "Wake up, Neo."},
+         ]},
+    ]
+
+
+def test_quote_search_finds_substring():
+    matches = main._search_quote_index(_sample_quote_index(), "resilient")
+    assert len(matches) == 1
+    assert matches[0]["media_id"] == 1
+    assert matches[0]["title"] == "Inception"
+    assert matches[0]["year"] == 2010
+    assert matches[0]["start"] == 20.0
+    assert matches[0]["end"] == 22.0
+    assert matches[0]["text"] == "What is the most resilient parasite?"
+
+
+def test_quote_search_case_insensitive():
+    matches = main._search_quote_index(_sample_quote_index(), "WAKE UP")
+    assert len(matches) == 1
+    assert matches[0]["media_id"] == 2
+
+
+def test_quote_search_spans_movies():
+    matches = main._search_quote_index(_sample_quote_index(), "o")
+    assert len(matches) == 3
+    assert {m["media_id"] for m in matches} == {1, 2}
+
+
+def test_quote_search_empty_query_returns_nothing():
+    assert main._search_quote_index(_sample_quote_index(), "") == []
+    assert main._search_quote_index(_sample_quote_index(), "   ") == []
+
+
+def test_quote_search_no_match():
+    assert main._search_quote_index(_sample_quote_index(), "zzzz") == []
+
+
+def test_quote_search_caps_at_limit():
+    index = [
+        {"media_id": i, "title": "T", "year": 0,
+         "lines": [{"start": 0.0, "end": 1.0, "text": "the quick brown fox"}]}
+        for i in range(10)
+    ]
+    matches = main._search_quote_index(index, "the", cap=3)
+    assert len(matches) == 3
