@@ -876,14 +876,22 @@ function updateSocialToggles() {
 // ── Caption-line selection (tap a line to clip it) ────────────────────
 
 var _captionLines = [];
+var _filteredIdx = [];   // full-array indices currently shown (search filter)
 var _activeLineIdx = -1;
 
 /** Fetch parsed subtitle lines once per media load; render the Lines panel. */
 function loadCaptionLines(mediaId) {
   var panel = document.getElementById("mob-lines");
   var list = document.getElementById("mob-lines-list");
+  var search = document.getElementById("mob-lines-search");
+  var count = document.getElementById("mob-lines-count");
+  var empty = document.getElementById("mob-lines-empty");
   _captionLines = [];
+  _filteredIdx = [];
   _activeLineIdx = -1;
+  if (search) search.value = "";
+  if (count) count.textContent = "";
+  if (empty) empty.style.display = "none";
   if (!panel || !list) return;
   if (!(state.currentItem && state.currentItem.subtitle_path)) {
     panel.style.display = "none";
@@ -899,26 +907,58 @@ function loadCaptionLines(mediaId) {
         list.innerHTML = "";
         return;
       }
-      list.innerHTML = "";
-      for (var i = 0; i < _captionLines.length; i++) {
-        (function(idx) {
-          var line = _captionLines[idx];
-          var btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "mob-line-btn";
-          btn.title = fmtTime(Math.floor(line.start)) + " - " + fmtTime(Math.ceil(line.end));
-          btn.innerHTML = "<span class=\"mob-line-time\">" + fmtTime(Math.floor(line.start)) + "</span>"
-            + "<span class=\"mob-line-text\">" + escHtml(line.text) + "</span>";
-          btn.addEventListener("click", function() { selectCaptionLine(idx); });
-          list.appendChild(btn);
-        })(i);
-      }
+      for (var i = 0; i < _captionLines.length; i++) _filteredIdx.push(i);
+      _renderLineList();
       panel.style.display = "";
     })
     .catch(function() {
       panel.style.display = "none";
       list.innerHTML = "";
     });
+}
+
+/** Rebuild the visible line buttons from _filteredIdx (search-aware). */
+function _renderLineList() {
+  var list = document.getElementById("mob-lines-list");
+  if (!list) return;
+  list.innerHTML = "";
+  for (var i = 0; i < _filteredIdx.length; i++) {
+    (function(fullIdx) {
+      var line = _captionLines[fullIdx];
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mob-line-btn";
+      btn.dataset.idx = fullIdx;
+      btn.title = fmtTime(Math.floor(line.start)) + " - " + fmtTime(Math.ceil(line.end));
+      btn.innerHTML = "<span class=\"mob-line-time\">" + fmtTime(Math.floor(line.start)) + "</span>"
+        + "<span class=\"mob-line-text\">" + escHtml(line.text) + "</span>";
+      btn.addEventListener("click", function() { selectCaptionLine(fullIdx); });
+      list.appendChild(btn);
+    })(_filteredIdx[i]);
+  }
+  // Re-apply the active highlight to the rebuilt DOM (if the line is visible)
+  if (_activeLineIdx >= 0) {
+    var act = list.querySelector(".mob-line-btn[data-idx=\"" + _activeLineIdx + "\"]");
+    if (act) act.classList.add("active");
+  }
+}
+
+/** Search filter (wired to the Lines panel input via oninput). */
+function mobFilterLines(q) {
+  var empty = document.getElementById("mob-lines-empty");
+  var count = document.getElementById("mob-lines-count");
+  var query = (q || "").trim().toLowerCase();
+  _filteredIdx = [];
+  if (!query) {
+    for (var i = 0; i < _captionLines.length; i++) _filteredIdx.push(i);
+  } else {
+    for (var j = 0; j < _captionLines.length; j++) {
+      if (_captionLines[j].text.toLowerCase().indexOf(query) !== -1) _filteredIdx.push(j);
+    }
+  }
+  _renderLineList();
+  if (count) count.textContent = query ? _filteredIdx.length + " / " + _captionLines.length : "";
+  if (empty) empty.style.display = (query && !_filteredIdx.length) ? "block" : "none";
 }
 
 /** Tap a line: mark the range around it, seek to it, arm caption burn. */
@@ -943,26 +983,29 @@ function selectCaptionLine(idx) {
 
 /** Highlight the active line; scroll=true only for explicit taps. */
 function _setActiveLine(idx, scroll) {
+  var list = document.getElementById("mob-lines-list");
+  if (!list) return;
   if (idx === _activeLineIdx) {
     if (scroll && idx >= 0) _scrollLineIntoView(idx);
     return;
   }
-  var list = document.getElementById("mob-lines-list");
-  if (!list) return;
   var prev = _activeLineIdx;
   _activeLineIdx = idx;
-  var els = list.children;
-  if (prev >= 0 && prev < els.length) els[prev].classList.remove("active");
-  if (idx >= 0 && idx < els.length) {
-    els[idx].classList.add("active");
-    if (scroll) _scrollLineIntoView(idx);
+  var prevEl = (prev >= 0) ? list.querySelector(".mob-line-btn[data-idx=\"" + prev + "\"]") : null;
+  if (prevEl) prevEl.classList.remove("active");
+  if (idx >= 0) {
+    var el = list.querySelector(".mob-line-btn[data-idx=\"" + idx + "\"]");
+    if (el) {
+      el.classList.add("active");
+      if (scroll) _scrollLineIntoView(idx);
+    }
   }
 }
 
 function _scrollLineIntoView(idx) {
   var list = document.getElementById("mob-lines-list");
   if (!list) return;
-  var el = list.children[idx];
+  var el = list.querySelector(".mob-line-btn[data-idx=\"" + idx + "\"]");
   if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
 }
 

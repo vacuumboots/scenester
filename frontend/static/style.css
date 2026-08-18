@@ -1338,6 +1338,44 @@ main {
   overflow-wrap: anywhere;
 }
 
+.mob-lines-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 10px;
+}
+
+.mob-lines-search-row input {
+  flex: 1;
+  min-height: 44px;  /* touch floor */
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-lines-search-row input:focus {
+  border-color: var(--gold);
+}
+
+.mob-lines-count {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.mob-lines-empty {
+  padding: 14px 12px;
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 13px;
+}
+
 /* ── Actions: loop (secondary) + download (primary gold) ────────────── */
 
 .mob-actions {

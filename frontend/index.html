@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Scenester</title>
-  <link rel="stylesheet" href="static/style.css?v=58">
+  <link rel="stylesheet" href="static/style.css?v=59">
 </head>
 <body>
 
@@ -242,7 +242,12 @@
     <!-- Caption lines: tap a line to mark the clip range around it -->
     <details class="mob-lines" id="mob-lines" style="display:none">
       <summary>💬 Lines</summary>
+      <div class="mob-lines-search-row">
+        <input type="search" id="mob-lines-search" placeholder="Search lines..." autocomplete="off" oninput="mobFilterLines(this.value)">
+        <span class="mob-lines-count" id="mob-lines-count"></span>
+      </div>
       <div class="mob-lines-list" id="mob-lines-list"></div>
+      <div class="mob-lines-empty" id="mob-lines-empty" style="display:none">No matching lines</div>
     </details>
 
     <!-- Actions: loop + download -->
@@ -291,8 +296,8 @@
 
 </main>
 
-<script src="static/app.js?v=58"></script>
-<script src="static/mobile.js?v=58"></script>
+<script src="static/app.js?v=59"></script>
+<script src="static/mobile.js?v=59"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");
