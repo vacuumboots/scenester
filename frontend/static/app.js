@@ -649,8 +649,12 @@ function seekVideoTo(t) {
 function playClip() {
   if (!dom.previewVideo) return;
   var vid = dom.previewVideo;
-  if (vid.readyState < 2) {
+  if (vid.readyState < 1) {
+    // No metadata yet — remember the intent and start once the stream
+    // delivers enough data (canplay/seeked fire after the load).
+    _loopPlayback = true;
     if (dom.clipStatus) dom.clipStatus.textContent = "Video still loading...";
+    _armLoopWhenReady(vid);
     return;
   }
 
@@ -662,7 +666,13 @@ function playClip() {
   }
 
   _loopPlayback = true;
+  _startLoopPlayback(vid);
+}
+
+/** Seek to the range start and play; loop intent is _loopPlayback. */
+function _startLoopPlayback(vid) {
   vid.currentTime = _sliderStart;
+  if (dom.clipStatus) dom.clipStatus.textContent = "";
   var promise = vid.play();
   if (promise) {
     promise.catch(function(err) {
@@ -670,6 +680,22 @@ function playClip() {
       if (dom.clipStatus) dom.clipStatus.textContent = "Playback failed: " + (err.message || "unknown error");
     });
   }
+}
+
+/** Start looping the range as soon as the stream delivers data at it.
+ *  A seek on mobile drops readyState to 1 (metadata only) while the new
+ *  position buffers, so playClip arms this instead of bailing. */
+function _armLoopWhenReady(vid) {
+  var started = false;
+  var tryStart = function() {
+    if (started || vid.readyState < 2 || !_loopPlayback || !vid.paused) return;
+    started = true;
+    vid.removeEventListener("canplay", tryStart);
+    vid.removeEventListener("seeked", tryStart);
+    _startLoopPlayback(vid);
+  };
+  vid.addEventListener("canplay", tryStart);
+  vid.addEventListener("seeked", tryStart);
 }
 
 
