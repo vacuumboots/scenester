@@ -369,7 +369,7 @@ header h1 {
 
 main {
   flex: 1;
-  width: min(100% - 32px, 1800px);
+  width: min(100% - 32px, 2560px);
   margin: 0 auto;
   padding: 24px;
   overflow-y: auto;
@@ -1787,6 +1787,8 @@ main {
     grid-template-columns: 1fr 1fr;
     gap: 8px 24px;
     padding: 6px 16px 14px;
+    max-width: 1200px;
+    margin: 0 auto;
   }
   .mob-ft-btn {
     min-height: 34px;
