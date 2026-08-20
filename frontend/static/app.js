@@ -558,6 +558,10 @@ function loadVideoPreview(mediaId) {
   if (!dom.previewVideo) return;
   var vid = dom.previewVideo;
 
+  // Reset the box to the CSS placeholder ratio (16:9 on desktop) until the
+  // movie's own aspect ratio is known — see onloadedmetadata below.
+  vid.style.aspectRatio = "";
+
   // Clear any subtitle <track> left over from a previous movie. A stale
   // track element stays attached to <video> across src changes, and the
   // browser re-associates its TextTrack with the new resource — so the
@@ -577,6 +581,12 @@ function loadVideoPreview(mediaId) {
     _videoReady = true;
     if (dom.previewLoading) dom.previewLoading.style.display = "none";
     if (dom.previewError) dom.previewError.style.display = "none";
+    // Hug the movie's native aspect ratio so widescreen films use the full
+    // player width instead of letterboxing inside a fixed 16:9 box. Before
+    // metadata the box sits at the CSS placeholder ratio.
+    if (vid.videoWidth && vid.videoHeight) {
+      vid.style.aspectRatio = vid.videoWidth + " / " + vid.videoHeight;
+    }
     vid.currentTime = (_pendingSeek != null) ? _pendingSeek : _sliderStart;
     _pendingSeek = null;
     // Always clear stale subtitle tracks (belt & braces — loadVideoPreview
@@ -890,9 +900,9 @@ function toggleCaptionPosition() {
   updateToggleButtons();
 }
 
-function toggleFormat() {
-  var sel = document.getElementById("mob-sel-format");
-  if (sel) _clipFormat = sel.value;
+function setFormat(fmt) {
+  if (fmt !== "gif") fmt = "mp4";
+  _clipFormat = fmt;
   updateToggleButtons();
 }
 
@@ -902,8 +912,11 @@ function updateToggleButtons() {
   if (mcc) mcc.checked = _captionsEnabled;
   var mcv = document.getElementById("mob-chk-vertical");
   if (mcv) mcv.checked = _verticalEnabled;
-  var mf = document.getElementById("mob-sel-format");
-  if (mf) mf.value = _clipFormat;
+  // Sync the format segmented control (MP4 | GIF)
+  var fmtBtns = document.querySelectorAll(".mob-format-btn");
+  for (var fi = 0; fi < fmtBtns.length; fi++) {
+    fmtBtns[fi].classList.toggle("active", fmtBtns[fi].getAttribute("data-format") === _clipFormat);
+  }
   // Sync caption color/placement option buttons (logic lives in mobile.js)
   if (typeof _mobRenderCaptionOpts === "function") _mobRenderCaptionOpts();
   updateDownloadButton();

@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Scenester</title>
-  <link rel="stylesheet" href="static/style.css?v=64">
+  <link rel="stylesheet" href="static/style.css?v=65">
 </head>
 <body>
 
@@ -56,9 +56,9 @@
   <div class="header-inner">
     <h1><img src="static/trans.png" alt="" class="header-logo"><span class="wordmark"><span class="brand-clip">Scene</span><span class="brand-arr">ster</span></span></h1>
     <div class="search-row">
-      <div class="search-mode" id="search-mode">
-        <button type="button" class="search-mode-btn active" data-mode="title" onclick="setSearchMode('title')">Titles</button>
-        <button type="button" class="search-mode-btn" data-mode="quote" onclick="setSearchMode('quote')">Lines</button>
+      <div class="search-mode seg" id="search-mode">
+        <button type="button" class="search-mode-btn seg-btn active" data-mode="title" onclick="setSearchMode('title')">Titles</button>
+        <button type="button" class="search-mode-btn seg-btn" data-mode="quote" onclick="setSearchMode('quote')">Lines</button>
       </div>
       <input id="search" type="text" placeholder="Search library..." autocomplete="off">
       <select id="sort-by">
@@ -223,13 +223,13 @@
       <!-- Duration presets — one segmented setting -->
       <div class="edit-duration">
         <span class="edit-label">Duration</span>
-        <div class="mob-presets">
-          <button class="mob-preset-btn" data-dur="0" onclick="mobPreset(0)">Free</button>
-          <button class="mob-preset-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
-          <button class="mob-preset-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
-          <button class="mob-preset-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
-          <button class="mob-preset-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
-          <button class="mob-preset-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
+        <div class="mob-presets seg" role="group" aria-label="Clip duration">
+          <button class="mob-preset-btn seg-btn" data-dur="0" onclick="mobPreset(0)">Free</button>
+          <button class="mob-preset-btn seg-btn" data-dur="5" onclick="mobPreset(5)">5s</button>
+          <button class="mob-preset-btn seg-btn" data-dur="10" onclick="mobPreset(10)">10s</button>
+          <button class="mob-preset-btn seg-btn" data-dur="15" onclick="mobPreset(15)">15s</button>
+          <button class="mob-preset-btn seg-btn" data-dur="45" onclick="mobPreset(45)">45s</button>
+          <button class="mob-preset-btn seg-btn" data-dur="60" onclick="mobPreset(60)">60s</button>
         </div>
       </div>
     </section>
@@ -294,12 +294,12 @@
           <input type="checkbox" id="mob-chk-vertical" onchange="toggleVertical()">
           📱 Vertical 9:16
         </label>
-        <label class="mob-option">🎞 Format
-          <select id="mob-sel-format" onchange="toggleFormat()" style="margin-left:auto">
-            <option value="mp4">MP4</option>
-            <option value="gif">GIF</option>
-          </select>
-        </label>
+        <div class="mob-option mob-option-format">🎞 Format
+          <div class="seg mob-format" role="group" aria-label="Clip format" style="margin-left:auto">
+            <button type="button" class="mob-format-btn seg-btn active" data-format="mp4" onclick="setFormat('mp4')">MP4</button>
+            <button type="button" class="mob-format-btn seg-btn" data-format="gif" onclick="setFormat('gif')">GIF</button>
+          </div>
+        </div>
       </details>
     </div>
 
@@ -322,8 +322,8 @@
 
 </main>
 
-<script src="static/app.js?v=64"></script>
-<script src="static/mobile.js?v=64"></script>
+<script src="static/app.js?v=65"></script>
+<script src="static/mobile.js?v=65"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");
