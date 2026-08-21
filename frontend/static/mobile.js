@@ -429,7 +429,7 @@ function _mobRender() {
   if (_mobEls.rangeSummary) {
     var rs;
     if (unselected) {
-      rs = "Set Start and End to define the clip";
+      rs = "";
     } else {
       rs = fmtTime(_sliderStart) + " → " + fmtTime(_sliderEnd) + " · " + dur.toFixed(1) + "s";
     }

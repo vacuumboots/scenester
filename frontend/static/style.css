@@ -1805,10 +1805,12 @@ main {
     margin-left: auto;
     margin-right: auto;
     margin-top: 8px;
+    /* Anchors the open panel so it spans the FULL row, not just the
+       chip's own column. */
+    position: relative;
   }
   .collapse-row > details {
     flex: 1;
-    position: relative;
   }
   .collapse-row > details[open] {
     flex-basis: auto;
