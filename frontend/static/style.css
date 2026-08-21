@@ -682,6 +682,19 @@ main {
   font-weight: 700;
 }
 
+.film-strip-icon {
+  width: 22px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background:
+    linear-gradient(currentColor, currentColor) 4px 3px / 12px 6px no-repeat,
+    repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px) 2px 1px / 17px 2px no-repeat,
+    repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px) 2px 11px / 17px 2px no-repeat;
+  opacity: 0.82;
+}
+
 /* ── Phone (≤ 480px) ──────────────────────────────────────────── */
 
 /* ── Clip shortcut link ─────────────────────────────────────────── */
@@ -1603,9 +1616,13 @@ main {
   background: rgba(196, 150, 59, 0.15);
 }
 
-.mob-line-btn.active {
+.mob-line-btn.selected {
   background: rgba(196, 150, 59, 0.18);
   border-left-color: var(--gold);
+}
+
+.mob-line-btn.active {
+  box-shadow: inset 0 0 0 1px rgba(196, 150, 59, 0.42);
 }
 
 .mob-line-time {
@@ -1725,32 +1742,91 @@ main {
 /* ── Desktop unified editor layout ───────────────────────────────────── */
 
 @media (min-width: 769px) {
-  .clip-editor {
-    margin: 14px 0 0;
+  /* Desktop spine: one cinema stage with its editing deck attached. The
+     player gets roughly three quarters of the viewport height on roomy
+     displays instead of reserving a fixed 590px for controls. */
+  main:has(#detail-view[style*="block"]) {
+    width: calc(100% - 32px);
+    max-width: none;
   }
 
-  /* Desktop: a full-width card, not a bottom sheet. */
+  #detail-view {
+    --desktop-stage-width: min(100%, calc(74dvh * 16 / 9));
+  }
+
+  .detail-header {
+    width: var(--desktop-stage-width);
+    margin: 0 auto 10px;
+    align-items: center;
+  }
+
+  .detail-title {
+    font-size: clamp(24px, 1.1vw, 34px);
+    letter-spacing: -0.02em;
+  }
+
+  .clip-editor {
+    width: var(--desktop-stage-width);
+    margin: 0 auto;
+  }
+
+  /* The controls are the lower deck of the player, not a floating card. */
   .mob-sheet {
-    border-radius: var(--radius);
+    border: 1px solid #303030;
+    border-top: 0;
+    border-radius: 0 0 14px 14px;
     margin-top: 0;
-    padding: 18px 28px 24px;
-    box-shadow: var(--shadow);
+    padding: 16px clamp(18px, 2vw, 34px) 20px;
+    background:
+      radial-gradient(circle at 7px 7px, #090909 0 3px, transparent 3.5px) 0 0 / 22px 14px repeat-x,
+      linear-gradient(180deg, #1b1b1b 0, #151515 100%);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.38);
   }
   .mob-sheet::before {
     display: none; /* no drag handle on desktop */
   }
 
-  /* Video: width-driven 16:9. The CARD width is capped (not the video
-     height) so the player hugs the video's real aspect — no letterbox
-     bars inside a stretched black card — and the whole editor fits the
-     viewport without scrolling. */
+  /* Video: a true 16:9 cinema stage that scales with viewport height. */
   .player-card {
-    max-width: max(568px, calc((100vh - 590px) * 16 / 9));
+    width: var(--desktop-stage-width);
+    max-width: none;
     margin-left: auto;
     margin-right: auto;
+    border: 1px solid #303030;
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
   }
   .preview-video-shared {
     aspect-ratio: 16 / 9;
+    height: min(74dvh, calc((100vw - 72px) * 9 / 16));
+  }
+
+  .timeline-bar {
+    padding: 0;
+    background:
+      radial-gradient(circle at 7px 7px, #050505 0 3px, transparent 3.5px) 0 0 / 22px 14px repeat-x,
+      linear-gradient(180deg, #151515, #111);
+    border-top-color: #343434;
+  }
+
+  .film-strip-chip {
+    min-height: 44px;
+    padding: 13px 18px 9px;
+    border-radius: 0;
+    color: #aaa;
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .film-strip-chip:hover {
+    background: rgba(255, 255, 255, 0.045);
+  }
+
+  .film-strip-chip.active {
+    background: linear-gradient(180deg, rgba(196, 150, 59, 0.18), rgba(196, 150, 59, 0.08));
   }
 
   /* Bigger timeline thumbs — desktop has the room to show more */
@@ -1761,10 +1837,29 @@ main {
 
   /* Playhead readout: compact and centered */
   .edit-position {
-    max-width: 640px;
+    max-width: 760px;
     margin-left: auto;
     margin-right: auto;
     margin-bottom: 8px;
+  }
+  .mob-playhead {
+    font-size: 13px;
+  }
+  .mob-playhead-label {
+    font-size: 12px;
+  }
+  .mob-playhead-value {
+    font-size: 20px;
+  }
+  .mob-readout {
+    font-size: 15px;
+  }
+  .mob-readout .mob-dur {
+    font-size: 13px;
+  }
+  .mob-skip-btn {
+    min-width: 46px;
+    min-height: 42px;
   }
 
   /* Fine-tune: START | END side by side; compact precision buttons */
@@ -1781,15 +1876,39 @@ main {
   /* Mark row: all four controls in one line at a comfortable width */
   .mob-mark-buttons {
     grid-template-columns: 1fr 1fr 1fr 1fr;
-    max-width: 960px;
+    max-width: 1100px;
+    gap: 1px;
     margin-left: auto;
     margin-right: auto;
+    padding: 1px;
+    background: #353535;
+    border: 1px solid #3b3b3b;
+    border-radius: 9px;
+    overflow: hidden;
   }
   .mob-mark-btn,
   .mob-loop-btn,
   .mob-download-btn {
-    min-height: 56px;
-    font-size: 15px;
+    min-height: 50px;
+    font-size: 14px;
+    border: 0;
+    border-radius: 7px;
+    transition: background 0.15s, color 0.15s, filter 0.15s;
+  }
+  .mob-mark-btn {
+    background: #171717;
+    color: #d6b46e;
+  }
+  .mob-mark-btn-end {
+    opacity: 1;
+  }
+  .mob-loop-btn {
+    background: #171717;
+    color: #b5b5b5;
+  }
+  .mob-download-btn:disabled {
+    background: #1b1b1b;
+    color: #666;
   }
 
   .range-summary {
@@ -1810,7 +1929,7 @@ main {
      overlay panel so nothing below is pushed out of the viewport. */
   .collapse-row {
     flex-wrap: nowrap;
-    max-width: 960px;
+    max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
     margin-top: 8px;
@@ -1833,8 +1952,12 @@ main {
     box-shadow: var(--shadow);
   }
   .collapse-row summary {
-    min-height: 36px;
-    padding: 6px 10px;
+    min-height: 38px;
+    padding: 7px 12px;
+    border-color: #343434;
+    background: #141414;
+    border-radius: 7px;
+    letter-spacing: 0.015em;
   }
 
   .mob-lines-list {

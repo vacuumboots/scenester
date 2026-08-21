@@ -752,10 +752,16 @@ function toggleFilmStrip() {
       buildFrameStrip((it && (it.media_id || it.id)) || "", state.mediaDuration);
     }
     if (dom.frameStrip) dom.frameStrip.style.display = "block";
-    if (btn) btn.classList.add("active");
+    if (btn) {
+      btn.classList.add("active");
+      btn.setAttribute("aria-expanded", "true");
+    }
   } else {
     if (dom.frameStrip) dom.frameStrip.style.display = "none";
-    if (btn) btn.classList.remove("active");
+    if (btn) {
+      btn.classList.remove("active");
+      btn.setAttribute("aria-expanded", "false");
+    }
   }
 }
 
@@ -938,6 +944,9 @@ function updateSocialToggles() {
 var _captionLines = [];
 var _filteredIdx = [];   // full-array indices currently shown (search filter)
 var _activeLineIdx = -1;
+var _lineSelectionAnchor = -1;
+var _selectedLineStart = -1;
+var _selectedLineEnd = -1;
 
 /** Fetch parsed subtitle lines once per media load; render the Lines panel. */
 function loadCaptionLines(mediaId) {
@@ -949,6 +958,9 @@ function loadCaptionLines(mediaId) {
   _captionLines = [];
   _filteredIdx = [];
   _activeLineIdx = -1;
+  _lineSelectionAnchor = -1;
+  _selectedLineStart = -1;
+  _selectedLineEnd = -1;
   if (search) search.value = "";
   if (count) count.textContent = "";
   if (empty) empty.style.display = "none";
@@ -1013,7 +1025,7 @@ function _renderLineList() {
       btn.title = fmtTime(Math.floor(line.start)) + " - " + fmtTime(Math.ceil(line.end));
       btn.innerHTML = "<span class=\"mob-line-time\">" + fmtTime(Math.floor(line.start)) + "</span>"
         + "<span class=\"mob-line-text\">" + escHtml(line.text) + "</span>";
-      btn.addEventListener("click", function() { selectCaptionLine(fullIdx); });
+      btn.addEventListener("click", function(e) { selectCaptionLine(fullIdx, e); });
       btn.addEventListener("dblclick", function() { dblSelectCaptionLine(fullIdx); });
       list.appendChild(btn);
     })(_filteredIdx[i]);
@@ -1023,6 +1035,7 @@ function _renderLineList() {
     var act = list.querySelector(".mob-line-btn[data-idx=\"" + _activeLineIdx + "\"]");
     if (act) act.classList.add("active");
   }
+  _renderSelectedLines();
 }
 
 /** Search filter (wired to the Lines panel input via oninput). */
@@ -1043,15 +1056,21 @@ function mobFilterLines(q) {
   if (empty) empty.style.display = (query && !_filteredIdx.length) ? "block" : "none";
 }
 
-/** Tap a line: mark the range around it, seek to it, arm caption burn. */
-function selectCaptionLine(idx) {
+/** Click a line to select it; Shift-click extends from the selection anchor. */
+function selectCaptionLine(idx, event) {
   var line = _captionLines[idx];
   if (!line) return;
+  var extend = !!(event && event.shiftKey && _lineSelectionAnchor >= 0);
+  if (!extend) _lineSelectionAnchor = idx;
+  var first = extend ? Math.min(_lineSelectionAnchor, idx) : idx;
+  var last = extend ? Math.max(_lineSelectionAnchor, idx) : idx;
+  var firstLine = _captionLines[first];
+  var lastLine = _captionLines[last];
   // Deactivate any duration preset chip — the line defines the range now.
   if (typeof _mobActivePreset !== "undefined") _mobActivePreset = 0;
-  if (typeof mobMarkStartAt === "function") mobMarkStartAt(line.start);
-  if (typeof mobMarkEndAt === "function") mobMarkEndAt(line.end);
-  seekVideoTo(line.start);
+  if (typeof mobMarkStartAt === "function") mobMarkStartAt(firstLine.start);
+  if (typeof mobMarkEndAt === "function") mobMarkEndAt(lastLine.end);
+  seekVideoTo(firstLine.start);
   // A line clip is a caption clip — arm the burn checkbox (user can uncheck).
   if (!_captionsEnabled) {
     _captionsEnabled = true;
@@ -1059,6 +1078,9 @@ function selectCaptionLine(idx) {
   }
   var panel = document.getElementById("mob-lines");
   if (panel && !panel.open) panel.open = true;
+  _selectedLineStart = first;
+  _selectedLineEnd = last;
+  _renderSelectedLines();
   _setActiveLine(idx, true);
   if (typeof _mobRender === "function") _mobRender();
 }
@@ -1077,6 +1099,18 @@ function dblSelectCaptionLine(idx) {
   } else {
     var mainEl = document.getElementById("main");
     if (mainEl) mainEl.scrollTop = 0;
+  }
+}
+
+/** Show every dialogue line included in the current contiguous clip range. */
+function _renderSelectedLines() {
+  var list = document.getElementById("mob-lines-list");
+  if (!list) return;
+  var buttons = list.querySelectorAll(".mob-line-btn");
+  for (var i = 0; i < buttons.length; i++) {
+    var idx = parseInt(buttons[i].dataset.idx, 10);
+    buttons[i].classList.toggle("selected",
+      _selectedLineStart >= 0 && idx >= _selectedLineStart && idx <= _selectedLineEnd);
   }
 }
 
@@ -1459,6 +1493,21 @@ function init() {
 
   // Frame strip drag-to-select
   initStripDrag();
+
+  // The compact editor panels behave as one dropdown group: opening one
+  // closes any sibling that is already open. The native <details> behavior
+  // still handles toggling the selected panel itself.
+  var collapseRow = qs(".collapse-row");
+  if (collapseRow) {
+    collapseRow.addEventListener("toggle", function(e) {
+      var opened = e.target;
+      if (!opened.matches("details") || !opened.open) return;
+      var panels = collapseRow.querySelectorAll(":scope > details[open]");
+      for (var i = 0; i < panels.length; i++) {
+        if (panels[i] !== opened) panels[i].open = false;
+      }
+    }, true);
+  }
 
   // Keyboard shortcuts
   document.addEventListener("keydown", function(e) {

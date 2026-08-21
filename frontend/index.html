@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Scenester</title>
-  <link rel="stylesheet" href="static/style.css?v=70">
+  <link rel="stylesheet" href="static/style.css?v=73">
 </head>
 <body>
 
@@ -154,7 +154,11 @@
         <div class="frame-strip-inner" id="frame-strip-inner"></div>
       </div>
       <div class="timeline-bar">
-        <button class="film-strip-chip" id="btn-film-strip" onclick="toggleFilmStrip()">🗂 Film strip</button>
+        <button class="film-strip-chip" id="btn-film-strip" type="button"
+                aria-expanded="false" aria-controls="frame-strip" onclick="toggleFilmStrip()">
+          <span class="film-strip-icon" aria-hidden="true"></span>
+          <span>Film strip</span>
+        </button>
       </div>
     </div>
 
@@ -291,7 +295,7 @@
         </div>
       </details>
 
-      <!-- Caption lines: click a line to mark the clip range around it -->
+      <!-- Caption lines: click one line; Shift-click another to select a range -->
       <details class="mob-lines" id="mob-lines" style="display:none">
         <summary>💬 Lines</summary>
         <div class="collapse-body">
@@ -319,8 +323,8 @@
 
 </main>
 
-<script src="static/app.js?v=70"></script>
-<script src="static/mobile.js?v=70"></script>
+<script src="static/app.js?v=73"></script>
+<script src="static/mobile.js?v=73"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");
