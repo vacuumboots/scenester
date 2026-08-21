@@ -371,7 +371,7 @@ main {
   flex: 1;
   width: min(100% - 32px, 2560px);
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
   overflow-y: auto;
 }
 
@@ -529,12 +529,12 @@ main {
   transition: color 0.15s;
 }
 
-.btn-back:hover {
-  color: var(--gold);
-}
-
 .detail-header {
-  margin-bottom: 18px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 12px;
 }
 
 .detail-title {
@@ -545,11 +545,12 @@ main {
   line-height: 1.25;
 }
 
+/* Meta sits inline after the title (" · 2026 · movie · 2h 15m") */
 .detail-meta {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-dim);
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 /* ── Player ────────────────────────────────────────────────────────── */
@@ -645,44 +646,39 @@ main {
   z-index: 1;
 }
 
-/* Timeline bar — the strip's home row: hint + film-strip toggle */
+/* Timeline bar — the film-strip toggle, full width of the player */
 .timeline-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 10px;
+  padding: 7px 0;
   background: #0d0d0d;
   border-top: 1px solid var(--border);
 }
 
-.timeline-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
 .film-strip-chip {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: transparent;
-  border: 1px solid #3a3a3a;
+  border: none;
   color: var(--text-dim);
   border-radius: 6px;
-  padding: 5px 12px;
+  padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
   -webkit-tap-highlight-color: transparent;
 }
 
 .film-strip-chip:hover {
-  border-color: var(--gold-dim);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text);
 }
 
 .film-strip-chip.active {
-  background: var(--gold);
-  color: #111;
-  border-color: var(--gold);
+  background: rgba(196, 150, 59, 0.14);
+  color: var(--gold);
   font-weight: 700;
 }
 
@@ -1167,23 +1163,10 @@ main {
   margin: 0 auto 14px;
 }
 
-/* ── Edit groups: purpose-labelled sections, spacing over borders ───── */
+/* ── Edit groups: spacing over borders ──────────────────────────────── */
 
 .edit-group {
   margin-bottom: 18px;
-}
-
-.edit-group-head {
-  margin-bottom: 8px;
-}
-
-.edit-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--text-muted);
 }
 
 /* ── Playhead readout: current "Frame at" time ──────────────────────── */
@@ -1269,7 +1252,8 @@ main {
   border-radius: 3px;
 }
 
-/* ── Two mark buttons — the only selection surface ───────────────────── */
+/* ── Mark row: loop · set start · set end · download ────────────────── */
+/* Mobile: 2×2 (loop+start / end+download); desktop: all four in a row. */
 
 .mob-mark-buttons {
   display: grid;
@@ -1280,7 +1264,8 @@ main {
 
 .mob-mark-btn {
   min-height: 56px;
-  font-size: 16px;
+  padding: 0 6px;
+  font-size: 14px;
   font-weight: 700;
   background: #1e1e1e;
   color: var(--gold);
@@ -1288,6 +1273,46 @@ main {
   border-radius: 12px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+.mob-loop-btn {
+  min-height: 56px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  background: #1a1a1a;
+  color: var(--text-dim);
+  border: 2px solid #3a3a3a;
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-loop-btn:active {
+  background: #2c2c2c;
+}
+
+.mob-download-btn {
+  min-height: 56px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--gold);
+  color: #111;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-download-btn:active {
+  filter: brightness(1.1);
+}
+
+.mob-download-btn:disabled {
+  background: #333;
+  color: var(--text-muted);
+  cursor: default;
 }
 
 .mob-mark-btn:active {
@@ -1415,68 +1440,78 @@ main {
 
 /* ── Duration presets: one segmented control ─────────────────────────── */
 
-.edit-duration {
+.mob-presets {
+  flex-wrap: wrap; /* the six chips may wrap on narrow screens */
+  justify-content: center;
+}
+
+/* ── Collapsed control row: fine tune · duration · export · lines ───── */
+
+.collapse-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+/* Chips sit 2×2 on phones, one row on desktop. The open body expands
+   in-flow on mobile; on desktop it drops down as an overlay panel. */
+.collapse-row > details {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+}
+
+.collapse-row > details[open] {
+  flex-basis: 100%;
+}
+
+.collapse-row summary {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin: 12px 0 0;
-}
-
-.mob-presets {
-  flex-wrap: wrap; /* the six chips may wrap on narrow screens */
-}
-
-/* ── Fine-tune (details / summary) ───────────────────────────────────── */
-
-.fine-tune {
-  margin: 0 0 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-  overflow: hidden;
-}
-
-.fine-tune summary,
-.mob-lines summary,
-.mob-options summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  cursor: pointer;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 10px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-dim);
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  cursor: pointer;
   list-style: none;
   -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: border-color 0.15s, color 0.15s;
 }
 
-.fine-tune summary::-webkit-details-marker,
-.mob-lines summary::-webkit-details-marker,
-.mob-options summary::-webkit-details-marker {
+.collapse-row summary::-webkit-details-marker {
   display: none;
 }
 
-.fine-tune summary::after,
-.mob-lines summary::after,
-.mob-options summary::after {
+.collapse-row summary::after {
   content: '▾';
   margin-left: auto;
   color: var(--text-muted);
   transition: transform 0.15s;
 }
 
-.fine-tune[open] summary::after,
-.mob-lines[open] summary::after,
-.mob-options[open] summary::after {
+.collapse-row details[open] summary::after {
   transform: rotate(180deg);
 }
 
-.fine-tune summary:hover,
-.mob-lines summary:hover,
-.mob-options summary:hover {
+.collapse-row summary:hover,
+.collapse-row details[open] summary {
   color: var(--gold);
+  border-color: var(--gold-dim);
+}
+
+.collapse-body {
+  margin-top: 4px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .mob-finetune {
@@ -1520,22 +1555,7 @@ main {
   background: #2c2c2c;
 }
 
-/* ── Lines (transcript) + Export options: side panels ────────────────── */
-
-.edit-side {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 0 0 18px;
-}
-
-.mob-lines,
-.mob-options {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-  overflow: hidden;
-}
+/* ── Lines (transcript) + export options: content inside collapse chips ─ */
 
 .mob-lines-list {
   max-height: 35vh;
@@ -1649,53 +1669,6 @@ main {
   accent-color: var(--gold);
 }
 
-/* ── Actions: loop (secondary) + set clip (primary gold) ─────────────── */
-
-.mob-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 4px 0 10px;
-}
-
-.mob-loop-btn {
-  min-height: 56px;
-  font-size: 15px;
-  font-weight: 700;
-  background: #222;
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mob-loop-btn:active {
-  background: #2c2c2c;
-}
-
-.mob-download-btn {
-  min-height: 56px;
-  font-size: 16px;
-  font-weight: 700;
-  background: var(--gold);
-  color: #111;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mob-download-btn:active {
-  filter: brightness(1.1);
-}
-
-.mob-download-btn:disabled {
-  background: #333;
-  color: var(--text-muted);
-  cursor: default;
-}
-
 /* ── Progress + status ──────────────────────────────────────────────── */
 
 /* #mob-clip-progress reuses the shared .clip-progress/.progress-bar/
@@ -1715,9 +1688,11 @@ main {
   .mob-sheet {
     padding: 12px 16px 16px;
   }
-  .mob-mark-btn {
+  .mob-mark-btn,
+  .mob-loop-btn,
+  .mob-download-btn {
     min-height: 44px;
-    font-size: 14px;
+    font-size: 13px;
   }
   .mob-unset-btn {
     min-height: 36px;
@@ -1736,36 +1711,37 @@ main {
     min-width: 38px;
     min-height: 38px;
   }
-  .mob-download-btn {
-    min-height: 44px;
-    font-size: 15px;
-  }
 }
 
 /* ── Desktop unified editor layout ───────────────────────────────────── */
 
 @media (min-width: 769px) {
   .clip-editor {
-    margin: 20px 0 0;
+    margin: 14px 0 0;
   }
 
   /* Desktop: a full-width card, not a bottom sheet. */
   .mob-sheet {
     border-radius: var(--radius);
     margin-top: 0;
-    padding: 22px 28px 28px;
+    padding: 18px 28px 24px;
     box-shadow: var(--shadow);
   }
   .mob-sheet::before {
     display: none; /* no drag handle on desktop */
   }
 
-  /* Video: width-driven and 16:9, capped so it never dominates a short
-     viewport. Width is the limiting factor on big monitors — not the old
-     480px/80vh height caps that left the player a small window. */
+  /* Video: width-driven 16:9. The CARD width is capped (not the video
+     height) so the player hugs the video's real aspect — no letterbox
+     bars inside a stretched black card — and the whole editor fits the
+     viewport without scrolling. */
+  .player-card {
+    max-width: max(568px, calc((100vh - 590px) * 16 / 9));
+    margin-left: auto;
+    margin-right: auto;
+  }
   .preview-video-shared {
     aspect-ratio: 16 / 9;
-    max-height: calc(100vh - 350px);
   }
 
   /* Bigger timeline thumbs — desktop has the room to show more */
@@ -1774,11 +1750,12 @@ main {
     height: 80px;
   }
 
-  /* Position section: compact and centered */
+  /* Playhead readout: compact and centered */
   .edit-position {
     max-width: 640px;
     margin-left: auto;
     margin-right: auto;
+    margin-bottom: 8px;
   }
 
   /* Fine-tune: START | END side by side; compact precision buttons */
@@ -1786,63 +1763,73 @@ main {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px 24px;
-    padding: 6px 16px 14px;
-    max-width: 1200px;
-    margin: 0 auto;
   }
   .mob-ft-btn {
     min-height: 34px;
     min-width: 52px;
   }
 
-  /* Clip range: the primary controls centered at a comfortable width */
-  .mob-mark-buttons,
-  .mob-frame-snaps,
-  .mob-unset-buttons,
-  .edit-duration {
-    max-width: 720px;
+  /* Mark row: all four controls in one line at a comfortable width */
+  .mob-mark-buttons {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    max-width: 960px;
     margin-left: auto;
     margin-right: auto;
   }
-  .mob-mark-btn {
-    min-height: 60px;
-    font-size: 17px;
+  .mob-mark-btn,
+  .mob-loop-btn,
+  .mob-download-btn {
+    min-height: 56px;
+    font-size: 15px;
   }
 
   .range-summary {
-    max-width: 720px;
+    max-width: 960px;
     margin: 0 auto;
     font-size: 15px;
     padding: 6px 0 2px;
   }
 
-  /* Lines + export options side by side */
-  .edit-side {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-  .edit-side .mob-lines {
-    flex: 1.5;
-  }
-  .edit-side .mob-options {
-    flex: 1;
-  }
-  .mob-lines-list {
-    max-height: 300px;
-  }
-  .mob-options .mob-option {
-    min-height: 38px;
+  .mob-frame-snaps,
+  .mob-unset-buttons {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  /* Actions: centered so the final CTA doesn't sprawl */
-  .mob-actions {
-    max-width: 720px;
+  /* Collapse row: one line of chips; open bodies drop down as an
+     overlay panel so nothing below is pushed out of the viewport. */
+  .collapse-row {
+    flex-wrap: nowrap;
+    max-width: 960px;
     margin-left: auto;
     margin-right: auto;
     margin-top: 8px;
   }
-  .mob-actions .mob-loop-btn,
-  .mob-actions .mob-download-btn {
-    min-height: 56px;
+  .collapse-row > details {
+    flex: 1;
+    position: relative;
+  }
+  .collapse-row > details[open] {
+    flex-basis: auto;
+  }
+  .collapse-row > details[open] .collapse-body {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    box-shadow: var(--shadow);
+  }
+  .collapse-row summary {
+    min-height: 36px;
+    padding: 6px 10px;
+  }
+
+  .mob-lines-list {
+    max-height: min(45vh, 420px);
+  }
+  .mob-options .mob-option {
+    min-height: 38px;
   }
 }

@@ -30,7 +30,6 @@ function getDom() {
     detailView:   qs("#detail-view"),
     detailTitle:  qs("#detail-title"),
     detailMeta:   qs("#detail-meta"),
-    btnBack:      qs("#btn-back"),
     nowPlaying:   qs("#now-playing"),
     npTitle:      qs("#np-title"),
     npTime:       qs("#np-time"),
@@ -1454,9 +1453,6 @@ function init() {
       renderLibrary(dom.search ? dom.search.value : "");
     });
   }
-
-  // Detail back button
-  if (dom.btnBack) dom.btnBack.addEventListener("click", goBack);
 
   // Download clip is wired via onclick="mobDownload()" in HTML (mobDownload
   // calls downloadClip) — no addEventListener here or every click fires twice.

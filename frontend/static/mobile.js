@@ -92,7 +92,8 @@ function initMobileDetail(item) {
 
   if (_mobEls.status) _mobEls.status.textContent = "";
   _mobRender();
-  if (_isMobile) { var f = document.getElementById("fine-tune"); if (f) f.open = true; }
+  // v=67+: fine-tune is a collapsed chip in the collapse row — no auto-open
+  // (the old mobile bottom-sheet default fought the collapsed design).
 }
 
 /** Called from app.js goBack()/goHome(). Removes listeners, clears timers. */
@@ -473,12 +474,12 @@ function _mobRender() {
       dlLabel = "⚠ Set a clip range";
     } else {
       dlDisabled = false;
-      dlLabel = "⬇ Set Clip";
+      dlLabel = "⬇ Download";
       var parts = [];
       if (_captionsEnabled) parts.push("captions");
       if (_verticalEnabled) parts.push("vertical");
       if (_clipFormat === "gif") parts.push("gif");
-      if (parts.length) dlLabel = "⬇ Set Clip (" + parts.join(" + ") + ")";
+      if (parts.length) dlLabel = "⬇ Download (" + parts.join(" + ") + ")";
     }
     if (dlDisabled !== _mobLast.dlDisabled) {
       _mobEls.btnDownload.disabled = dlDisabled;
@@ -520,11 +521,8 @@ function _mobRender() {
     if (ue !== _mobLast.ue) { _mobEls.btnUnsetEnd.style.display = ue; _mobLast.ue = ue; }
   }
 
-  // Desktop progressive disclosure: auto-open "✂ Fine-tune" when an edge is
-  // marked, but never force-close it — force-closing fights the user's manual
-  // toggle (the "opens and shuts" bug when _mobRender runs on every timeupdate).
-  var ft = document.getElementById("fine-tune");
-  if (ft && !_isMobile && (_mobStartSet || _mobEndSet)) { ft.open = true; }
+  // v=67: fine-tune is a collapsed chip in the collapse row — no auto-open
+  // (the old desktop progressive disclosure fought the collapsed design).
 
   _mobRenderCaptionOpts();
 }
