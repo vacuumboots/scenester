@@ -16,8 +16,10 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 
 ## Features
 
-- **Video-first preview** — direct media streaming with byte-range seeking; the
-  native `<video>` controls are the only scrubber.
+- **Video-first preview** — the player spans the full editor width on
+  desktop (up to a 2560px canvas; native aspect ratio, no letterboxing) and
+  streams directly with byte-range seeking; the native `<video>` controls
+  are the only scrubber.
 - **Mobile-friendly** — the full editing workflow works in portrait and
   landscape on phones, not just desktop.
 - **Unified mark-from-playhead editor** — one selection model on desktop and
@@ -27,8 +29,9 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
   +5s +10s +30s (1 frame ≈ 0.04s). Fat-thumb accessible.
 - **Duration presets** — Free (default) plus 5s / 10s / 15s / 45s / 60s.
 - **Looped clip preview** — 🔁 Loop auditions the selected range before download.
-- **Opt-in film strip** — a navigation-only thumbnail strip (🗂 toggle): tap a
-  frame to move the playhead. It never marks clip edges.
+- **Opt-in film strip** — a navigation-only thumbnail strip (🗂 toggle in the
+  player's timeline bar): tap a frame to move the playhead; the frame nearest
+  the playhead is ringed. It never marks clip edges.
 - **MP4 or GIF output** — pick the format in the editor; GIFs go through a
   palette-optimized ffmpeg pipeline for small, crisp loops.
 - **Optional caption burning** — .srt files found alongside the media (e.g.
@@ -149,7 +152,7 @@ pulling — see [Development](#development).*
 3. Click a title to open the detail view.
 4. Play or scrub to your in-point and click **Set Start**, then to your
    out-point and click **Set End** (or pick a duration preset).
-5. Fine-tune with the nudge rows, then click **⬇ Download Clip**.
+5. Fine-tune with the nudge rows, then click **⬇ Set Clip**.
 
 ### Keyboard shortcuts
 
@@ -198,7 +201,7 @@ your network layer), not in the app itself.
   python:3.12-slim with ffmpeg + VAAPI drivers). Prebuilt images are
   published to GHCR by GitHub Actions on every push (`latest`, `sha-*`, and
   `v*` tags) — no need to build anything yourself.
-- **CI** — GitHub Actions: pytest suite (35 tests) + a `node --check`
+- **CI** — GitHub Actions: pytest suite (50 tests) + a `node --check`
   syntax gate on the frontend JS.
 - **Storage** — no database. Configuration comes from environment
   variables; Plex OAuth tokens persist to a `/data` volume; clips are plain
