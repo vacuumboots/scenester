@@ -948,7 +948,10 @@ main {
 }
 
 /* Loading/error overlays sit ON the player (not below it). The wrapper
-   itself never intercepts clicks — only its visible children do. */
+   itself never intercepts clicks — only its visible children do. The
+   wrapper must stay TRANSPARENT while the video plays: the dark scrim
+   lives on the loading/error cards, not the container (a 60% black
+   overlay here dimmed every playing video). */
 #frame-preview {
   position: absolute;
   inset: 0;
@@ -956,12 +959,18 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
   pointer-events: none;
 }
 
 #frame-preview > div {
   pointer-events: auto;
+}
+
+#preview-loading,
+#preview-error {
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius);
+  min-width: 260px;
 }
 
 @media (max-width: 768px) {
