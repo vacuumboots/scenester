@@ -6,16 +6,51 @@ Scenester clips movies from your Plex library. Browse, scrub a live video previe
 mark a range with two buttons, and download frame-accurate 1080p clips.
 
 <p align="center">
-  <img src="screenshots/library-desktop.jpg" alt="Scenester movie library on desktop" width="62%">
-  <img src="screenshots/editor-desktop.jpg" alt="Clip editor on desktop" width="36%">
+  <img src="screenshots/library-desktop.jpg" alt="Scenester movie library on desktop, with the now-playing banner" width="62%">
+  <img src="screenshots/editor-desktop-clean.jpg" alt="Clip editor on desktop with a live video preview" width="36%">
 </p>
 <p align="center">
-  <img src="screenshots/library-mobile.jpg" alt="Scenester movie library on mobile" width="180">
-  <img src="screenshots/editor-mobile.jpg" alt="Clip editor on mobile" width="180">
+  <img src="screenshots/editor-desktop-multi-lines.jpg" alt="Selecting a run of dialogue lines marks the matching clip range" width="49%">
+  <img src="screenshots/library-desktop-searchline-hell.jpg" alt="Searching every movie's dialogue by quote — 885 matches for &quot;what the hell&quot;" width="49%">
 </p>
+<p align="center">
+  <img src="screenshots/editor-desktop-finetune-filmstrip.jpg" alt="Fine-tune nudges and the opt-in film strip" width="62%">
+  <img src="screenshots/editor-desktop-line-search.jpg" alt="Searching lines within a movie's transcript" width="36%">
+</p>
+<p align="center">
+  <img src="screenshots/library-mobile-manual.jpg" alt="Movie library on mobile" width="180">
+  <img src="screenshots/editor-mobile-manual.jpg" alt="Clip editor on mobile" width="180">
+</p>
+
+## Why Scenester?
+
+Most clip editors make you drag slider handles and pray. Scenester is built
+around a different idea: **edit by selecting lines of dialogue**.
+
+Because Scenester already reads your movies' subtitle files, the clip range
+isn't an abstract timeline — it *is* the script. Every line under your playhead
+is listed with its timestamp:
+
+- **Tap a line to select it; shift-tap to extend** — the clip's start and end
+  snap to the dialogue you picked. Selecting "the argument scene" is just
+  selecting those lines.
+- **The selection follows your range in real time**: mark Start/End anywhere
+  (buttons, keyboard, film strip) and the covered lines light up instantly;
+  select lines and the range moves to match. Two views of one edit, always in
+  sync.
+- **Search quotes across your entire library** — flip the search box to
+  **Lines** mode and type any phrase ("we're not in Kansas anymore") to find
+  which movie says it, at what timestamp, then jump straight into that moment
+  ready to clip it.
+- **Double-tap a line to audition it** — the exact span loops instantly so you
+  can hear the take before committing.
+
+No other Plex clipper works this way: you mark moments by their words, not by
+eyeballing waveform handles.
 
 ## Features
 
+- **Dialogue-driven editing** — see above; it's the headline feature.
 - **Video-first preview** — the player spans the full editor width on
   desktop (up to a 2560px canvas; native aspect ratio, no letterboxing) and
   streams directly with byte-range seeking; the native `<video>` controls
@@ -27,11 +62,13 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
   Unset buttons free an edge to ride the playhead again.
 - **Frame-precise nudging** — explicit Start/End rows of −30s −10s −5s −1f +1f
   +5s +10s +30s (1 frame ≈ 0.04s). Fat-thumb accessible.
+- **Library view with search & sort** — poster grid for the whole library;
+  filter by title as you type and sort by title, year (newest/oldest),
+  duration, date added, or shuffle.
 - **Duration presets** — Free (default) plus 5s / 10s / 15s / 45s / 60s.
 - **Looped clip preview** — 🔁 Loop auditions the selected range before download.
 - **Opt-in film strip** — a navigation-only thumbnail strip (🗂 toggle in the
-  player's timeline bar): tap a frame to move the playhead; the frame nearest
-  the playhead is ringed. It never marks clip edges.
+  player's timeline bar): tap a frame to move the playhead.
 - **MP4 or GIF output** — pick the format in the editor; GIFs go through a
   palette-optimized ffmpeg pipeline for small, crisp loops.
 - **Optional caption burning** — .srt files found alongside the media (e.g.
@@ -50,21 +87,13 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 
 ## Setup
 
-*New to Docker? You don't need to understand it. Scenester ships as a
-ready-made package — "pulling" just means downloading it, and the commands
-below do everything else. You need three things: Docker installed, a Plex
-server, and a folder on the same machine containing your media files.*
+*New to Docker? You don't need to understand it. Add this service to your
+existing Docker Compose file and run `docker compose up -d` — that's the whole
+install.*
 
-### 1. Get the app (one time)
+### 1. Configure
 
-```bash
-docker pull ghcr.io/vacuumboots/scenester:latest
-```
-
-That's the whole app, downloaded. (Using Docker Compose in step 3? Skip
-this — Compose downloads it automatically.)
-
-### 2. Configure
+Next to your `compose.yaml`, create a `.env` file:
 
 ```bash
 cp .env.example .env
@@ -77,14 +106,13 @@ PLEX_URL=http://host.docker.internal:32400
 # PLEX_TOKEN=...   (optional — the in-app "Connect to Plex" login is easier)
 ```
 
-### 3. Run (recommended: Docker Compose)
+### 2. Add it to your compose file
 
-Save this as `compose.yaml` next to your `.env`. Change the three
-`/path/to/...` lines to your real folders — the first one must be the
-folder your Plex library lives in:
+Paste this service into your existing `compose.yaml`. Change the three
+`/path/to/...` lines to your real folders — the first one must be the folder
+your Plex library lives in:
 
 ```yaml
-services:
   scenester:
     image: ghcr.io/vacuumboots/scenester:latest
     container_name: scenester
@@ -102,16 +130,16 @@ services:
       - /path/to/data:/data             # app settings + login (survives restarts)
 ```
 
+Then:
+
 ```bash
 docker compose up -d
 ```
 
-Compose downloads the app if needed and starts it. That's it.
+Compose pulls the image automatically and starts it. That's it.
 
-### 4. No Docker Compose? One command instead
-
-Prefer no config file? This single command does the same thing — the three
-`-v` lines are your three folders from above:
+<details>
+<summary>Not using Compose? One command instead</summary>
 
 ```bash
 docker run -d --name scenester \
@@ -125,8 +153,9 @@ docker run -d --name scenester \
   --restart unless-stopped \
   ghcr.io/vacuumboots/scenester:latest
 ```
+</details>
 
-### 5. Open it
+### 3. Open it
 
 Browse to `http://localhost:8096` (or the IP of the machine running
 Docker) and sign in with your Plex account.
@@ -148,10 +177,12 @@ pulling — see [Development](#development).*
 ## Usage
 
 1. Open the app — connect with Plex OAuth (or a pre-set token).
-2. Browse or search your movie library.
+2. Browse or search your movie library (or switch the search to **Lines**
+   mode to find a scene by quoting it).
 3. Click a title to open the detail view.
-4. Play or scrub to your in-point and click **Set Start**, then to your
-   out-point and click **Set End** (or pick a duration preset).
+4. Mark your clip: tap dialogue lines, or play/scrub to your in-point and
+   click **Set Start**, then to your out-point and click **Set End** (or pick
+   a duration preset).
 5. Fine-tune with the nudge rows, then click **⬇ Set Clip**.
 
 ### Keyboard shortcuts
@@ -189,7 +220,8 @@ your network layer), not in the app itself.
     drops from ~111s to ~11s on a Haswell i5.
   - Subtitle burning parses `.srt` files (UTF-8/Latin-1), chunks them into
     word groups for a "dynamic captions" look, and renders via ffmpeg's
-    `subtitles=` filter with ASS styling.
+    `subtitles=` filter with ASS styling. The same parser powers dialogue-line
+    selection and cross-library quote search.
   - Plex integration through the official HTTP API: library, metadata,
     sessions (the now-playing banner), and OAuth PIN login.
 - **Frontend** — vanilla HTML/CSS/JS, no framework, no build step
@@ -211,14 +243,13 @@ your network layer), not in the app itself.
 
 ## Development
 
-Want to build the Docker image from source instead of pulling it?
+Want to build the Docker image from source instead of pulling it? Swap the
+`image:` line in your compose service for `build: .` pointing at a checkout
+of this repo, or:
 
 ```bash
 docker build -t scenester .
 ```
-
-Then run it with the compose file from [Setup](#setup) (swap the `image:`
-line for `build: .`), or the `docker run` command.
 
 To run the backend locally without Docker (the frontend needs no build step):
 
