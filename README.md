@@ -7,19 +7,35 @@ mark a range with two buttons, and download frame-accurate 1080p clips.
 
 <p align="center">
   <img src="screenshots/library-desktop.jpg" alt="Scenester movie library on desktop, with the now-playing banner" width="62%">
-  <img src="screenshots/editor-desktop-clean.jpg" alt="Clip editor on desktop with a live video preview" width="36%">
+  <br>
+  <sub>The library — every title in your Plex server, searchable and sortable. The banner shows what's playing right now.</sub>
+  <br><br>
+  <img src="screenshots/editor-desktop-clean.jpg" alt="Clip editor on desktop with a live video preview" width="62%">
+  <br>
+  <sub>The editor — the movie streams right in the page; mark a start and an end and download the clip.</sub>
 </p>
 <p align="center">
-  <img src="screenshots/editor-desktop-multi-lines.jpg" alt="Selecting a run of dialogue lines marks the matching clip range" width="49%">
-  <img src="screenshots/library-desktop-searchline-hell.jpg" alt="Searching every movie's dialogue by quote — 885 matches for &quot;what the hell&quot;" width="49%">
+  <img src="screenshots/editor-desktop-multi-lines.jpg" alt="Selecting a run of dialogue lines marks the matching clip range" width="62%">
+  <br>
+  <sub>Editing by dialogue — select the lines you want and the clip range follows. Six lines here become a 23.6s clip.</sub>
+</p>
+<p align="center">
+  <img src="screenshots/library-desktop-searchline-hell.jpg" alt="Searching every movie's dialogue by quote — 885 matches for &quot;what the hell&quot;" width="62%">
+  <br>
+  <sub>Quote search — remember the line, not the movie. 885 matches for &quot;what the hell&quot;, each one a click away from clipping.</sub>
 </p>
 <p align="center">
   <img src="screenshots/editor-desktop-finetune-filmstrip.jpg" alt="Fine-tune nudges and the opt-in film strip" width="62%">
-  <img src="screenshots/editor-desktop-line-search.jpg" alt="Searching lines within a movie's transcript" width="36%">
+  <br>
+  <sub>Fine-tuning — nudge each edge by single frames if you want, with an optional thumbnail film strip for jumping around.</sub>
 </p>
 <p align="center">
+  <img src="screenshots/editor-desktop-line-search.jpg" alt="Searching lines within a movie's transcript" width="36%">
   <img src="screenshots/library-mobile-manual.jpg" alt="Movie library on mobile" width="180">
   <img src="screenshots/editor-mobile-manual.jpg" alt="Clip editor on mobile" width="180">
+</p>
+<p align="center">
+  <sub>Searching within one movie's transcript · the whole workflow on a phone</sub>
 </p>
 
 ## Why Scenester?
