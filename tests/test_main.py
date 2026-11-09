@@ -89,6 +89,54 @@ def test_clip_basename_slugifies_title():
     assert main._clip_basename(meta, 10.0, 20.0) == "The_Matrix_Reloaded_10.0-20.0"
 
 
+# ── _clip_variant: the filename is the clip cache key ──────────────────────
+
+
+def test_clip_variant_plain_clip_keeps_legacy_name():
+    assert main._clip_variant(False, False, 3, "white", "bottom") == ""
+
+
+def test_clip_variant_captions_get_a_distinct_filename():
+    meta = {"title": "Possible Love"}
+    plain = main._clip_basename(meta, 8807.9, 8886.3)
+    variant = main._clip_variant(True, False, 3, "white", "bottom")
+    assert variant == "-cap3"
+    assert main._clip_basename(meta, 8807.9, 8886.3, variant) == "Possible_Love_8807.9-8886.3-cap3"
+    # A captioned export must never reuse the captionless file already on disk
+    assert plain != main._clip_basename(meta, 8807.9, 8886.3, variant)
+
+
+def test_clip_variant_encodes_style_and_crop():
+    assert main._clip_variant(True, False, 1, "yellow", "middle") == "-cap1-middle-yellow"
+    assert main._clip_variant(False, True, 3, "white", "bottom") == "-v"
+    assert main._clip_variant(True, True, 3, "white", "bottom") == "-v-cap3"
+
+
+# ── _build_clip_cmd ────────────────────────────────────────────────────────
+
+
+def test_build_clip_cmd_drops_source_chapters():
+    """Chapters carry absolute source timestamps — copied into a clip they
+    stretch the output to the chapter's end time (a 78s clip of a 2h40m film
+    read as 19:42 in players)."""
+    cmd = main._build_clip_cmd(
+        "/media/Film.mp4", 8807.9, 78.4, "/clips/out.mp4",
+        "scale=1920:-2", [], use_vaapi=False, hw_decode=False, simple_scale=True,
+    )
+    assert "-map_chapters" in cmd
+    assert cmd[cmd.index("-map_chapters") + 1] == "-1"
+
+
+def test_build_clip_cmd_keeps_seek_semantics():
+    cmd = main._build_clip_cmd(
+        "/media/Film.mp4", 8807.9, 78.4, "/clips/out.mp4",
+        "scale=1920:-2", [], use_vaapi=False, hw_decode=False, simple_scale=True,
+    )
+    assert cmd[cmd.index("-ss") + 1] == "8807.9"
+    assert cmd[cmd.index("-t") + 1] == "78.4"
+    assert cmd[-1] == "/clips/out.mp4"
+
+
 # ── _srt_timestamp / _fmt_srt_timestamp ────────────────────────────────────
 
 

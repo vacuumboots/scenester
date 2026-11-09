@@ -8,17 +8,36 @@ creating frame-accurate ffmpeg clips (VAAPI-accelerated).
 import asyncio
 import os
 import re
+import tempfile
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import plex
 
-app = FastAPI(title="Scenester")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Expire old cached frames/thumbnails on boot (see _prune_cache)."""
+    removed = _prune_cache()
+    if removed:
+        print(f"scenester: pruned {removed} expired cache files", flush=True)
+    yield
+
+
+app = FastAPI(title="Scenester", lifespan=_lifespan)
+
+# /api/library is ~490KB of JSON and the client fetches it on every page load.
+# Over Tailscale (and especially on mobile) that is the single biggest transfer
+# in the app, and it compresses to roughly a tenth. Text/JSON only — images and
+# video are already compressed and would only burn CPU.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -63,11 +82,40 @@ def _slugify(text: str) -> str:
     s = re.sub(r"[ _-]+", "_", s).strip("_")
     return s or "unknown"
 
-def _clip_basename(meta: dict, start_sec: float, end_sec: float) -> str:
+def _clip_variant(
+    captions: bool, vertical: bool, words_per_chunk: int,
+    caption_color: str, caption_position: str,
+) -> str:
+    """Filename suffix describing the render options, or "" for the plain clip.
+
+    The clip cache is keyed on the filename, so the filename MUST change when
+    anything that alters the pixels changes — otherwise toggling "Burn
+    subtitles" after a captionless export of the same range returns the old
+    file in the `ready` path and the captions silently never appear.
+
+    Plain clip (no captions, no crop) keeps the historical name so existing
+    clips and their filenames stay valid.
+    """
+    parts: list[str] = []
+    if vertical:
+        parts.append("v")
+    if captions:
+        parts.append(f"cap{words_per_chunk}")
+        if caption_position != "bottom":
+            parts.append(caption_position)
+        if caption_color != "white":
+            parts.append(caption_color)
+    return "-" + "-".join(parts) if parts else ""
+
+
+def _clip_basename(
+    meta: dict, start_sec: float, end_sec: float, variant: str = "",
+) -> str:
     """Build a human-friendly clip filename without extension.
 
     Sub-second precision is kept to one decimal so distinct clips never
     collide (same-integer-second ranges produce different filenames).
+    `variant` carries the render options (captions/crop) — see _clip_variant.
 
     Movies:    Movie_Title_5307.2-5337.4
     Episodes:  Show_Title_S01E03_5307.2-5337.4
@@ -82,7 +130,7 @@ def _clip_basename(meta: dict, start_sec: float, end_sec: float) -> str:
         prefix = title
     start = f"{start_sec:.1f}"
     end = f"{end_sec:.1f}"
-    return f"{prefix}_{start}-{end}"
+    return f"{prefix}_{start}-{end}{variant}"
 
 # ── Subtitle utilities ────────────────────────────────────────────────────
 
@@ -215,6 +263,130 @@ STATIC_DIR = _resolve_static_dir()
 CLIPS_DIR = Path("/tmp/clips")
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Derived-artifact cache ────────────────────────────────────────────────
+# Frames and thumbnails are the hot path: every scrub/scroll used to re-seek
+# the source file on a spinning disk and re-download a full-size poster. Both
+# are deterministic for a given (media, timestamp) / media, so cache them on
+# disk under /data (a bind mount — survives container recreation, unlike /tmp).
+CACHE_DIR = Path(os.environ.get("CLIPARR_CACHE_DIR", "/data/cache"))
+
+
+def _pick_cache_root(preferred: Path) -> Path:
+    """Return a usable cache root, creating it if needed.
+
+    Importing this module must never fail for want of /data: the container bind
+    mounts it, but a dev checkout and the test suite do not have it. Fall back to
+    a temp directory (and, if even that fails, to the preferred path — writes are
+    best-effort everywhere, so a missing directory just means nothing is cached).
+    """
+    candidates = [preferred]
+    if "CLIPARR_CACHE_DIR" not in os.environ:
+        candidates.append(Path(tempfile.gettempdir()) / "scenester-cache")
+    for candidate in candidates:
+        try:
+            (candidate / "frames").mkdir(parents=True, exist_ok=True)
+            (candidate / "thumbs").mkdir(parents=True, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+    return preferred
+
+
+CACHE_ROOT = _pick_cache_root(CACHE_DIR)
+FRAME_CACHE_DIR = CACHE_ROOT / "frames"
+THUMB_CACHE_DIR = CACHE_ROOT / "thumbs"
+
+# Frame extraction is the single most expensive thing the app does per unit of
+# output (fresh ffmpeg process + seek into a multi-GB file). Unbounded parallel
+# requests turned one film-strip build into a load-8.6 spike on a 4-core box,
+# starving the encoder and the UI. Cap it; queueing beats thrashing.
+FRAME_CONCURRENCY = max(1, int(os.environ.get("CLIPARR_FRAME_CONCURRENCY", "2")))
+_FRAME_SEM = asyncio.Semaphore(FRAME_CONCURRENCY)
+FRAME_WIDTH = int(os.environ.get("CLIPARR_FRAME_WIDTH", "640"))
+THUMB_WIDTH = int(os.environ.get("CLIPARR_THUMB_WIDTH", "320"))
+
+# In-process TTL caches. Plex metadata is effectively immutable for a title
+# that is already on disk, and the library list only changes when the *arr
+# stack imports something, so a short TTL costs nothing and saves a Plex
+# roundtrip on every frame, thumb and clip request.
+META_TTL = float(os.environ.get("CLIPARR_META_TTL", "300"))
+LIBRARY_TTL = float(os.environ.get("CLIPARR_LIBRARY_TTL", "60"))
+
+_meta_cache: dict[int, tuple[float, dict]] = {}
+_library_cache: dict = {"items": None, "ts": 0.0}
+_library_refreshing = {"task": None}
+
+
+async def _metadata(media_id: int) -> dict:
+    """plex.get_metadata with a TTL cache. Raises ValueError if unknown."""
+    hit = _meta_cache.get(media_id)
+    now = time.time()
+    if hit and now - hit[0] < META_TTL:
+        return hit[1]
+    meta = await plex.get_metadata(media_id)
+    _meta_cache[media_id] = (now, meta)
+    # Bound the dict so a long browse session cannot grow it without limit.
+    if len(_meta_cache) > 4096:
+        for mid, _ in sorted(_meta_cache.items(), key=lambda kv: kv[1][0])[:1024]:
+            _meta_cache.pop(mid, None)
+    return meta
+
+
+def _cache_path(directory: Path, key: str) -> Path:
+    """Filesystem-safe cache path (keys are numeric, but ids can be tuples)."""
+    return directory / (re.sub(r"[^0-9A-Za-z_.-]", "_", key))
+
+
+async def _resize_image(raw: bytes, width: int) -> bytes:
+    """Downscale a JPEG/PNG to `width` px (no upscaling). Pillow if present,
+    ffmpeg otherwise — never raises, returns the original on any failure."""
+    try:
+        import io
+
+        from PIL import Image
+
+        def _do() -> bytes:
+            with Image.open(io.BytesIO(raw)) as im:
+                im = im.convert("RGB")
+                if im.width > width:
+                    h = max(1, round(im.height * width / im.width))
+                    im = im.resize((width, h), Image.LANCZOS)
+                buf = io.BytesIO()
+                im.save(buf, "JPEG", quality=82, optimize=True)
+                return buf.getvalue()
+
+        out = await asyncio.to_thread(_do)
+        return out if out else raw
+    except Exception:
+        return raw
+
+
+CACHE_MAX_AGE = float(os.environ.get("CLIPARR_CACHE_MAX_AGE_DAYS", "14")) * 86400
+
+
+def _prune_cache(max_age: float = CACHE_MAX_AGE) -> int:
+    """Drop cached frames/thumbs older than max_age. Returns files removed.
+
+    Frames are keyed by media + timestamp, so a long browsing habit grows the
+    directory without bound. Nothing is lost by expiring them: a stale frame is
+    simply re-extracted on the next request.
+    """
+    cutoff = time.time() - max_age
+    removed = 0
+    for directory in (FRAME_CACHE_DIR, THUMB_CACHE_DIR):
+        try:
+            for f in directory.iterdir():
+                try:
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink()
+                        removed += 1
+                except OSError:
+                    continue
+        except OSError:
+            continue
+    return removed
+
+
 # ── Request models ───────────────────────────────────────────────────────
 
 class ClipRequest(BaseModel):
@@ -307,19 +479,48 @@ async def sessions():
 
 @app.get("/api/library")
 async def library():
-    """Browse full library (movies + TV episodes)."""
+    """Browse full library (movies + TV episodes).
+
+    Cached: the list only changes when the *arr stack imports something, and
+    rebuilding it means pulling every item out of Plex (~0.9s, ~490KB) on a
+    request the client makes on every page load. Serve the cached copy
+    immediately and refresh in the background once it goes stale.
+    """
+    now = time.time()
+    cached = _library_cache.get("items")
+    fresh = cached is not None and (now - _library_cache["ts"]) < LIBRARY_TTL
+
+    if cached is not None and fresh:
+        return {"items": cached}
+
+    if cached is not None:
+        # Stale: serve it now, refresh behind the client's back.
+        task = _library_refreshing.get("task")
+        if task is None or task.done():
+            _library_refreshing["task"] = asyncio.create_task(_refresh_library())
+        return {"items": cached}
+
+    # Cold: must block once.
     try:
-        items = await plex.get_library_sections()
-        return {"items": items}
+        items = await _refresh_library()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+    return {"items": items}
+
+
+async def _refresh_library() -> list[dict]:
+    """Fetch the library from Plex and update the cache."""
+    items = await plex.get_library_sections()
+    _library_cache["items"] = items
+    _library_cache["ts"] = time.time()
+    return items
 
 
 @app.get("/api/library/{media_id}")
 async def library_item(media_id: int):
     """Get single item detail."""
     try:
-        return await plex.get_metadata(media_id)
+        return await _metadata(media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -330,18 +531,45 @@ async def library_item(media_id: int):
 
 @app.get("/api/thumb/{media_id}")
 async def thumb(media_id: int):
-    """Proxy Plex thumbnail through the backend."""
-    try:
-        image_bytes, content_type = await plex.get_thumb_url(media_id)
-        return StreamingResponse(
-            iter([image_bytes]),
-            media_type=content_type,
+    """Proxy Plex thumbnail through the backend, downscaled and disk-cached.
+
+    Plex hands back the source poster verbatim — often the full-resolution
+    poster.jpg (sampled up to 1.4MB, avg ~375KB). A browse grid pulls dozens
+    of these, so resize once to THUMB_WIDTH and serve the cached copy from
+    then on.
+    """
+    dest = _cache_path(THUMB_CACHE_DIR, f"{media_id}.jpg")
+    if dest.exists():
+        return FileResponse(
+            dest,
+            media_type="image/jpeg",
             headers={"Cache-Control": "public, max-age=86400"},
         )
+
+    try:
+        meta = await _metadata(media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    thumb_path = meta.get("thumb") or ""
+    if not thumb_path:
+        raise HTTPException(status_code=404, detail=f"No thumbnail for media ID {media_id}")
+
+    try:
+        raw, _ctype = await plex.fetch_image(thumb_path)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Plex error: {e}")
+
+    data = await _resize_image(raw, THUMB_WIDTH)
+    try:
+        dest.write_bytes(data)
+    except OSError:
+        pass  # cache is best-effort; still serve the bytes
+
+    return Response(content=data, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 # ── API: Frame extraction ────────────────────────────────────────────────
@@ -350,10 +578,21 @@ async def thumb(media_id: int):
 async def get_frame(media_id: int, t: float = 0):
     """Extract a single JPEG frame at timestamp t (seconds) from the original media file.
 
-    Uses fast seeking (-ss before -i) for sub-second response on local files.
+    Frames are deterministic for a (media, timestamp) pair and were previously
+    re-extracted on every request: a fresh Plex metadata call plus a fresh
+    ffmpeg process seeking into a multi-GB file on a spinning disk. The strip
+    alone asks for 8-16 of them, so cache to disk and cap concurrency.
     """
+    cached = _cache_path(FRAME_CACHE_DIR, f"{media_id}_{t:.2f}.jpg")
+    if cached.exists():
+        return FileResponse(
+            cached,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     try:
-        meta = await plex.get_metadata(media_id)
+        meta = await _metadata(media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -369,27 +608,30 @@ async def get_frame(media_id: int, t: float = 0):
         "-ss", str(t),
         "-i", file_path,
         "-vframes", "1",
-        "-vf", "scale=1280:-1",
+        "-vf", f"scale={FRAME_WIDTH}:-1",
         "-q:v", "4",
         "-f", "image2pipe",
         "-",
     ]
 
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
-    stdout, _ = await proc.communicate()
+    async with _FRAME_SEM:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
 
     if proc.returncode != 0 or not stdout:
         raise HTTPException(status_code=500, detail="Frame extraction failed")
 
-    return StreamingResponse(
-        iter([stdout]),
-        media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
+    try:
+        cached.write_bytes(stdout)
+    except OSError:
+        pass  # cache is best-effort
+
+    return Response(content=stdout, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 # ── API: Media streaming ──────────────────────────────────────────────────
@@ -404,7 +646,7 @@ async def stream_media(media_id: int):
     requests directly against the original file.
     """
     try:
-        meta = await plex.get_metadata(media_id)
+        meta = await _metadata(media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -442,7 +684,7 @@ async def subtitle_lines(media_id: int):
     selection around a spoken line.
     """
     try:
-        meta = await plex.get_metadata(media_id)
+        meta = await _metadata(media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -463,7 +705,7 @@ async def serve_subtitle(media_id: int):
     Content-Type: text/vtt. Browsers render this natively via <track>.
     """
     try:
-        meta = await plex.get_metadata(media_id)
+        meta = await _metadata(media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -732,6 +974,10 @@ def _build_clip_cmd(
 
     cmd += ["-c:a", "aac", "-b:a", "128k",
             "-map", "0:v:0", "-map", "0:a:0"]
+    # Do NOT copy the source's chapters: ffmpeg keeps their absolute
+    # timestamps, so a 78s clip of a 2h40m film gets a chapter track ending
+    # at ~1182s and players report the clip as ~19:42 long.
+    cmd += ["-map_chapters", "-1"]
     cmd += ["-progress", "pipe:2"]
     cmd += meta_args
     cmd.append(str(output_path))
@@ -976,7 +1222,7 @@ async def create_clip(req: ClipRequest):
     _prune_clip_jobs()
 
     try:
-        meta = await plex.get_metadata(req.media_id)
+        meta = await _metadata(req.media_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -992,8 +1238,12 @@ async def create_clip(req: ClipRequest):
         if not subtitle_path or not os.path.isfile(subtitle_path):
             raise HTTPException(status_code=400, detail="No subtitle file found for this media")
 
+    variant = _clip_variant(
+        req.captions, req.vertical, req.words_per_chunk,
+        req.caption_color, req.caption_position,
+    )
     ext = "gif" if req.format == "gif" else "mp4"
-    filename = f"{_clip_basename(meta, req.start_sec, req.end_sec)}.{ext}"
+    filename = f"{_clip_basename(meta, req.start_sec, req.end_sec, variant)}.{ext}"
 
     # Check if already running
     if filename in clip_jobs and not clip_jobs[filename].get("done"):
