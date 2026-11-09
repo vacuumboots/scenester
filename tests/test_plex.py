@@ -109,6 +109,19 @@ def test_find_subtitle_returns_none_on_listdir_error(tmp_path, monkeypatch):
     assert plex._find_subtitle_path(str(media)) is None
 
 
+def test_find_subtitle_never_borrows_another_files_english_srt(tmp_path):
+    """Regression: English-anywhere-first picked a different film's subs when a
+    directory held more than one SRT, burning the wrong dialogue on the clip."""
+    media = tmp_path / "Film.mkv"
+    media.write_text("")
+    own = tmp_path / "Film.srt"
+    own.write_text("1\n00:00:01,000 --> 00:00:02,000\nEnglish for Film\n")
+    (tmp_path / "Other_Movie.en.srt").write_text(
+        "1\n00:00:01,000 --> 00:00:02,000\nWrong movie's subs\n"
+    )
+    assert plex._find_subtitle_path(str(media)) == str(own)
+
+
 def test_translate_path_configurable_prefix(monkeypatch):
     # Phase 5: PLEX_MEDIA_SRC / PLEX_MEDIA_DST override the hardcoded mapping.
     monkeypatch.setattr(plex, "PLEX_MEDIA_SRC", "/srv/plex")

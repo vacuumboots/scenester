@@ -24,11 +24,32 @@ import plex
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    """Expire old cached frames/thumbnails on boot (see _prune_cache)."""
+    """Boot housekeeping plus the background tasks the app needs.
+
+    - Expire old cached frames/thumbnails at boot AND daily (a long-lived
+      container otherwise never prunes — the boot-only prune only fired when
+      the container was recreated).
+    - Optionally expire generated clips (`CLIPARR_CLIP_MAX_AGE_DAYS`; off by
+      default — those are the user's exports).
+    - Warm the subtitle/quote index in the background so the first quote
+      search does not pay a ~50s build.
+    """
     removed = _prune_cache()
     if removed:
         print(f"scenester: pruned {removed} expired cache files", flush=True)
-    yield
+    pruned_clips = _prune_clips()
+    if pruned_clips:
+        print(f"scenester: pruned {pruned_clips} old clips", flush=True)
+
+    tasks = [
+        asyncio.create_task(_cache_prune_loop()),
+        asyncio.create_task(_warm_quote_index()),
+    ]
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
 
 
 app = FastAPI(title="Scenester", lifespan=_lifespan)
@@ -305,6 +326,12 @@ _FRAME_SEM = asyncio.Semaphore(FRAME_CONCURRENCY)
 FRAME_WIDTH = int(os.environ.get("CLIPARR_FRAME_WIDTH", "640"))
 THUMB_WIDTH = int(os.environ.get("CLIPARR_THUMB_WIDTH", "320"))
 
+# Encoding a clip is the heaviest thing the box does (decode + scale + encode,
+# often while Plex transcodes from the same spindles). Two at a time keeps a
+# double-tap responsive without letting a burst of exports swamp 4 cores.
+CLIP_CONCURRENCY = max(1, int(os.environ.get("CLIPARR_CLIP_CONCURRENCY", "2")))
+_CLIP_SEM = asyncio.Semaphore(CLIP_CONCURRENCY)
+
 # In-process TTL caches. Plex metadata is effectively immutable for a title
 # that is already on disk, and the library list only changes when the *arr
 # stack imports something, so a short TTL costs nothing and saves a Plex
@@ -385,6 +412,42 @@ def _prune_cache(max_age: float = CACHE_MAX_AGE) -> int:
         except OSError:
             continue
     return removed
+
+
+# Generated clips are the user's *exports*, so pruning them is opt-in:
+# CLIPARR_CLIP_MAX_AGE_DAYS unset (0) means never delete anything. Set it and
+# the clips directory stops growing without bound (~1.7GB after a few months of
+# normal use on this deployment).
+CLIP_MAX_AGE = float(os.environ.get("CLIPARR_CLIP_MAX_AGE_DAYS", "0")) * 86400
+
+
+def _prune_clips(max_age: float = CLIP_MAX_AGE) -> int:
+    """Delete generated clips older than max_age. No-op unless max_age > 0."""
+    if max_age <= 0:
+        return 0
+    cutoff = time.time() - max_age
+    removed = 0
+    try:
+        for f in CLIPS_DIR.iterdir():
+            try:
+                if f.is_file() and f.suffix in (".mp4", ".gif") and f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return removed
+
+
+async def _cache_prune_loop() -> None:
+    """Re-run the frame/thumb prune once a day for the life of the process."""
+    while True:
+        await asyncio.sleep(86400)
+        try:
+            await asyncio.to_thread(_prune_cache)
+        except Exception:
+            pass
 
 
 # ── Request models ───────────────────────────────────────────────────────
@@ -602,6 +665,21 @@ async def get_frame(media_id: int, t: float = 0):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Media file not found on disk")
 
+    # Clamp the client-supplied timestamp: a negative or past-the-end t makes
+    # ffmpeg exit non-zero (a 500 the user cannot act on) and gives every junk
+    # value its own cache key. Duration comes from Plex in milliseconds.
+    t = max(0.0, t)
+    duration_s = (meta.get("duration") or 0) / 1000
+    if duration_s > 0:
+        t = min(t, max(0.0, duration_s - 0.1))
+        cached = _cache_path(FRAME_CACHE_DIR, f"{media_id}_{t:.2f}.jpg")
+        if cached.exists():
+            return FileResponse(
+                cached,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=3600"},
+            )
+
     # Fast-seek to timestamp, extract one frame as JPEG (scaled for preview)
     cmd = [
         "ffmpeg", "-y",
@@ -736,8 +814,13 @@ async def serve_subtitle(media_id: int):
 
 _quote_index: list[dict] | None = None
 _quote_index_ts: float = 0.0
+_quote_index_sig: tuple | None = None
 _quote_index_lock = asyncio.Lock()
-_QUOTE_INDEX_TTL_SECONDS = 3600
+# Six hours (was one): a rebuild parses every subtitle file in the library
+# (~2100 films → ~1.2M lines, tens of seconds of seeks on a spinning disk).
+# The library fingerprint below skips the rebuild entirely when nothing changed;
+# override with CLIPARR_QUOTE_INDEX_TTL when adding SRTs mid-session.
+_QUOTE_INDEX_TTL_SECONDS = float(os.environ.get("CLIPARR_QUOTE_INDEX_TTL", str(6 * 3600)))
 # Safety ceiling only: the real result set is unbounded (per-movie cap
 # keeps it diverse), but a pathological query ("the", "a") must not ship
 # a multi-MB response. The frontend shows a refine note when hit.
@@ -745,14 +828,16 @@ _QUOTE_MAX_MATCHES = 1000
 _QUOTE_LINES_PER_MOVIE = 3
 
 
-async def _build_quote_index() -> list[dict]:
-    """Parse every movie's subtitle file once; the result is cached.
+def _parse_subtitles(items: list[dict]) -> list[dict]:
+    """Parse every library item's subtitle file into the quote index.
+
+    Synchronous and CPU/disk heavy by nature (one read + regex pass per SRT):
+    callers MUST run it off the event loop via asyncio.to_thread, or every
+    other request — and the whole UI — stalls for the duration.
 
     Each entry: {media_id, title, year, lines} where lines is a list of
     (start, end, text) tuples (cheaper than dicts at ~1.2M lines).
-    Movies without an SRT are skipped entirely.
     """
-    items = await plex.get_library_sections()
     index: list[dict] = []
     for item in items:
         fp = item.get("file_path") or ""
@@ -773,19 +858,45 @@ async def _build_quote_index() -> list[dict]:
     return index
 
 
-async def _refresh_quote_index() -> None:
+async def _build_quote_index() -> tuple[list[dict], tuple]:
+    """Fetch the library, then parse subtitles in a worker thread.
+
+    Returns (index, fingerprint). The fingerprint is the set of (media_id,
+    file_path) pairs the index was built from, so an unchanged library can
+    renew the TTL instead of re-parsing thousands of files.
+    """
+    items = await plex.get_library_sections()
+    sig = tuple(sorted((i.get("media_id", 0), i.get("file_path") or "") for i in items))
+    index = await asyncio.to_thread(_parse_subtitles, items)
+    return index, sig
+
+
+async def _refresh_quote_index(force: bool = False) -> None:
     """Rebuild the index if it is stale. Lock-guarded; on failure the
     previous index (or None) is kept so a transient Plex error never
     wipes a working index."""
-    global _quote_index, _quote_index_ts
+    global _quote_index, _quote_index_ts, _quote_index_sig
     async with _quote_index_lock:
-        if _quote_index is not None and time.time() - _quote_index_ts < _QUOTE_INDEX_TTL_SECONDS:
+        if (not force and _quote_index is not None
+                and time.time() - _quote_index_ts < _QUOTE_INDEX_TTL_SECONDS):
             return
         try:
-            idx = await _build_quote_index()
+            idx, sig = await _build_quote_index()
         except Exception:
             return
-        _quote_index, _quote_index_ts = idx, time.time()
+        if _quote_index is not None and sig == _quote_index_sig:
+            # Library unchanged since the last parse — renew, don't re-read.
+            _quote_index_ts = time.time()
+            return
+        _quote_index, _quote_index_ts, _quote_index_sig = idx, time.time(), sig
+
+
+async def _warm_quote_index() -> None:
+    """Build the quote index once at boot, off the event loop."""
+    try:
+        await _refresh_quote_index()
+    except Exception:
+        pass
 
 
 async def _get_quote_index() -> list[dict] | None:
@@ -879,6 +990,31 @@ clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 
 _CLIP_JOB_RETENTION_SECONDS = 3600
 
+# ffmpeg -progress emits `key=value` on stderr; everything else on stderr with
+# `-v error` is a real message.
+_PROGRESS_LINE = re.compile(
+    r"^(frame|fps|stream_\d+_\d+_q|bitrate|total_size|out_time_us|out_time_ms|"
+    r"out_time|dup_frames|drop_frames|speed|progress)="
+)
+
+
+def _ffmpeg_error(rc: int, tail: str) -> str:
+    """One-line, actionable ffmpeg failure string (and log the full tail).
+
+    The frontend prints this in the clip status line, so it must stay short;
+    ffmpeg's last non-progress stderr line is almost always the actual cause
+    ("No such file", "Invalid data found", "Cannot load libcuda", ...).
+    """
+    if tail:
+        print(f"scenester: ffmpeg failed (rc={rc}):\n{tail}", flush=True)
+    last = ""
+    for line in reversed(tail.splitlines()):
+        if line.strip():
+            last = line.strip()
+            break
+    msg = f"ffmpeg exited with code {rc}"
+    return f"{msg}: {last}" if last else msg
+
 
 def _prune_clip_jobs() -> None:
     """Drop completed clip_jobs entries older than the retention window.
@@ -970,7 +1106,12 @@ def _build_clip_cmd(
     if use_vaapi:
         cmd += ["-c:v", "h264_vaapi", "-global_quality", _VAAPI_ENCODE_QUALITY]
     else:
-        cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "20"]
+        # -pix_fmt is not optional: libx264 inherits the source bit depth, so a
+        # 10-bit source produced a High 10 / yuv420p10le MP4 that QuickTime,
+        # Safari and X/Twitter all refuse to play. The VAAPI tiers are already
+        # 8-bit (nv12 before hwupload); this keeps the fallback tier in step.
+        cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                "-pix_fmt", "yuv420p"]
 
     cmd += ["-c:a", "aac", "-b:a", "128k",
             "-map", "0:v:0", "-map", "0:a:0"]
@@ -978,6 +1119,9 @@ def _build_clip_cmd(
     # timestamps, so a 78s clip of a 2h40m film gets a chapter track ending
     # at ~1182s and players report the clip as ~19:42 long.
     cmd += ["-map_chapters", "-1"]
+    # Moov atom up front: the clip starts playing without a full download
+    # (matters for the preview player and for social uploads).
+    cmd += ["-movflags", "+faststart"]
     cmd += ["-progress", "pipe:2"]
     cmd += meta_args
     cmd.append(str(output_path))
@@ -1088,8 +1232,14 @@ async def _clip_impl(
         codec = _probe_video_codec(file_path)
         hw_decode = codec in _VAAPI_DECODE_OK
 
-    async def _run_async(cmd: list[str]) -> int:
-        """Execute ffmpeg, stream progress into clip_jobs, return rc."""
+    async def _run_async(cmd: list[str]) -> tuple[int, str]:
+        """Execute ffmpeg, stream progress into clip_jobs, return (rc, errors).
+
+        ffmpeg runs with `-v error`, so stderr carries progress key=value lines
+        plus any real error text. Keep the non-progress lines: without them a
+        failed encode reached the user as "ffmpeg exited with code 1" with no
+        hint of what broke.
+        """
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stderr=asyncio.subprocess.PIPE,
@@ -1097,6 +1247,7 @@ async def _clip_impl(
         )
         time_pattern = re.compile(r"out_time_us=(\d+)")
         out_time_ms_pattern = re.compile(r"out_time_ms=(\d+)")
+        tail: list[str] = []
         last_progress = 0.0
         current = 0.0
         async for line in proc.stderr:
@@ -1113,8 +1264,12 @@ async def _clip_impl(
                 if pct > last_progress:
                     last_progress = pct
                     clip_jobs[filename]["progress"] = pct
+            elif decoded.strip() and not _PROGRESS_LINE.match(decoded):
+                tail.append(decoded.rstrip())
+                del tail[:-20]
         await proc.wait()
-        return proc.returncode if proc.returncode is not None else 1
+        rc = proc.returncode if proc.returncode is not None else 1
+        return rc, "\n".join(tail)
 
     if fmt == "gif":
         # ── GIF output: standalone palette pipeline, no VAAPI ─────────
@@ -1135,7 +1290,7 @@ async def _clip_impl(
             "-progress", "pipe:2",
             str(output_path),
         ]
-        rc = await _run_async(gif_cmd)
+        rc, err_tail = await _run_async(gif_cmd)
 
         # Clean up temp SRT
         if tmp_srt and tmp_srt.exists():
@@ -1148,14 +1303,14 @@ async def _clip_impl(
         if rc == 0 and output_path.exists() and output_path.stat().st_size > 0:
             clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None, "started_at": started}
         else:
-            clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {rc}", "started_at": started}
+            clip_jobs[filename] = {"progress": 0.0, "done": True, "error": _ffmpeg_error(rc, err_tail), "started_at": started}
         return
 
     cmd = _build_clip_cmd(
         file_path, start_sec, duration, str(output_path), vf, meta_args,
         use_vaapi=use_vaapi, hw_decode=hw_decode, simple_scale=simple_scale,
     )
-    rc = await _run_async(cmd)
+    rc, err_tail = await _run_async(cmd)
 
     # VAAPI failed (e.g. driver hiccup, odd resolution)? Retry with libx264.
     if rc != 0 and use_vaapi:
@@ -1163,7 +1318,7 @@ async def _clip_impl(
             file_path, start_sec, duration, str(output_path), vf, meta_args,
             use_vaapi=False, hw_decode=False, simple_scale=simple_scale,
         )
-        rc = await _run_async(cmd_fallback)
+        rc, err_tail = await _run_async(cmd_fallback)
 
     # Clean up temp SRT
     if tmp_srt and tmp_srt.exists():
@@ -1176,7 +1331,7 @@ async def _clip_impl(
     if rc == 0 and output_path.exists() and output_path.stat().st_size > 0:
         clip_jobs[filename] = {"progress": 1.0, "done": True, "error": None, "started_at": started}
     else:
-        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": f"ffmpeg exited with code {rc}", "started_at": started}
+        clip_jobs[filename] = {"progress": 0.0, "done": True, "error": _ffmpeg_error(rc, err_tail), "started_at": started}
 
 
 async def _run_ffmpeg_clip(
@@ -1196,13 +1351,17 @@ async def _run_ffmpeg_clip(
 
     The try/except ensures a failed run (e.g. ffmpeg missing) marks the job
     done-with-error so the client's poll terminates instead of timing out.
+    The semaphore keeps a burst of export taps from starting N concurrent
+    x264/VAAPI encodes on a 4-core box; extra jobs queue (progress stays at 0
+    until they reach the encoder).
     """
     clip_jobs[filename] = {"progress": 0.0, "done": False, "error": None, "started_at": time.time()}
     try:
-        await _clip_impl(
-            filename, file_path, start_sec, duration, meta, subtitle_path,
-            vertical, words_per_chunk, caption_color, caption_position, fmt,
-        )
+        async with _CLIP_SEM:
+            await _clip_impl(
+                filename, file_path, start_sec, duration, meta, subtitle_path,
+                vertical, words_per_chunk, caption_color, caption_position, fmt,
+            )
     except Exception as e:
         clip_jobs[filename] = {"progress": 0.0, "done": True, "error": str(e), "started_at": time.time()}
 

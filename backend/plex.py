@@ -152,6 +152,20 @@ async def _get(path: str) -> dict:
     return resp.json()
 
 
+async def fetch_image(thumb_path: str) -> tuple[bytes, str]:
+    """Download a raw image (poster/fanart) from Plex by its thumb path.
+
+    Takes the thumb path directly (e.g. "/library/metadata/123/thumb/456")
+    so callers that already hold metadata never pay a second API roundtrip
+    just to re-read the path.
+    """
+    client = get_client()
+    url = urljoin(PLEX_URL, thumb_path)
+    resp = await client.get(url, headers=_headers())
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("content-type", "image/jpeg")
+
+
 # ── OAuth: PIN flow ───────────────────────────────────────────────────────
 
 async def create_pin() -> dict:
@@ -198,10 +212,13 @@ async def check_pin(pin_id: int) -> dict:
 # ── Path translation ──────────────────────────────────────────────────────
 
 def _find_subtitle_path(file_path: str) -> str | None:
-    """Find an .srt subtitle file alongside the media file.
+    """Find the .srt subtitle file belonging to this media file.
 
-    Looks for .srt files in the same directory. Prefers English (.en.srt),
-    falls back to any .srt file.
+    Order matters: the file whose name matches the media stem wins, and only
+    among those does English (.en.srt) win. Preferring English library-wide
+    first picked a *different* film's subtitles whenever a directory held more
+    than one SRT (confirmed: Film.mkv + Film.srt + Other_Movie.en.srt returned
+    Other_Movie.en.srt, which burns the wrong dialogue onto the clip).
     """
     if not file_path or not os.path.exists(file_path):
         return None
@@ -223,20 +240,22 @@ def _find_subtitle_path(file_path: str) -> str | None:
     if not candidates:
         return None
 
-    # Prefer English subtitles
-    for c in candidates:
-        basename = os.path.basename(c).lower()
-        if ".en." in basename or basename.endswith(".en.srt"):
-            return c
+    def _is_english(path: str) -> bool:
+        base = os.path.basename(path).lower()
+        return ".en." in base or base.endswith(".en.srt")
 
-    # Prefer file matching the media stem
-    for c in candidates:
-        sub_stem = os.path.splitext(os.path.basename(c))[0]
-        if sub_stem.startswith(media_stem):
-            return c
+    def _belongs_to_media(path: str) -> bool:
+        sub_stem = os.path.splitext(os.path.basename(path))[0]
+        return sub_stem == media_stem or sub_stem.startswith(media_stem + ".")
 
-    # Fall back to first .srt found
-    return candidates[0]
+    # Pass 1: subtitles for THIS file (stem, or stem + suffix like .1080p/.en).
+    owned = [c for c in candidates if _belongs_to_media(c)]
+    pool = owned or candidates
+
+    for c in pool:
+        if _is_english(c):
+            return c
+    return pool[0]
 
 
 def _translate_path(mc: dict) -> str:
@@ -360,25 +379,3 @@ async def get_metadata(media_id: int) -> dict:
         item["episode"] = mc.get("index", 0)
 
     return item
-
-
-async def get_thumb_url(media_id: int) -> tuple[bytes, str]:
-    """Fetch a thumbnail image from Plex.
-
-    Returns (image_bytes, content_type).
-    """
-    # First get metadata to find the thumb path
-    data = await _get(f"/library/metadata/{media_id}")
-    mc = data.get("MediaContainer", {}).get("Metadata", [])
-    if not mc:
-        raise ValueError(f"Media ID {media_id} not found")
-
-    thumb = mc[0].get("thumb", "")
-    if not thumb:
-        raise ValueError(f"No thumbnail for media ID {media_id}")
-
-    client = get_client()
-    url = urljoin(PLEX_URL, thumb)
-    resp = await client.get(url, headers=_headers())
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("content-type", "image/jpeg")

@@ -137,6 +137,45 @@ def test_build_clip_cmd_keeps_seek_semantics():
     assert cmd[-1] == "/clips/out.mp4"
 
 
+def test_build_clip_cmd_forces_8bit_output_on_the_x264_tier():
+    """libx264 inherits the source bit depth: a 10-bit film used to produce a
+    High 10 / yuv420p10le MP4 that QuickTime, Safari and X refuse to play."""
+    cmd = main._build_clip_cmd(
+        "/media/Film.mkv", 10.0, 20.0, "/clips/out.mp4",
+        "scale=1920:-2", [], use_vaapi=False, hw_decode=False, simple_scale=True,
+    )
+    assert cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"
+
+
+def test_build_clip_cmd_faststarts_the_moov():
+    cmd = main._build_clip_cmd(
+        "/media/Film.mkv", 10.0, 20.0, "/clips/out.mp4",
+        "scale=1920:-2", [], use_vaapi=False, hw_decode=False, simple_scale=True,
+    )
+    assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+
+
+# ── ffmpeg error reporting ─────────────────────────────────────────────────
+
+
+def test_ffmpeg_error_surfaces_the_last_real_line(capsys):
+    tail = "frame=12\nprogress=continue\n[mov,mp4 @ 0x1] moov atom not found"
+    msg = main._ffmpeg_error(1, tail)
+    assert msg == "ffmpeg exited with code 1: [mov,mp4 @ 0x1] moov atom not found"
+    # the full tail is logged for diagnosis
+    assert "moov atom not found" in capsys.readouterr().out
+
+
+def test_ffmpeg_error_plain_exit_code_when_no_stderr():
+    assert main._ffmpeg_error(1, "") == "ffmpeg exited with code 1"
+
+
+def test_progress_lines_are_not_treated_as_errors():
+    for line in ("frame=1", "fps=0.00", "out_time_us=1000", "speed=1.2x", "progress=end"):
+        assert main._PROGRESS_LINE.match(line)
+    assert not main._PROGRESS_LINE.match("[libx264 @ 0x1] width or height too large")
+
+
 # ── _srt_timestamp / _fmt_srt_timestamp ────────────────────────────────────
 
 
