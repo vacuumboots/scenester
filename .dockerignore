@@ -4,3 +4,19 @@
 **/._*
 **/__pycache__/
 **/*.pyc
+
+# Never ship into the image or hand to the build daemon:
+.git/
+**/.venv/
+.venv/
+.pytest_cache/
+tests/
+scripts/
+.github/
+.hermes/
+gitignore_human_handoff/
+screenshots/
+*.md
+.env
+.env.*
+!.env.example

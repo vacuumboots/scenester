@@ -176,6 +176,33 @@ def test_progress_lines_are_not_treated_as_errors():
     assert not main._PROGRESS_LINE.match("[libx264 @ 0x1] width or height too large")
 
 
+# ── _check_clip_range ──────────────────────────────────────────────────────
+
+
+def test_check_clip_range_accepts_a_real_clip():
+    assert main._check_clip_range(10.0, 15.5) == 5.5
+
+
+def test_check_clip_range_rejects_the_one_edge_seed_range():
+    """Marking only Start leaves a 0.04s seed range; that used to encode."""
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as err:
+        main._check_clip_range(100.0, 100.04)
+    assert err.value.status_code == 400
+    assert "at least" in err.value.detail
+
+
+def test_check_clip_range_rejects_backwards_ranges():
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as err:
+        main._check_clip_range(100.0, 100.0)
+    assert err.value.detail == "End must be after start"
+
+
 # ── _srt_timestamp / _fmt_srt_timestamp ────────────────────────────────────
 
 

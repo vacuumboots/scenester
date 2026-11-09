@@ -67,6 +67,17 @@ let dom;
 var _sliderStart = 0;
 var _sliderEnd = 0;
 
+// Shortest clip the UI will offer to encode. Marking only one edge leaves a
+// 0.04s seed range on purpose (so the overview bar has something to draw), so
+// the "is there a clip?" test must be a real duration, not dur > 0 — otherwise
+// tapping Set Start alone arms Download with a 40ms clip. The backend enforces
+// the same floor.
+var MIN_CLIP_SECONDS = 0.5;
+
+function clipRangeReady() {
+  return (_sliderEnd - _sliderStart) >= MIN_CLIP_SECONDS;
+}
+
 // Bumped by goHome()/goBack() so in-flight selectItem() fetches can detect
 // that the user navigated away (SPA history integration, v=35).
 var _navCounter = 0;
@@ -260,6 +271,8 @@ function goHome() {
   if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
   if (dom.search) dom.search.value = "";
+  // Leaving the detail view: stop any clip status polling.
+  cancelClipPolling();
   // Clean up video preview
   if (dom.previewVideo) {
     dom.previewVideo.pause();
@@ -381,6 +394,7 @@ function goBack() {
   if (mainEl) mainEl.scrollTop = 0;
   if (dom.framePreview) dom.framePreview.style.display = "none";
   state.currentItem = null;
+  cancelClipPolling();
   // Clean up video preview
   if (dom.previewVideo) {
     dom.previewVideo.pause();
@@ -638,8 +652,10 @@ function loadVideoPreview(mediaId) {
     if (dom.frameTimeValue) dom.frameTimeValue.textContent = fmtTime(Math.floor(ct));
     // Keep the timeline's playhead marker on the nearest thumbnail
     updateStripPosition();
-    // Loop within clip range when playing a clip preview
-    if (_loopPlayback && ct >= _sliderEnd) {
+    // Loop within clip range when playing a clip preview. The range test
+    // matters: with loop armed and no edges marked (_sliderEnd === 0) every
+    // timeupdate sought to 0 and playback was pinned in the first frames.
+    if (_loopPlayback && _sliderEnd > _sliderStart && ct >= _sliderEnd) {
       vid.currentTime = _sliderStart;
     }
   };
@@ -718,7 +734,12 @@ function buildFrameStrip(mediaId, durationS) {
   if (!dom.frameStrip || !dom.frameStripInner) return;
   _stripThumbs = [];
 
-  var count = durationS < 600 ? 8 : durationS < 3600 ? 12 : 16;
+  // Each frame is a real random seek into a multi-GB file on the spinning
+  // media drive (~1.3s cold, more while Plex is streaming from the same
+  // platter). The strip is navigation only, so keep it lean: 16 thumbnails
+  // meant ~20s of disk work before the last one landed. Cached frames are
+  // free on revisits, which is why this can stay small and still be useful.
+  var count = durationS < 600 ? 4 : durationS < 3600 ? 6 : 8;
   var html = "";
   for (var i = 0; i < count; i++) {
     var t = Math.floor((durationS / (count - 1)) * i);
@@ -740,6 +761,7 @@ function buildFrameStrip(mediaId, durationS) {
 // mark clip edges. Tap/click a thumbnail to move the playhead there.
 // Dragging/panning never seeks.
 var _stripClickTime = null;
+var _stripTouchOrigin = null;   // {x, y, t} of the touchstart, to tell tap from pan
 var _lastTouchEndTime = 0;  // suppresses compatibility mouse events after touch
 // Film-strip opt-in toggle — hidden by default, shown on request.
 var _filmStripEnabled = false;
@@ -781,14 +803,27 @@ function initStripDrag() {
     var thumb = e.target.closest && e.target.closest(".frame-thumb");
     if (!thumb) return;
     _stripClickTime = parseInt(thumb.getAttribute("data-time"));
+    var t0 = e.touches && e.touches[0];
+    _stripTouchOrigin = t0 ? { x: t0.clientX, y: t0.clientY, t: Date.now() } : null;
     // No seek here — a pan/scroll is browsing, not scrubbing. Seek on tap.
   }, { passive: true });
 
-  dom.frameStripInner.addEventListener("touchend", function() {
+  dom.frameStripInner.addEventListener("touchend", function(e) {
     _lastTouchEndTime = Date.now();
+    var origin = _stripTouchOrigin;
+    _stripTouchOrigin = null;
     if (_stripClickTime == null) return;
     var t = _stripClickTime;
     _stripClickTime = null;
+    // iOS Safari does not reliably fire touchcancel for a scroll that starts
+    // inside the strip, so decide tap-vs-pan here: a finger that moved, or that
+    // rested for a while, was scrolling rather than tapping a frame.
+    if (origin) {
+      var end = e.changedTouches && e.changedTouches[0];
+      var dx = end ? Math.abs(end.clientX - origin.x) : 0;
+      var dy = end ? Math.abs(end.clientY - origin.y) : 0;
+      if (dx > 12 || dy > 12 || Date.now() - origin.t > 600) return;
+    }
     seekVideoTo(t);  // move the playhead to the tapped frame
   }, { passive: true });
 
@@ -833,8 +868,9 @@ function updateStripPosition() {
 
 function updateTimeDisplay() {
   // Enforce constraints FIRST, then display.
-  // NOTE: no hard 140s cap — handles should move freely. The download
-  // button disables itself when duration > 140s; that's the enforcement point.
+  // There is no maximum clip length — the only gate is MIN_CLIP_SECONDS at the
+  // bottom end. Marking Start alone seeds a 1s range here, which is what makes
+  // Download armable after one tap.
   if (_sliderEnd <= _sliderStart) _sliderEnd = _sliderStart + 1;
   if (_sliderEnd > state.mediaDuration) _sliderEnd = Math.floor(state.mediaDuration);
   if (_sliderStart > state.mediaDuration) _sliderStart = Math.floor(state.mediaDuration);
@@ -858,8 +894,13 @@ function setSliderEnd(t) {
 
 function updateDownloadButton() {
   if (!dom.btnDownload) return;
-  var dur = _sliderEnd - _sliderStart;
-  if (dur <= 0) {
+  // The unified editor renderer owns the button (label + disabled state) so
+  // the three writers that used to disagree on wording cannot drift apart.
+  if (typeof _mobRender === "function" && typeof _mobLast !== "undefined" && _mobLast) {
+    _mobRender();
+    return;
+  }
+  if (!clipRangeReady()) {
     dom.btnDownload.disabled = true;
     dom.btnDownload.textContent = "⚠ Set a clip range";
   } else {
@@ -1255,6 +1296,20 @@ function openQuoteMatch(el) {
 // ── Clip Download ──────────────────────────────────────────────────────
 
 var _clipPollTimer = null;
+var _clipPollCancel = null;   // rejects the in-flight poll (set by pollClipStatus)
+
+/** Stop any in-flight clip status polling. Called when leaving the detail view. */
+function cancelClipPolling() {
+  if (_clipPollTimer) {
+    clearTimeout(_clipPollTimer);
+    _clipPollTimer = null;
+  }
+  if (typeof _clipPollCancel === "function") {
+    var cancel = _clipPollCancel;
+    _clipPollCancel = null;
+    cancel();
+  }
+}
 
 async function downloadClip() {
   if (!dom) return;
@@ -1304,10 +1359,14 @@ async function downloadClip() {
     // 2) Poll until done
     var result = await pollClipStatus(filename);
 
-    // 3) Download
+    // 3) Download — unless the user left the detail view meanwhile (the clip is
+    // still in the gallery, but nothing should pop up unprompted).
+    if (!state.currentItem || (state.currentItem.media_id || state.currentItem.id) !== mediaId) {
+      return;
+    }
     if (result.done && !result.error) {
       var a = document.createElement("a");
-      a.href = "api/download/" + filename;
+      a.href = "api/download/" + encodeURIComponent(filename);
       a.download = filename;
       document.body.appendChild(a);
       a.click();
@@ -1319,10 +1378,13 @@ async function downloadClip() {
       throw new Error(result.error || "Unknown error");
     }
   } catch (err) {
+    if (err && err.message === "Clip polling cancelled") return;
     if (dom.clipStatus) dom.clipStatus.textContent = "Error: " + err.message;
   } finally {
     if (dom.clipProgress) dom.clipProgress.style.display = "none";
-    if (dom.btnDownload) { dom.btnDownload.disabled = false; dom.btnDownload.textContent = "\u{1F4E5} Set Clip"; }
+    // Let the single renderer restore the button (label + disabled state) —
+    // hard-coding a label here is what left it stale after every export.
+    updateDownloadButton();
   }
 }
 
@@ -1330,21 +1392,34 @@ function pollClipStatus(filename) {
   return new Promise(function(resolve, reject) {
     var maxPolls = 300;
     var polls = 0;
+    var settled = false;
+
+    function settle(err, value) {
+      if (settled) return;
+      settled = true;
+      _clipPollCancel = null;
+      if (_clipPollTimer) { clearTimeout(_clipPollTimer); _clipPollTimer = null; }
+      if (err) reject(err); else resolve(value);
+    }
+
+    // Leaving the detail view must not leave this chain running: it used to
+    // keep polling for 10 minutes and then fire a download from a hidden view.
+    _clipPollCancel = function() { settle(new Error("Clip polling cancelled")); };
 
     function poll() {
       polls++;
-      if (polls > maxPolls) { reject(new Error("Clip generation timed out")); return; }
+      if (polls > maxPolls) { settle(new Error("Clip generation timed out")); return; }
 
-      fetch("api/clip/status/" + filename)
+      fetch("api/clip/status/" + encodeURIComponent(filename))
         .then(function(resp) { return resp.json(); })
         .then(function(status) {
-          if (status.error) { reject(new Error(status.error)); return; }
+          if (status.error) { settle(new Error(status.error)); return; }
 
           if (status.done) {
             // Done — resolve with the result
             if (dom.clipProgressFill) dom.clipProgressFill.style.width = "100%";
             if (dom.clipProgressText) dom.clipProgressText.textContent = "Done!";
-            resolve({ done: true, error: null, filename: filename });
+            settle(null, { done: true, error: null, filename: filename });
             return;
           }
 
@@ -1360,9 +1435,9 @@ function pollClipStatus(filename) {
           if (dom.clipProgressText) dom.clipProgressText.textContent = text;
 
           // Poll again
-          setTimeout(poll, 2000);
+          if (!settled) _clipPollTimer = setTimeout(poll, 2000);
         })
-        .catch(function(err) { reject(err); });
+        .catch(function(err) { settle(err); });
     }
 
     poll();
@@ -1391,27 +1466,75 @@ async function loadClipGallery() {
     for (var i = 0; i < clips.length; i++) {
       var c = clips[i];
       var sizeMB = (c.size / 1048576).toFixed(1);
+      var isGif = c.filename.slice(-4).toLowerCase() === ".gif";
+      // Tap-to-load placeholder. Rendering a <video preload="metadata"> (or a
+      // full <img> for a GIF) per clip made opening the gallery fire one
+      // request per file — 62 clips / 1.6GB — and every one of those is a
+      // seek into the clips directory. Only load the media the user asks for.
       html += '<div class="clip-card">' +
-        (c.filename.slice(-4).toLowerCase() === ".gif"
-          ? '<img src="api/download/' + c.filename + '" class="clip-gif" alt="">'
-          : '<video src="api/download/' + c.filename + '" controls preload="metadata"></video>') +
+        '<button type="button" class="clip-placeholder" data-clip="' + escAttr(c.filename) + '" data-gif="' + (isGif ? "1" : "0") + '">' +
+          '<span class="clip-placeholder-play">▶</span>' +
+          '<span class="clip-placeholder-hint">tap to load ' + sizeMB + 'MB</span>' +
+        '</button>' +
         '<div class="clip-card-info">' +
-          '<span class="clip-card-name" title="' + c.filename + '">' + c.filename + ' (' + sizeMB + 'MB)</span>' +
+          '<span class="clip-card-name" title="' + escAttr(c.filename) + '">' + escHtml(c.filename) + ' (' + sizeMB + 'MB)</span>' +
           '<div class="clip-card-actions">' +
-            '<a class="btn btn-small" href="api/download/' + c.filename + '" download>DL</a>' +
-            '<button class="btn btn-small" onclick="deleteClip(\'' + c.filename + '\')" style="color:var(--red)">✕</button>' +
+            '<a class="btn btn-small" href="api/download/' + encodeURIComponent(c.filename) + '" download>DL</a>' +
+            '<button class="btn btn-small" data-del="' + escAttr(c.filename) + '" style="color:var(--red)">✕</button>' +
           '</div>' +
         '</div></div>';
     }
-    if (dom.clipGalleryGrid) dom.clipGalleryGrid.innerHTML = html;
+    if (dom.clipGalleryGrid) {
+      dom.clipGalleryGrid.innerHTML = html;
+      bindClipPlaceholders();
+    }
   } catch (err) {
     // Silently fail — gallery is optional
   }
 }
 
+/**
+ * Wire the tap-to-load placeholders in the clips gallery.
+ *
+ * Each placeholder swaps itself for the real <video>/<img> on first tap, so
+ * opening the gallery costs zero media requests regardless of how many clips
+ * have accumulated.
+ */
+function bindClipPlaceholders() {
+  if (!dom.clipGalleryGrid) return;
+  var nodes = dom.clipGalleryGrid.querySelectorAll(".clip-placeholder");
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].addEventListener("click", function() {
+      var name = this.getAttribute("data-clip");
+      var isGif = this.getAttribute("data-gif") === "1";
+      var src = "api/download/" + encodeURIComponent(name);
+      var el = document.createElement(isGif ? "img" : "video");
+      el.src = src;
+      if (isGif) {
+        el.className = "clip-gif";
+        el.alt = "";
+      } else {
+        el.controls = true;
+        el.preload = "metadata";
+        el.addEventListener("loadedmetadata", function() { this.play().catch(function() {}); });
+      }
+      this.replaceWith(el);
+    });
+  }
+  // Delete is wired here instead of an inline onclick: the filename came
+  // straight from the API into a JS string literal, so a hand-placed file with
+  // a quote in its name could break the markup and the handler.
+  var dels = dom.clipGalleryGrid.querySelectorAll("[data-del]");
+  for (var j = 0; j < dels.length; j++) {
+    dels[j].addEventListener("click", function() {
+      deleteClip(this.getAttribute("data-del"));
+    });
+  }
+}
+
 async function deleteClip(filename) {
   try {
-    await fetch("api/clips/" + filename, { method: "DELETE" });
+    await fetch("api/clips/" + encodeURIComponent(filename), { method: "DELETE" });
   } catch (e) {}
   loadClipGallery();
 }
@@ -1428,6 +1551,12 @@ function showClipShortcut() {
 // ── Event Wiring ───────────────────────────────────────────────────────
 
 function init() {
+  // Idempotent: boot and the Plex PIN poll can both call init(), and a second
+  // run rebound every document listener and leaked a second session-poll
+  // interval (its handle overwrote the first, so the old timer never stopped).
+  if (window.__scenesterInit) return;
+  window.__scenesterInit = true;
+
   dom = getDom();
 
   // ── SPA history: keep back-swipe / back-button INSIDE the app ──
@@ -1551,6 +1680,9 @@ function init() {
         seekVideoTo(_sliderStart);
       }
     } else if (e.key === "Enter") {
+      // Don't hijack Enter when it is activating a focused button/link — the
+      // Space handler above already had this guard.
+      if (e.target.tagName === "BUTTON" || e.target.tagName === "A") return;
       e.preventDefault();
       downloadClip();
     }
@@ -1575,6 +1707,7 @@ function stopPinPolling() {
   }
   _authPinId = null;
   _authPollCount = 0;
+  _authPollInFlight = false;
 }
 
 function showLoginStep(step) {
@@ -1659,11 +1792,18 @@ function startPinFlow() {
     });
 }
 
+var _authPollInFlight = false;
+
 function pollPinStatus() {
   if (!_authPinId) return;
+  // A slow plex.tv response (> the 2s interval) used to let two polls resolve
+  // "done" and call init() twice.
+  if (_authPollInFlight) return;
+  _authPollInFlight = true;
 
   _authPollCount++;
   if (_authPollCount > MAX_PIN_POLLS) {
+    _authPollInFlight = false;
     stopPinPolling();
     showLoginError("PIN expired. Please try again.");
     return;
@@ -1672,6 +1812,10 @@ function pollPinStatus() {
   fetch("api/auth/pin/" + _authPinId)
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      // Release the in-flight guard before branching: the terminal branches
+      // return via stopPinPolling(), and a swallowed flag would kill polling
+      // for good after a single slow response.
+      _authPollInFlight = false;
       if (data.status === "done") {
         stopPinPolling();
         var overlay = qs("#login-overlay");
@@ -1684,7 +1828,8 @@ function pollPinStatus() {
       // "waiting" — keep polling
     })
     .catch(function() {
-      // Backend error during poll — keep trying
+      // Backend error during poll — release the guard and keep trying
+      _authPollInFlight = false;
     });
 }
 

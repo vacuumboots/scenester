@@ -988,6 +988,24 @@ async def search_quotes(q: str = ""):
 
 clip_jobs: dict[str, dict] = {}  # filename -> {progress, done, error}
 
+# Shortest clip the API will encode. The UI seeds a 0.04s range when only one
+# edge is marked, so a bare "end > start" test accepted a 40ms clip. Keep in
+# step with MIN_CLIP_SECONDS in frontend/static/app.js.
+MIN_CLIP_SECONDS = 0.5
+
+
+def _check_clip_range(start_sec: float, end_sec: float) -> float:
+    """Validate a requested clip range and return its duration in seconds."""
+    duration = end_sec - start_sec
+    if duration <= 0:
+        raise HTTPException(status_code=400, detail="End must be after start")
+    if duration < MIN_CLIP_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Clip must be at least {MIN_CLIP_SECONDS:g}s",
+        )
+    return duration
+
 _CLIP_JOB_RETENTION_SECONDS = 3600
 
 # ffmpeg -progress emits `key=value` on stderr; everything else on stderr with
@@ -1372,9 +1390,7 @@ async def create_clip(req: ClipRequest):
 
     Optional: captions (burn in word-chunked subtitles), vertical (9:16 crop).
     """
-    duration = req.end_sec - req.start_sec
-    if duration <= 0:
-        raise HTTPException(status_code=400, detail="End must be after start")
+    duration = _check_clip_range(req.start_sec, req.end_sec)
     if req.format not in ("mp4", "gif"):
         raise HTTPException(status_code=400, detail="Invalid format")
 

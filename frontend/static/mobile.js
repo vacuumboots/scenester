@@ -183,8 +183,10 @@ function mobMarkStartAt(t) {
     _mobEndSet = true;
     _mobRefreshSnap("end");
   } else {
+    // Free mode: end rides the playhead. setSliderStart → updateTimeDisplay
+    // already seeds a 1s window, so there is nothing to seed here (the old
+    // 0.04s fallback was unreachable).
     _mobEndSet = false;
-    if (_sliderEnd <= _sliderStart) setSliderEnd(_sliderStart + 0.04);
   }
   _mobSyncBrowse();
   _mobFlash(_mobEls.btnStart);
@@ -467,19 +469,23 @@ function _mobRender() {
   }
 
   if (_mobEls.btnDownload) {
+    // Same floor as the backend: marking one edge leaves a 0.04s seed range,
+    // which used to pass a bare `dur <= 0` test and arm Download with a 40ms
+    // clip. Anything under MIN_CLIP_SECONDS is not a clip.
+    var minClip = (typeof MIN_CLIP_SECONDS === "number") ? MIN_CLIP_SECONDS : 0.5;
     var dlDisabled;
     var dlLabel;
-    if (dur <= 0) {
+    if (dur < minClip) {
       dlDisabled = true;
       dlLabel = "⚠ Set a clip range";
     } else {
       dlDisabled = false;
-      dlLabel = "⬇ Download";
+      dlLabel = "⬇ Set Clip";
       var parts = [];
       if (_captionsEnabled) parts.push("captions");
       if (_verticalEnabled) parts.push("vertical");
       if (_clipFormat === "gif") parts.push("gif");
-      if (parts.length) dlLabel = "⬇ Download (" + parts.join(" + ") + ")";
+      if (parts.length) dlLabel = "⬇ Set Clip (" + parts.join(" + ") + ")";
     }
     if (dlDisabled !== _mobLast.dlDisabled) {
       _mobEls.btnDownload.disabled = dlDisabled;

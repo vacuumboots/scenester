@@ -7,12 +7,29 @@ COPY frontend/ ./static/
 FROM python:3.12-slim
 # i965-va-driver + libva = VAAPI hardware-accelerated clipping on the
 # Haswell iGPU (render node /dev/dri/renderD128 passed at runtime).
-RUN apt-get update && apt-get install -y ffmpeg i965-va-driver libva-drm2 && rm -rf /var/lib/apt/lists/*
+# --no-install-recommends keeps the ffmpeg Recommends chain out of the image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg i965-va-driver libva-drm2 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=frontend /app/static ./static
+
+# Dependencies first: this layer changes only when requirements.txt does, so a
+# JS/CSS edit no longer re-runs pip install (most of the old 10-15 min build).
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY backend/ .
-RUN mkdir -p /tmp/clips /data
+
+COPY backend/ ./
+
+# Frontend LAST — it changes on nearly every UI deploy, so nothing expensive
+# may sit below it.
+COPY --from=frontend /app/static ./static
+
+RUN mkdir -p /tmp/clips /data /data/cache/frames /data/cache/thumbs
 EXPOSE 8096
+
+# Liveness signal for `--restart` / `docker ps`: a hung-but-listening uvicorn
+# never trips a restart without this. python is always present; curl is not.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/api/auth/status', timeout=4)" || exit 1
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8096"]
