@@ -75,7 +75,11 @@ var _sliderEnd = 0;
 var MIN_CLIP_SECONDS = 0.5;
 
 function clipRangeReady() {
-  return (_sliderEnd - _sliderStart) >= MIN_CLIP_SECONDS;
+  // Both edges must be marked. updateTimeDisplay() widens a single-mark seed to
+  // a full second (so the overview bar has something to draw), which is above
+  // MIN_CLIP_SECONDS and used to arm Download after one tap of Set Start.
+  return _mobStartSet === true && _mobEndSet === true &&
+         (_sliderEnd - _sliderStart) >= MIN_CLIP_SECONDS;
 }
 
 // Bumped by goHome()/goBack() so in-flight selectItem() fetches can detect
@@ -303,11 +307,28 @@ async function selectItem(mediaId) {
     showDetailView();
   } catch (err) {
     console.error("Failed to load item:", err);
+    // Doing nothing left the library looking unresponsive and invited repeated
+    // taps, which are expensive for this user.
+    var banner = document.getElementById("error-banner");
+    if (banner) {
+      banner.textContent = "Could not open that title - " + (err && err.message ? err.message : "unknown error");
+      banner.style.display = "block";
+      clearTimeout(selectItem._bannerTimer);
+      selectItem._bannerTimer = setTimeout(function() { banner.style.display = "none"; }, 6000);
+    }
   }
 }
 
 function showDetailView() {
   var item = state.currentItem;
+
+  // Clear the previous film's dialogue before its own metadata arrives. Until
+  // then the Lines panel used to stay populated and live, so tapping a line
+  // marked a range from the film you had already left.
+  _captionLines = [];
+  _filteredIdx = [];
+  var _staleLines = document.getElementById("mob-lines");
+  if (_staleLines) _staleLines.style.display = "none";
   if (!item) return;
 
   if (dom.libraryView) dom.libraryView.style.display = "none";
@@ -1015,6 +1036,9 @@ function loadCaptionLines(mediaId) {
   fetch("api/subtitle/lines/" + mediaId)
     .then(function(r) { return r.ok ? r.json() : { lines: [] }; })
     .then(function(data) {
+      // Ignore a slow response for a film the user has already left.
+      if (!state.currentItem ||
+          (state.currentItem.media_id || state.currentItem.id) !== mediaId) return;
       _captionLines = data.lines || [];
       if (!_captionLines.length) {
         panel.style.display = "none";
@@ -1311,8 +1335,15 @@ function cancelClipPolling() {
   }
 }
 
+var _clipInFlight = false;
+
 async function downloadClip() {
   if (!dom) return;
+
+  // Re-entrancy guard: Enter bypassed the disabled button, and two runs shared
+  // one poll handle — whichever settled first cleared the other's timer, so the
+  // second export was stranded with no error.
+  if (_clipInFlight) return;
 
   if (!state.currentItem) {
     if (dom.clipStatus) dom.clipStatus.textContent = "No item selected";
@@ -1328,11 +1359,14 @@ async function downloadClip() {
   var startSec = _sliderStart || 0;
   var endSec = _sliderEnd || 0;
 
-  if (endSec <= startSec) {
-    if (dom.clipStatus) dom.clipStatus.textContent = "Invalid range: " + fmtTime(startSec) + " - " + fmtTime(endSec);
+  // Same predicate as the button, so Enter and any programmatic caller cannot
+  // post a range the UI itself refuses (the backend answers 400 instead).
+  if (!clipRangeReady()) {
+    if (dom.clipStatus) dom.clipStatus.textContent = "Set a clip range of at least " + MIN_CLIP_SECONDS + "s";
     return;
   }
 
+  _clipInFlight = true;
   if (dom.btnDownload) { dom.btnDownload.disabled = true; dom.btnDownload.textContent = "Clipping..."; }
   if (dom.clipStatus) dom.clipStatus.textContent = "";
   // Progress UI (unified #mob-clip-progress* — dom.clipProgress* re-point there)
@@ -1381,6 +1415,7 @@ async function downloadClip() {
     if (err && err.message === "Clip polling cancelled") return;
     if (dom.clipStatus) dom.clipStatus.textContent = "Error: " + err.message;
   } finally {
+    _clipInFlight = false;
     if (dom.clipProgress) dom.clipProgress.style.display = "none";
     // Let the single renderer restore the button (label + disabled state) —
     // hard-coding a label here is what left it stale after every export.
@@ -1480,7 +1515,7 @@ async function loadClipGallery() {
           '<span class="clip-card-name" title="' + escAttr(c.filename) + '">' + escHtml(c.filename) + ' (' + sizeMB + 'MB)</span>' +
           '<div class="clip-card-actions">' +
             '<a class="btn btn-small" href="api/download/' + encodeURIComponent(c.filename) + '" download>DL</a>' +
-            '<button class="btn btn-small" data-del="' + escAttr(c.filename) + '" style="color:var(--red)">✕</button>' +
+            '<button type="button" class="btn btn-small btn-del" data-del="' + escAttr(c.filename) + '" aria-label="Delete clip">✕</button>' +
           '</div>' +
         '</div></div>';
     }
@@ -1527,15 +1562,39 @@ function bindClipPlaceholders() {
   var dels = dom.clipGalleryGrid.querySelectorAll("[data-del]");
   for (var j = 0; j < dels.length; j++) {
     dels[j].addEventListener("click", function() {
-      deleteClip(this.getAttribute("data-del"));
+      // Two steps: this button sits next to Download and the action is
+      // irreversible, so a single mis-tap must not destroy an export.
+      var btn = this;
+      if (btn.getAttribute("data-confirm") !== "1") {
+        btn.setAttribute("data-confirm", "1");
+        btn.textContent = "Delete?";
+        btn.classList.add("btn-del-confirm");
+        setTimeout(function() {
+          if (!document.body.contains(btn)) return;
+          btn.removeAttribute("data-confirm");
+          btn.textContent = "✕";
+          btn.classList.remove("btn-del-confirm");
+        }, 4000);
+        return;
+      }
+      deleteClip(btn.getAttribute("data-del"));
     });
   }
 }
 
 async function deleteClip(filename) {
+  var note = document.getElementById("clip-gallery-note") || (dom && dom.clipStatus);
   try {
-    await fetch("api/clips/" + encodeURIComponent(filename), { method: "DELETE" });
-  } catch (e) {}
+    var resp = await fetch("api/clips/" + encodeURIComponent(filename), { method: "DELETE" });
+    if (!resp.ok) {
+      // A rejected delete used to look identical to a successful one.
+      if (note) note.textContent = "Delete failed (HTTP " + resp.status + ")";
+      return;
+    }
+  } catch (e) {
+    if (note) note.textContent = "Delete failed: " + e.message;
+    return;
+  }
   loadClipGallery();
 }
 
@@ -1662,10 +1721,16 @@ function init() {
       if (isEnd) {
         var ne = Math.max(_sliderStart + 1, _sliderEnd - step);
         setSliderEnd(ne);
+        _mobEndSet = true;
+        _mobSyncBrowse();
+        _mobRender();
         seekVideoTo(_sliderEnd);
       } else {
         var ns = Math.max(0, start - step);
         setSliderStart(ns);
+        _mobStartSet = true;
+        _mobSyncBrowse();
+        _mobRender();
         seekVideoTo(_sliderStart);
       }
     } else if (e.key === "ArrowRight") {
@@ -1673,10 +1738,16 @@ function init() {
       if (isEnd) {
         var ne = Math.min(state.mediaDuration, _sliderEnd + step);
         setSliderEnd(ne);
+        _mobEndSet = true;
+        _mobSyncBrowse();
+        _mobRender();
         seekVideoTo(_sliderEnd);
       } else {
         var ns = Math.min(state.mediaDuration, start + step);
         setSliderStart(ns);
+        _mobStartSet = true;
+        _mobSyncBrowse();
+        _mobRender();
         seekVideoTo(_sliderStart);
       }
     } else if (e.key === "Enter") {
@@ -1684,7 +1755,7 @@ function init() {
       // Space handler above already had this guard.
       if (e.target.tagName === "BUTTON" || e.target.tagName === "A") return;
       e.preventDefault();
-      downloadClip();
+      if (!_clipInFlight) downloadClip();
     }
   });
 
@@ -1773,6 +1844,9 @@ function cancelPinFlow() {
 }
 
 function startPinFlow() {
+  // Double-tap created two PINs and leaked the first interval, which
+  // stopPinPolling() could never clear.
+  if (_authPollTimer) return;
   showLoginStep("login-step-pin");
 
   fetch("api/auth/pin", { method: "POST" })

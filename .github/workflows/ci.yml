@@ -46,6 +46,26 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: scenester:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Every failure that matters happens after a successful build: a CMD
+      # pointing at the wrong module, static/ missing, ffmpeg absent from the
+      # final layer. Build-only CI called all of those green.
+      - name: Smoke-test the image
+        run: |
+          mkdir -p /tmp/clips /tmp/data
+          docker run -d --name smoke -p 8096:8096 \
+            -v /tmp/clips:/tmp/clips -v /tmp/data:/data scenester:ci
+          for i in $(seq 1 40); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8096/healthz; then
+              echo "healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "container never became healthy:" >&2
+          docker logs smoke >&2 || true
+          exit 1
 

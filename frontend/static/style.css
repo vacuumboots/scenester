@@ -952,13 +952,32 @@ main {
 
 .clip-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .clip-card-actions .btn {
   font-size: 11px;
   padding: 4px 10px;
+}
+
+/* Delete sits beside Download and cannot be undone: 44px target (the app's
+   own floor) and a visible confirm state, not a 22px ✕ with no feedback. */
+.clip-card-actions .btn-del {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--red);
+}
+
+.clip-card-actions .btn-del-confirm {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  padding: 0 10px;
 }
 
 /* ── Error Banner ──────────────────────────────────────────────────── */

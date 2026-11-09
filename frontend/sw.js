@@ -41,7 +41,10 @@ self.addEventListener("fetch", e => {
       fetch(e.request)
         .then(res => {
           const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
+          // Tie the write to the event lifetime: respondWith only keeps the
+          // worker alive until the response resolves, so an unawaited put can
+          // be dropped and leave a stale offline shell.
+          e.waitUntil(caches.open(CACHE).then(c => c.put(e.request, clone)));
           return res;
         })
         .catch(() => caches.match(e.request))

@@ -182,10 +182,11 @@ function mobMarkStartAt(t) {
     setSliderEnd(Math.min(_sliderStart + _mobActivePreset, state.mediaDuration));
     _mobEndSet = true;
     _mobRefreshSnap("end");
-  } else {
-    // Free mode: end rides the playhead. setSliderStart → updateTimeDisplay
-    // already seeds a 1s window, so there is nothing to seed here (the old
-    // 0.04s fallback was unreachable).
+  } else if (!(_mobEndSet && _sliderEnd > _sliderStart)) {
+    // Free mode: end rides the playhead — but only when it is not already
+    // pinned. Scrubbing forward to find an OUT and then going back to its head
+    // is the natural order, and this used to discard that explicit end and let
+    // the range grow to wherever the playhead went next.
     _mobEndSet = false;
   }
   _mobSyncBrowse();
@@ -210,7 +211,9 @@ function mobMarkEndAt(t) {
     return;
   }
   setSliderEnd(t);
-  _mobStartSet = true;
+  // Do NOT pin the start here: marking only the end must leave the start free
+  // to ride the playhead. Pinning it at 0 armed a clip from the top of the film
+  // from a single tap, and froze the range because both flags then read pinned.
   _mobEndSet = true;
   _mobSyncBrowse();
   if (vid) vid.pause();
@@ -299,6 +302,15 @@ function mobSkip(delta) {
 
 // ── Nudge rows ─────────────────────────────────────────────────────────
 
+// Each nudge changes the edge time, which is a new /api/frame cache key, so
+// holding the button fired one cold ffmpeg seek into a multi-GB file per tap.
+// Wait for the tapping to stop instead.
+var _snapTimers = {};
+function _mobRefreshSnapDebounced(which) {
+  clearTimeout(_snapTimers[which]);
+  _snapTimers[which] = setTimeout(function() { _mobRefreshSnap(which); }, 500);
+}
+
 function mobNudgeStart(delta) {
   var dur = _sliderEnd - _sliderStart;
   var locked = _mobActivePreset > 0 && _mobStartSet && _mobEndSet && dur > 0;
@@ -321,7 +333,7 @@ function mobNudgeStart(delta) {
   _mobStartSet = true;
   _mobSyncBrowse();
   seekVideoTo(_sliderStart);
-  _mobRefreshSnap("start");
+  _mobRefreshSnapDebounced("start");
   _mobRender();
 }
 
@@ -344,7 +356,7 @@ function mobNudgeEnd(delta) {
   _mobEndSet = true;
   _mobSyncBrowse();
   seekVideoTo(_sliderEnd);
-  _mobRefreshSnap("end");
+  _mobRefreshSnapDebounced("end");
   _mobRender();
 }
 
@@ -475,7 +487,7 @@ function _mobRender() {
     var minClip = (typeof MIN_CLIP_SECONDS === "number") ? MIN_CLIP_SECONDS : 0.5;
     var dlDisabled;
     var dlLabel;
-    if (dur < minClip) {
+    if (dur < minClip || !_mobStartSet || !_mobEndSet) {
       dlDisabled = true;
       dlLabel = "⚠ Set a clip range";
     } else {

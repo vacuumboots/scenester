@@ -29,7 +29,13 @@ EXPOSE 8096
 
 # Liveness signal for `--restart` / `docker ps`: a hung-but-listening uvicorn
 # never trips a restart without this. python is always present; curl is not.
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+
+LABEL org.opencontainers.image.title="Scenester" \
+      org.opencontainers.image.description="Plex clip maker - browse, scrub, mark, download" \
+      org.opencontainers.image.source="https://github.com/vacuumboots/scenester"
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/api/auth/status', timeout=4)" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/healthz', timeout=4)" || exit 1
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8096"]
