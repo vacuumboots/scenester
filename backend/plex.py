@@ -27,9 +27,11 @@ PLEX_TV = "https://plex.tv"
 PLEX_MEDIA_SRC = os.getenv("PLEX_MEDIA_SRC", "/data/media")
 PLEX_MEDIA_DST = os.getenv("PLEX_MEDIA_DST", "/media")
 
-# Token persistence
-TOKEN_FILE = Path(os.getenv("CLIPARR_DATA_DIR", "/data")) / "plex_token.json"
-CLIENT_ID_FILE = Path(os.getenv("CLIPARR_DATA_DIR", "/data")) / "client_id.json"
+# Token persistence. SCENESTER_DATA_DIR is the current name; CLIPARR_DATA_DIR
+# is honoured so an older container definition does not lose the saved login.
+DATA_DIR = Path(os.getenv("SCENESTER_DATA_DIR") or os.getenv("CLIPARR_DATA_DIR") or "/data")
+TOKEN_FILE = DATA_DIR / "plex_token.json"
+CLIENT_ID_FILE = DATA_DIR / "client_id.json"
 
 _token: Optional[str] = None
 _client_id: Optional[str] = None

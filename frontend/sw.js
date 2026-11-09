@@ -3,12 +3,12 @@
 // offline fallback). Icons/manifest are cache-first. API is network-only.
 //
 // Served from the APP ROOT (not /static/) so its scope covers the whole app
-// at both the Caddy /cliparr/ URL and the direct :8096 URL. All shell paths
+// at both the Caddy /scenester/ URL and the direct :8096 URL. All shell paths
 // are derived from self.registration.scope — never hardcode the prefix.
 const CACHE = "scenester-v1";
 
 self.addEventListener("install", e => {
-  const scope = self.registration.scope;           // "/" or "/cliparr/"
+  const scope = self.registration.scope;           // "/" or "/scenester/"
   const shell = [scope, scope + "manifest.json"];
   self.skipWaiting();                              // new SW activates at once
   e.waitUntil(

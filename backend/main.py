@@ -22,6 +22,21 @@ from pydantic import BaseModel
 import plex
 
 
+def _env(suffix: str, default: str | None = None):
+    """Read a SCENESTER_* setting, falling back to the pre-rename CLIPARR_* name.
+
+    The rename to Scenester changed every knob from CLIPARR_X to SCENESTER_X.
+    Keeping the old name readable means an existing container, cron job or
+    hand-written `docker run` keeps working instead of silently losing its
+    configuration to a default.
+    """
+    for prefix in ("SCENESTER_", "CLIPARR_"):
+        value = os.environ.get(prefix + suffix)
+        if value is not None:
+            return value
+    return default
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     """Boot housekeeping plus the background tasks the app needs.
@@ -29,7 +44,7 @@ async def _lifespan(_app: FastAPI):
     - Expire old cached frames/thumbnails at boot AND daily (a long-lived
       container otherwise never prunes — the boot-only prune only fired when
       the container was recreated).
-    - Optionally expire generated clips (`CLIPARR_CLIP_MAX_AGE_DAYS`; off by
+    - Optionally expire generated clips (`SCENESTER_CLIP_MAX_AGE_DAYS`; off by
       default — those are the user's exports).
     - Warm the subtitle/quote index in the background so the first quote
       search does not pay a ~50s build.
@@ -268,10 +283,10 @@ def _resolve_static_dir() -> Path:
     directory, so the default `backend/static` (== /app/static) already works.
     For local development from a source checkout there is no backend/static —
     fall back to the repo-layout `frontend/` directory so `uvicorn main:app`
-    run from backend/ serves the SPA with no build step. A CLIPARR_STATIC_DIR
+    run from backend/ serves the SPA with no build step. A SCENESTER_STATIC_DIR
     env var overrides both.
     """
-    env = os.environ.get("CLIPARR_STATIC_DIR")
+    env = _env("STATIC_DIR")
     if env:
         return Path(env)
     default = Path(__file__).parent / "static"
@@ -289,7 +304,7 @@ CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 # the source file on a spinning disk and re-download a full-size poster. Both
 # are deterministic for a given (media, timestamp) / media, so cache them on
 # disk under /data (a bind mount — survives container recreation, unlike /tmp).
-CACHE_DIR = Path(os.environ.get("CLIPARR_CACHE_DIR", "/data/cache"))
+CACHE_DIR = Path(_env("CACHE_DIR", "/data/cache"))
 
 
 def _pick_cache_root(preferred: Path) -> Path:
@@ -301,7 +316,7 @@ def _pick_cache_root(preferred: Path) -> Path:
     best-effort everywhere, so a missing directory just means nothing is cached).
     """
     candidates = [preferred]
-    if "CLIPARR_CACHE_DIR" not in os.environ:
+    if _env("CACHE_DIR") is None:
         candidates.append(Path(tempfile.gettempdir()) / "scenester-cache")
     for candidate in candidates:
         try:
@@ -321,23 +336,23 @@ THUMB_CACHE_DIR = CACHE_ROOT / "thumbs"
 # output (fresh ffmpeg process + seek into a multi-GB file). Unbounded parallel
 # requests turned one film-strip build into a load-8.6 spike on a 4-core box,
 # starving the encoder and the UI. Cap it; queueing beats thrashing.
-FRAME_CONCURRENCY = max(1, int(os.environ.get("CLIPARR_FRAME_CONCURRENCY", "2")))
+FRAME_CONCURRENCY = max(1, int(_env("FRAME_CONCURRENCY", "2")))
 _FRAME_SEM = asyncio.Semaphore(FRAME_CONCURRENCY)
-FRAME_WIDTH = int(os.environ.get("CLIPARR_FRAME_WIDTH", "640"))
-THUMB_WIDTH = int(os.environ.get("CLIPARR_THUMB_WIDTH", "320"))
+FRAME_WIDTH = int(_env("FRAME_WIDTH", "640"))
+THUMB_WIDTH = int(_env("THUMB_WIDTH", "320"))
 
 # Encoding a clip is the heaviest thing the box does (decode + scale + encode,
 # often while Plex transcodes from the same spindles). Two at a time keeps a
 # double-tap responsive without letting a burst of exports swamp 4 cores.
-CLIP_CONCURRENCY = max(1, int(os.environ.get("CLIPARR_CLIP_CONCURRENCY", "2")))
+CLIP_CONCURRENCY = max(1, int(_env("CLIP_CONCURRENCY", "2")))
 _CLIP_SEM = asyncio.Semaphore(CLIP_CONCURRENCY)
 
 # In-process TTL caches. Plex metadata is effectively immutable for a title
 # that is already on disk, and the library list only changes when the *arr
 # stack imports something, so a short TTL costs nothing and saves a Plex
 # roundtrip on every frame, thumb and clip request.
-META_TTL = float(os.environ.get("CLIPARR_META_TTL", "300"))
-LIBRARY_TTL = float(os.environ.get("CLIPARR_LIBRARY_TTL", "60"))
+META_TTL = float(_env("META_TTL", "300"))
+LIBRARY_TTL = float(_env("LIBRARY_TTL", "60"))
 
 _meta_cache: dict[int, tuple[float, dict]] = {}
 _library_cache: dict = {"items": None, "ts": 0.0}
@@ -388,7 +403,7 @@ async def _resize_image(raw: bytes, width: int) -> bytes:
         return raw
 
 
-CACHE_MAX_AGE = float(os.environ.get("CLIPARR_CACHE_MAX_AGE_DAYS", "14")) * 86400
+CACHE_MAX_AGE = float(_env("CACHE_MAX_AGE_DAYS", "14")) * 86400
 
 
 def _prune_cache(max_age: float = CACHE_MAX_AGE) -> int:
@@ -415,10 +430,10 @@ def _prune_cache(max_age: float = CACHE_MAX_AGE) -> int:
 
 
 # Generated clips are the user's *exports*, so pruning them is opt-in:
-# CLIPARR_CLIP_MAX_AGE_DAYS unset (0) means never delete anything. Set it and
+# SCENESTER_CLIP_MAX_AGE_DAYS unset (0) means never delete anything. Set it and
 # the clips directory stops growing without bound (~1.7GB after a few months of
 # normal use on this deployment).
-CLIP_MAX_AGE = float(os.environ.get("CLIPARR_CLIP_MAX_AGE_DAYS", "0")) * 86400
+CLIP_MAX_AGE = float(_env("CLIP_MAX_AGE_DAYS", "0")) * 86400
 
 
 def _prune_clips(max_age: float = CLIP_MAX_AGE) -> int:
@@ -473,7 +488,7 @@ async def index():
 
 # PWA root-level files: service worker + manifest MUST be served from the
 # app root (not /static/) so their scope covers the whole app at both the
-# Caddy /cliparr/ URL and the direct :8096 URL.
+# Caddy /scenester/ URL and the direct :8096 URL.
 @app.get("/sw.js")
 async def service_worker():
     return FileResponse(STATIC_DIR / "sw.js")
@@ -819,8 +834,8 @@ _quote_index_lock = asyncio.Lock()
 # Six hours (was one): a rebuild parses every subtitle file in the library
 # (~2100 films → ~1.2M lines, tens of seconds of seeks on a spinning disk).
 # The library fingerprint below skips the rebuild entirely when nothing changed;
-# override with CLIPARR_QUOTE_INDEX_TTL when adding SRTs mid-session.
-_QUOTE_INDEX_TTL_SECONDS = float(os.environ.get("CLIPARR_QUOTE_INDEX_TTL", str(6 * 3600)))
+# override with SCENESTER_QUOTE_INDEX_TTL when adding SRTs mid-session.
+_QUOTE_INDEX_TTL_SECONDS = float(_env("QUOTE_INDEX_TTL", str(6 * 3600)))
 # Safety ceiling only: the real result set is unbounded (per-movie cap
 # keeps it diverse), but a pathological query ("the", "a") must not ship
 # a multi-MB response. The frontend shows a refine note when hit.
@@ -1054,7 +1069,7 @@ def _prune_clip_jobs() -> None:
 # ── Hardware-accelerated clipping (VAAPI) ──────────────────────────────
 # The host is a Haswell iGPU (i965 driver): H264/MPEG2/VC1 HW decode,
 # H264 Main-profile HW encode. No HEVC/VP9/AV1 HW decode — those fall
-# back to CPU decode + HW encode. Set CLIPARR_DISABLE_VAAPI=1 to force
+# back to CPU decode + HW encode. Set SCENESTER_DISABLE_VAAPI=1 to force
 # the legacy libx264 path (debugging / no /dev/dri in container).
 
 VAAPI_DEVICE = "/dev/dri/renderD128"
@@ -1064,7 +1079,7 @@ _VAAPI_ENCODE_QUALITY = "23"  # ICQ; ~matches libx264 crf 20 bitrate
 
 def _vaapi_available() -> bool:
     """True if a VAAPI render node is present in the container."""
-    if os.environ.get("CLIPARR_DISABLE_VAAPI") == "1":
+    if _env("DISABLE_VAAPI") == "1":
         return False
     return os.path.exists(VAAPI_DEVICE)
 

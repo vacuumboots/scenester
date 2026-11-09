@@ -148,11 +148,11 @@ only holds while the container sits behind a private network. Two real options:
    `-p 8096:8096`, which listens on `0.0.0.0` — any device on the LAN can reach
    the API directly, bypassing Caddy entirely. Prerequisite: Caddy currently
    proxies to `http://host.docker.internal:8096` (`/opt/hms-docker/d/Caddyfile`,
-   the `handle_path /cliparr/*` block), i.e. it dials the *published host port*,
+   the `handle_path /scenester/*` block), i.e. it dials the *published host port*,
    so this is not a one-line change. Either point that route at the container
-   name over `hms_media_net` (`reverse_proxy http://cliparr:8096`), or bind the
+   name over `hms_media_net` (`reverse_proxy http://scenester:8096`), or bind the
    port to the docker bridge gateway (`-p 172.17.0.1:8096:8096`) so only the
-   host and containers can reach it. Verify `/cliparr/` through the public URL
+   host and containers can reach it. Verify `/scenester/` through the public URL
    afterwards.
 2. **Shared secret when `CLIPARR_ACCESS_TOKEN` is set**: middleware compares a
    cookie or `X-Scenester-Token` header and the UI stores it in `localStorage`.
@@ -173,7 +173,7 @@ single new film doesn't force a full re-parse.
 
 ### P2 — clips are never pruned by default
 
-1.7GB of exports accumulate in `/opt/hms-docker/apps/cliparr/clips`. Retention
+1.7GB of exports accumulate in `/opt/hms-docker/apps/scenester/clips`. Retention
 now exists but is opt-in (`CLIPARR_CLIP_MAX_AGE_DAYS`), because deleting a
 user's exports by default is the wrong trade. Two better answers than a global
 retention policy: show the total size in the gallery header, or add a "clear
@@ -253,7 +253,7 @@ handful of `TestClient` cases over `/api/clip` (validation, ready-path reuse,
 ## How this was verified
 
 - Every backend fix ran against a real throwaway container
-  (`cliparr:audit` on :8099) with the real film *Possible Love (2026)*, then the
+  (`scenester:audit` on :8099) with the real film *Possible Love (2026)*, then the
   output was probed with `ffprobe` and specific frames were extracted and
   inspected visually for burned-in captions.
 - The 19-minute-runtime and 10-bit claims were reproduced with the *original*

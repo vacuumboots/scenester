@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild the Scenester (Cliparr) image and recreate the container.
+# Rebuild the Scenester image and recreate the container.
 #
 # There is no compose file — the container was created by hand, so the flags
 # live here instead of being retyped from memory on every deploy.
@@ -8,7 +8,7 @@
 #   --device /dev/dri/renderD128          VAAPI hardware clipping (Haswell iGPU)
 #   --add-host host.docker.internal       Linux Docker has no host.docker.internal
 #                                         without this, and Plex is reached by name
-#   -v .../data:/data                     frame + thumbnail cache lives here; a
+#   -v $APP_DIR/data:/data                frame + thumbnail cache lives here; a
 #                                         --rm/blank volume makes every scroll re-extract
 #
 # Recreate is rollback-safe: the pre-deploy image is tagged :prev first, and if
@@ -17,8 +17,9 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
-IMAGE=cliparr
-NAME=cliparr
+IMAGE=scenester
+NAME=scenester
+APP_DIR=/opt/hms-docker/apps/scenester
 
 cd "$REPO"
 
@@ -29,6 +30,16 @@ fi
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl not found — the health probe needs it" >&2
   exit 1
+fi
+
+# Bind-mount sources must exist, or Docker creates them root-owned.
+mkdir -p "$APP_DIR/clips" "$APP_DIR/data"
+
+# The container and image were called cliparr before the rename. Retire the
+# old container explicitly: it holds port 8096, so a rebuild would fail to bind.
+if docker ps -a --format '{{.Names}}' | grep -qx cliparr; then
+  echo "==> removing legacy container 'cliparr'"
+  docker rm -f cliparr >/dev/null
 fi
 
 # Keep the image that is serving right now addressable for rollback.
@@ -50,8 +61,8 @@ run_container() {  # $1 = image
     --log-opt max-size=10m --log-opt max-file=3 \
     -p 8096:8096 \
     -v /mnt/DriveA/hms-docker/media_data/_library:/media:ro \
-    -v /opt/hms-docker/apps/cliparr/clips:/tmp/clips \
-    -v /opt/hms-docker/apps/cliparr/data:/data \
+    -v "$APP_DIR/clips:/tmp/clips" \
+    -v "$APP_DIR/data:/data" \
     "$1" >/dev/null
 }
 
