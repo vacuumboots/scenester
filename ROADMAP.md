@@ -4,9 +4,9 @@ Scenester is a tool I actually use to clip films out of my Plex library, not a
 demo built to look like one. This roadmap is ordered by what a stranger hits
 first: the repo, the README, the code, then the details.
 
-Last updated 2026-11-10. Current state: `main` green in CI, 80+ backend tests,
-`ghcr.io/vacuumboots/scenester` publishing on every passing push, container
-healthy on the host for weeks at a time.
+Last updated 2026-11-10. Current state: P0 is shipped (unprivileged container, no
+published port, shared-secret API gate, pinned build inputs), 94 backend tests,
+CI green, `ghcr.io/vacuumboots/scenester` publishing on every passing push.
 
 ## How this is prioritised
 
@@ -21,35 +21,38 @@ healthy on the host for weeks at a time.
 
 ---
 
-## P0 — Hardening (do this first)
+## P0 — Hardening (shipped 2026-11-10)
 
-These are small, mechanical, and they remove the only things in the repo that
-could read as carelessness. One maintenance window, roughly half a day.
+These were small, mechanical, and they removed the only things in the repo that
+could read as carelessness. Done in one window, and verified on the host rather
+than in a plan.
 
-- [ ] **Stop publishing the container port on every interface.** Caddy dials
+- [x] **Stop publishing the container port on every interface.** Caddy dials
       `scenester:8096` over the shared Docker network instead of
       `host.docker.internal:8096`, `-p 8096:8096` comes out of `deploy.sh`, and
       the health probe moves to `docker exec`. Both containers are already on
       the same network, so this is three edits and a Caddy reload.
-- [ ] **Add the API access-token layer.** `SCENESTER_ACCESS_TOKEN` compared with
+- [x] **Add the API access-token layer.** `SCENESTER_ACCESS_TOKEN` compared with
       `hmac.compare_digest` on `/api/*`, exempting `/api/auth/*`. The PIN flow
       also needs binding to the client that opened it, so a stranger cannot
       create a PIN and approve it with their own Plex account.
-- [ ] **Non-root.** `scenester` user in the image, `chown` of `CLIPS_DIR` and
+- [x] **Non-root.** `scenester` user in the image, `chown` of `CLIPS_DIR` and
       `/data`, `--user`, `--cap-drop=ALL`,
       `--security-opt=no-new-privileges`, keeping only
       `--device /dev/dri/renderD128`. Also fixes the root-owned cache files
       that make host-side cleanup need a privileged chroot.
-- [ ] **Resource limits.** `--memory=2g --memory-swap=2g --cpus=3
-      --pids-limit=256` plus matching `deploy.resources.limits` in the compose
-      example. Three of four cores, deliberately leaving one for Plex. A clip
+- [x] **Resource limits.** Already present as `--memory=3g --memory-swap=3g
+      --cpus=3 --pids-limit=512`; verified rather than re-added. The compose
+      example still needs the matching `deploy.resources.limits`. Three of four cores, deliberately leaving one for Plex. A clip
       should not be able to starve the transcoder, and a leak should hit a wall
       instead of the host.
-- [ ] **Delete `gitignore_human_handoff/` and rotate the token inside it.**
+- [x] **Delete `gitignore_human_handoff/` and rotate the token inside it.**
+      Deleted; **rotating the token is still outstanding and is the owner's
+      action**.
       Nothing in the repo needs it. It was never committed and never reached
       an image, but it travels with any rsync of the working tree, and this
       tree gets copied around during development.
-- [ ] **Pin what the build depends on.** Base images by digest, the apt layer,
+- [x] **Pin what the build depends on.** Base images by digest, the apt layer,
       and a hashed lockfile for Python. Not hygiene for its own sake: the
       VAAPI green-frame fix depends on filter-graph negotiation in a specific
       ffmpeg build, so an unpinned `apt-get install ffmpeg` can silently
@@ -69,8 +72,9 @@ could read as carelessness. One maintenance window, roughly half a day.
       architecture diagram, design decisions, measured numbers, limitations,
       setup, configuration table, roadmap. Mermaid diagram, not an image, so it
       stays readable and diffable.
-- [ ] **A configuration table and a complete `.env.example`.** There are about
-      twelve settings and the example documents three. `SCENESTER_FRAME_CONCURRENCY`
+- [x] **A complete `.env.example`.** All eighteen settings, with defaults and the
+      two load levers called out. (The README configuration table is still
+      pending.) Was: about twelve settings, three documented. `SCENESTER_FRAME_CONCURRENCY`
       is the single lever that controls the documented load spike and it is
       currently undiscoverable.
 - [ ] **Badges that mean something**: CI status, image publish, GHCR pull
