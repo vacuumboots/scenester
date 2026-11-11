@@ -1,6 +1,6 @@
 # Scenester Changelog
 
-## 2026-11-11 — v1.0.0 release: README rebuilt around a scan, compose file, demo loop
+## 2026-11-11 — v1.1.0: README rebuilt around a scan, compose file, demo loop
 
 The repo worked; it read like a working tree. This pass was about what a
 stranger sees in the first ninety seconds, without changing behaviour.
@@ -31,7 +31,7 @@ stranger sees in the first ninety seconds, without changing behaviour.
 Verified: 94 tests, CI green, image published to `ghcr.io/vacuumboots/scenester`
 for `v1.0.0`, and the compose file validated with `docker compose config`.
 
-## 2026-11-10 — v1.0.0: unprivileged container, no published port, access gate
+## 2026-11-10 — v1.1.0: unprivileged container, no published port, access gate
 
 The API had no credential of its own and the container published 8096 on every
 interface, so anything on the LAN could stream the whole library, delete clips
