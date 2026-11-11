@@ -1,0 +1,91 @@
+# Scenester — one container, no external services.
+#
+# This file is the definition a new install is expected to edit. `deploy.sh` is
+# the maintainer's own deploy script for a host where the container is created by
+# hand; the flags are the same in both, so a change to one belongs in the other.
+#
+#   cp .env.example .env      # then set SCENESTER_ACCESS_TOKEN
+#   docker compose up -d
+#
+# Requires Compose v2. Values in .env are interpolated here, so nothing needs to
+# be repeated between the two files.
+
+services:
+  scenester:
+    image: ghcr.io/vacuumboots/scenester:latest
+    # Building from a checkout instead:
+    # build: .
+    container_name: scenester
+    restart: unless-stopped
+    init: true
+
+    # The app runs unprivileged. These two lines are what make the media, clip
+    # and cache bind mounts writable: match them to the owner of those paths on
+    # the host (`id -u`), and to the gid of the host's render group:
+    #   getent group render        # usually 992 on Debian/Ubuntu
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "${RENDER_GID:-992}"
+
+    # Everything the container can do, it does with no capabilities and no way
+    # to gain them. ffmpeg and the VAAPI driver need neither.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Bound to loopback only. The app has a shared-secret gate, but nothing
+    # outside this host needs a direct socket: put a reverse proxy in front, or
+    # delete this block entirely if the proxy already reaches the container by
+    # name on a shared Docker network.
+    ports:
+      - "127.0.0.1:8096:8096"
+
+    environment:
+      PLEX_URL: ${PLEX_URL:-http://host.docker.internal:32400}
+      # Unset means the API is open. Set it for anything but localhost-only.
+      SCENESTER_ACCESS_TOKEN: ${SCENESTER_ACCESS_TOKEN:-}
+      # Optional: only needed if you are not using the in-app Plex login.
+      PLEX_TOKEN: ${PLEX_TOKEN:-}
+      # The two levers that decide whether opening the film strip makes the
+      # whole host slow. Every frame is a real seek; see .env.example.
+      SCENESTER_FRAME_CONCURRENCY: ${SCENESTER_FRAME_CONCURRENCY:-2}
+      SCENESTER_CLIP_CONCURRENCY: ${SCENESTER_CLIP_CONCURRENCY:-2}
+
+    # Linux Docker has no host.docker.internal without this, and Plex is reached
+    # by that name. On macOS/Windows Docker Desktop it already resolves.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    volumes:
+      # Point the left side at the media root your Plex server reports.
+      - ${PLEX_MEDIA_PATH:-/mnt/media}:/media:ro
+      # Clips are large and temporary; the cache is derived data. Both must be
+      # writable by the uid above.
+      - ./clips:/tmp/clips
+      - ./data:/data
+
+    # Hardware encoding. Delete these two lines and set SCENESTER_DISABLE_VAAPI=1
+    # on a host with no render node — clips then take about 10x longer.
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+
+    # One workload on a shared host must not be able to starve the others: Plex
+    # transcoding from the same spindles is the usual victim. 3 of 4 cores, and
+    # a memory ceiling rather than the whole box.
+    deploy:
+      resources:
+        limits:
+          cpus: "3"
+          memory: 3g
+          pids: 512
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # The image ships its own HEALTHCHECK against /healthz, which probes the
+    # cache directory, ffmpeg, and the media mount rather than just "is the
+    # process listening".

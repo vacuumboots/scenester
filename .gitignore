@@ -10,5 +10,4 @@ __pycache__/
 # Local-only working docs — kept for dev reference, not part of the public repo
 .hermes/
 HANDOFF.md
-CHANGELOG.md
 gitignore_human_handoff/
