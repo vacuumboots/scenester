@@ -136,6 +136,27 @@ body {
   margin-bottom: 8px;
 }
 
+/* Access-token field. Full width and 44px tall: it is the first thing anyone
+   touches on a phone, and this app is used from one. */
+.gate-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.gate-input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
 .login-pin-link {
   display: inline-block;
   color: var(--blue);

@@ -6,8 +6,11 @@ creating frame-accurate ffmpeg clips (VAAPI-accelerated).
 """
 
 import asyncio
+import hashlib
+import hmac
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -15,15 +18,17 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 import plex
+
+APP_VERSION = "1.0.0"
 
 
 def _env(suffix: str, default: str | None = None):
@@ -87,6 +92,72 @@ app = FastAPI(title="Scenester", lifespan=_lifespan)
 # in the app, and it compresses to roughly a tenth. Text/JSON only — images and
 # video are already compressed and would only burn CPU.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+# ── Access gate ───────────────────────────────────────────────────────────
+#
+# A reverse proxy cannot do this for us: Caddy terminates TLS for twenty-odd
+# apps on one domain, so a shared-secret gate belongs in the app. One secret,
+# compared in constant time, accepted as either a header (scripts, curl) or a
+# cookie (the browser, set once by /api/auth/unlock).
+#
+# Unset means OFF, deliberately: `docker run` with no extra configuration keeps
+# behaving exactly as it did, and the test suite can exercise both states.
+# Set it whenever the app is reachable by anything other than you.
+ACCESS_TOKEN = _env("ACCESS_TOKEN") or ""
+_ACCESS_COOKIE = "scenester_access"
+_ACCESS_HEADER = "x-scenester-token"
+_ACCESS_MAX_AGE = 30 * 86400
+# Open paths: the UI has to be able to ask "am I locked?" and to submit the
+# token, otherwise there is no way in. Everything else under /api/ is gated,
+# including media streaming, clip download and delete.
+_OPEN_API_PATHS = {"/api/auth/status", "/api/auth/unlock"}
+
+
+def _access_cookie_value() -> str:
+    """Derive the cookie from the secret so the cookie is not the secret.
+
+    Rotating SCENESTER_ACCESS_TOKEN invalidates every issued cookie for free.
+    """
+    return hashlib.sha256(("scenester-access:" + ACCESS_TOKEN).encode()).hexdigest()
+
+
+def _is_https(request: Request) -> bool:
+    """True when the browser reached us over TLS.
+
+    Behind Caddy the app itself sees plain http, so the scheme has to come from
+    the proxy header — otherwise the Secure flag is never set on a public URL
+    and the cookie travels on any http request to the same host.
+    """
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    return forwarded == "https" or request.url.scheme == "https"
+
+
+def _request_authorized(request: Request) -> bool:
+    if not ACCESS_TOKEN:
+        return True
+    supplied = request.headers.get(_ACCESS_HEADER, "")
+    if supplied and hmac.compare_digest(supplied, ACCESS_TOKEN):
+        return True
+    cookie = request.cookies.get(_ACCESS_COOKIE, "")
+    return bool(cookie) and hmac.compare_digest(cookie, _access_cookie_value())
+
+
+@app.middleware("http")
+async def access_gate(request: Request, call_next):
+    path = request.url.path
+    if (
+        ACCESS_TOKEN
+        and path.startswith("/api/")
+        and path not in _OPEN_API_PATHS
+        and not _request_authorized(request)
+    ):
+        return JSONResponse(
+            {"detail": "access token required", "locked": True},
+            status_code=401,
+        )
+    return await call_next(request)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -601,9 +672,11 @@ async def healthz():
     body = {
         "ok": not problems,
         "problems": problems,
+        "version": APP_VERSION,
         "clips_dir": str(CLIPS_DIR),
         "cache_root": str(CACHE_ROOT),
         "authenticated": plex.is_authenticated(),
+        "access_token_required": bool(ACCESS_TOKEN),
     }
     return Response(
         content=__import__("json").dumps(body),
@@ -614,38 +687,117 @@ async def healthz():
 
 # ── API: Auth ─────────────────────────────────────────────────────────────
 
+class UnlockRequest(BaseModel):
+    token: str = ""
+
+
+# PINs are created for a specific client and must be approved by that same
+# client. Without the binding, any reachable client could start its own PIN,
+# approve it with its own Plex account and overwrite the stored token — the
+# "login" became a takeover. The nonce rides in an HttpOnly cookie so a caller
+# who knows the PIN id (they are sequential on plex.tv) still cannot claim it.
+_PIN_COOKIE = "scenester_pin"
+_PIN_TTL = 600
+_PIN_MAX = 50
+_PINS: dict[int, tuple[str, float]] = {}
+
+
+def _prune_pins() -> None:
+    now = time.time()
+    for pin_id, (_, created) in list(_PINS.items()):
+        if now - created > _PIN_TTL:
+            _PINS.pop(pin_id, None)
+
+
 @app.get("/api/auth/status")
-async def auth_status():
-    """Return whether we have a working Plex token."""
-    return {"authenticated": plex.is_authenticated()}
+async def auth_status(request: Request):
+    """Whether Plex is connected, and whether this client may talk to the API."""
+    return {
+        "authenticated": plex.is_authenticated(),
+        "locked": bool(ACCESS_TOKEN) and not _request_authorized(request),
+        "access_token_required": bool(ACCESS_TOKEN),
+        "version": APP_VERSION,
+    }
+
+
+@app.post("/api/auth/unlock")
+async def auth_unlock(body: UnlockRequest, request: Request, response: Response):
+    """Exchange the access token for a cookie, so the browser sends it automatically."""
+    if not ACCESS_TOKEN:
+        return {"ok": True, "required": False}
+    # Compare digests, not strings: a length- and time-varying comparison leaks
+    # the token one character at a time to anyone who can measure it.
+    if not body.token or not hmac.compare_digest(body.token.strip(), ACCESS_TOKEN):
+        raise HTTPException(status_code=401, detail="wrong access token")
+    response.set_cookie(
+        _ACCESS_COOKIE,
+        _access_cookie_value(),
+        max_age=_ACCESS_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=_is_https(request),
+        path="/",
+    )
+    return {"ok": True, "required": True}
 
 
 @app.post("/api/auth/pin")
-async def auth_create_pin():
+async def auth_create_pin(request: Request, response: Response):
     """Start the Plex OAuth PIN flow.
 
     Returns a code the user enters at https://plex.tv/link."""
     try:
         pin = await plex.create_pin()
-        return pin
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Plex.tv error: {e}")
 
+    _prune_pins()
+    if len(_PINS) >= _PIN_MAX:
+        # Drop the oldest rather than growing without bound; a PIN that has
+        # fallen off the map can still be re-created by the client.
+        _PINS.pop(min(_PINS, key=lambda k: _PINS[k][1]), None)
+    nonce = secrets.token_urlsafe(24)
+    _PINS[pin["id"]] = (nonce, time.time())
+    response.set_cookie(
+        _PIN_COOKIE,
+        f"{pin['id']}.{nonce}",
+        max_age=_PIN_TTL,
+        httponly=True,
+        samesite="lax",
+        secure=_is_https(request),
+        path="/",
+    )
+    return pin
+
 
 @app.get("/api/auth/pin/{pin_id}")
-async def auth_check_pin(pin_id: int):
-    """Check whether the user has approved the PIN at plex.tv/link."""
+async def auth_check_pin(pin_id: int, request: Request):
+    """Check whether the user has approved the PIN at plex.tv/link.
+
+    Only the client that created the PIN may collect its token."""
+    _prune_pins()
+    entry = _PINS.get(pin_id)
+    supplied = request.cookies.get(_PIN_COOKIE, "")
+    expected = f"{pin_id}.{entry[0]}" if entry else ""
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(
+            status_code=403,
+            detail="this Plex PIN was not started by this client",
+        )
     try:
         result = await plex.check_pin(pin_id)
+        if result.get("status") == "done":
+            _PINS.pop(pin_id, None)
         return result
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Plex.tv error: {e}")
 
 
 @app.post("/api/auth/logout")
-async def auth_logout():
-    """Clear the stored Plex token."""
+async def auth_logout(response: Response):
+    """Clear the stored Plex token (and this client's access cookie)."""
     plex.clear_token()
+    response.delete_cookie(_ACCESS_COOKIE, path="/")
     return {"authenticated": False}
 
 

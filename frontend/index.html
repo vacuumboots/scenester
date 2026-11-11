@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="static/trans.png">
   <link rel="manifest" href="manifest.json">
   <title>Scenester</title>
-  <link rel="stylesheet" href="static/style.css?v=76">
+  <link rel="stylesheet" href="static/style.css?v=77">
 </head>
 <body>
 
@@ -21,6 +21,16 @@
   <div class="login-card">
     <div class="login-logo"><img src="static/trans.png" alt="" class="login-logo-img"><span class="login-wordmark"><span class="brand-clip">Scene</span><span class="brand-arr">ster</span></span></div>
     <div class="login-sub">Plex Clip Maker</div>
+
+    <!-- Step 0: access token (only shown when SCENESTER_ACCESS_TOKEN is set) -->
+    <div class="login-step" id="login-step-gate" style="display:none">
+      <div class="login-pin-label">This Scenester is locked. Enter the access token.</div>
+      <input class="gate-input" id="gate-token" type="password" inputmode="text"
+             autocomplete="current-password" autocapitalize="off" spellcheck="false"
+             placeholder="access token">
+      <button class="btn btn-primary" id="btn-gate-unlock">Unlock</button>
+      <div class="login-pin-error" id="gate-error" style="display:none"></div>
+    </div>
 
     <!-- Step 1: Connect button -->
     <div class="login-step" id="login-step-connect">
@@ -323,8 +333,8 @@
 
 </main>
 
-<script src="static/app.js?v=76"></script>
-<script src="static/mobile.js?v=76"></script>
+<script src="static/app.js?v=77"></script>
+<script src="static/mobile.js?v=77"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");

@@ -1782,11 +1782,41 @@ function stopPinPolling() {
 }
 
 function showLoginStep(step) {
-  var steps = ["login-step-connect", "login-step-pin", "login-step-error"];
+  var steps = ["login-step-gate", "login-step-connect", "login-step-pin", "login-step-error"];
   for (var i = 0; i < steps.length; i++) {
     var el = qs("#" + steps[i]);
     if (el) el.style.display = steps[i] === step ? "" : "none";
   }
+}
+
+// Exchange the access token for a cookie. Reload rather than re-init: the app's
+// boot path is one function that expects to run once, and a reload is what a
+// person expects after unlocking anyway.
+function submitGateToken() {
+  var input = qs("#gate-token");
+  var err = qs("#gate-error");
+  var btn = qs("#btn-gate-unlock");
+  var token = input ? input.value.trim() : "";
+  if (!token) return;
+  if (btn) btn.disabled = true;
+  fetch("api/auth/unlock", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: token })
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error("rejected");
+      return r.json();
+    })
+    .then(function() { location.reload(); })
+    .catch(function() {
+      if (err) {
+        err.textContent = "That token was not accepted.";
+        err.style.display = "";
+      }
+      if (btn) btn.disabled = false;
+      if (input) { input.value = ""; input.focus(); }
+    });
 }
 
 function initAuth() {
@@ -1794,11 +1824,21 @@ function initAuth() {
   var btnConnect = qs("#btn-plex-connect");
   var btnRetry = qs("#btn-login-retry");
   var btnCancel = qs("#btn-pin-cancel");
+  var btnGate = qs("#btn-gate-unlock");
+  var gateInput = qs("#gate-token");
 
-  // Check if already authenticated
+  // Check whether this client is allowed in at all, then whether Plex is
+  // connected. Both answers come from the same call so a locked client never
+  // fires a request that would be refused.
   fetch("api/auth/status")
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      if (data.locked) {
+        if (overlay) overlay.classList.remove("hidden");
+        showLoginStep("login-step-gate");
+        if (gateInput) gateInput.focus();
+        return;
+      }
       if (data.authenticated) {
         // Already have a token — hide login, init app
         if (overlay) overlay.classList.add("hidden");
@@ -1814,6 +1854,16 @@ function initAuth() {
       if (overlay) overlay.classList.remove("hidden");
       showLoginStep("login-step-connect");
     });
+
+  // Access token
+  if (btnGate) {
+    btnGate.addEventListener("click", submitGateToken);
+  }
+  if (gateInput) {
+    gateInput.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") submitGateToken();
+    });
+  }
 
   // Connect button
   if (btnConnect) {
