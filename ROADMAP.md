@@ -4,9 +4,10 @@ Scenester is a tool I actually use to clip films out of my Plex library, not a
 demo built to look like one. This roadmap is ordered by what a stranger hits
 first: the repo, the README, the code, then the details.
 
-Last updated 2026-11-10. Current state: P0 is shipped (unprivileged container, no
-published port, shared-secret API gate, pinned build inputs), 94 backend tests,
-CI green, `ghcr.io/vacuumboots/scenester` publishing on every passing push.
+Last updated 2026-11-11. Current state: P0 and P1 are shipped — unprivileged
+container, no published port, shared-secret API gate, pinned build inputs, a
+shipped compose file, a generated demo loop, a rebuilt README and a tagged
+release. 94 backend tests, CI green on every push.
 
 ## How this is prioritised
 
@@ -58,17 +59,17 @@ than in a plan.
       ffmpeg build, so an unpinned `apt-get install ffmpeg` can silently
       reintroduce a visual corruption bug that took a session to find.
 
-## P1 — The first 90 seconds
+## P1 — The first 90 seconds (shipped 2026-11-11)
 
-- [ ] **A demo loop above the fold.** 60–90 seconds, under 8MB, committed:
+- [x] **A demo loop above the fold.** 60–90 seconds, under 8MB, committed:
       browse, quote-search a line, mark a range, clip, download. Screenshots
       prove the UI exists; a loop proves the thing works. This is the single
       highest-value item on the list for a reader who will not run Docker.
-- [ ] **Ship a `docker-compose.yml`.** Today the README says "add it to your
+- [x] **Ship a `docker-compose.yml`.** Today the README says "add it to your
       compose file" and hands over a `docker run` block. A compose file is what
       reviewers expect, it makes self-hosting one command, and it gives the
       resource limits somewhere to live.
-- [ ] **Restructure the README** into: one-line pitch, demo loop, what it does,
+- [x] **Restructure the README** into: one-line pitch, demo loop, what it does,
       architecture diagram, design decisions, measured numbers, limitations,
       setup, configuration table, roadmap. Mermaid diagram, not an image, so it
       stays readable and diffable.
@@ -77,28 +78,24 @@ than in a plan.
       pending.) Was: about twelve settings, three documented. `SCENESTER_FRAME_CONCURRENCY`
       is the single lever that controls the documented load spike and it is
       currently undiscoverable.
-- [ ] **Badges that mean something**: CI status, image publish, GHCR pull
+- [x] **Badges that mean something**: CI status, image publish, GHCR pull
       count, licence, Python version, test count. Screen-reader-friendly alt
       text on each.
-- [ ] **Move the working docs into `docs/`.** `docs/ARCHITECTURE.md`,
+- [x] **Move the working docs into `docs/`.** `docs/ARCHITECTURE.md`,
       `docs/SECURITY.md`, `docs/audits/2026-11-08-review.md`. The audit is a
       real asset — it shows the discipline of reviewing my own work and finding
       four defects that mattered — but only once its open items are closed.
       It gets a resolution-status header at that point, not before.
-- [ ] **Track `CHANGELOG.md` and cut releases.** Tag `v1.0.0`, publish a GitHub
+- [x] **Track `CHANGELOG.md` and cut releases.** Tag `v1.0.0`, publish a GitHub
       Release whose notes point at the GHCR digest. Release notes are the
       cheapest maturity signal a repo can carry, and right now the changelog is
       gitignored as a working file.
-- [ ] **Surface the version at runtime** in `/healthz` and the UI footer so a
+- [x] **Surface the version at runtime** in `/healthz` and the UI footer so a
       bug report can name a build.
-- [ ] **Decide what to do with the "Proudly vibecoded with Deepseek" banner.**
-      My recommendation: keep the honesty, move it. It is currently the second
-      thing in the README, ahead of any description of what the tool does, and
-      as a first impression it invites a reader to discount the work before
-      they have seen it. Put it near the bottom under "How this was built",
-      alongside what the model wrote, what I specified, and what I had to debug
-      myself. Same disclosure, better sequencing: the tool first, the tooling
-      second. Reversible if you disagree, it is one line either way.
+- [x] **Decide what to do with the "Proudly vibecoded with Deepseek" banner.**
+      Done: kept the honesty, moved it. It now sits under "How this was built"
+      with what the model did and what I had to debug myself. Same disclosure,
+      better sequencing — the tool first, the tooling second.
 
 ## P2 — Depth
 
@@ -197,8 +194,8 @@ Written to be pasted, with numbers that are measured rather than estimated:
 
 | Phase | Effort | When |
 |---|---|---|
-| P0 hardening | ~4-6 h | One window, before anything else |
-| P1 first 90 seconds | ~6-10 h | This week |
+| P0 hardening | ~4-6 h | Done 2026-11-10 |
+| P1 first 90 seconds | ~6-10 h | Done 2026-11-11 |
 | P2 depth | ~3-4 evenings | Ongoing, one item per sitting |
 | P3 distribution | ~2-3 h plus publishing | After P1 |
 

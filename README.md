@@ -15,6 +15,13 @@ Self-hosted, one container, no database. Runs unprivileged, exports through
 ffmpeg on the server, and uses an Intel iGPU when there is one.
 
 <p align="center">
+  <img src="screenshots/demo.gif" alt="Filtering the library to one film, marking a 13-second range with Set Start and Set End while it plays, and exporting the clip" width="88%">
+  <br>
+  <sub>Filter → open → mark a 13s range while it plays → export. This is a capture of a
+  live instance, produced by <code>scripts/record_demo.py</code>, not a mockup.</sub>
+</p>
+
+<p align="center">
   <img src="screenshots/library-desktop.jpg" alt="Scenester movie library on desktop, with the now-playing banner" width="62%">
   <br>
   <sub>The library — every title in your Plex server, searchable and sortable. The banner shows what's playing right now.</sub>
@@ -292,8 +299,13 @@ pip-compile --generate-hashes --output-file requirements.lock.txt requirements.t
 the image, and smoke-tests it against `/healthz` before anything is published.
 
 `/healthz` is the real readiness probe — it checks cache writability, ffmpeg and
-ffprobe, and the media mount. `/` and `/api/auth/status` stay 200 when the app
-is useless, which is why the container healthcheck does not use them.
+ffprobe, and the media mount. `/` and `/api/auth/status` stay 200 when the app is
+useless, which is why the container healthcheck does not use them.
+
+The README's demo loop is generated rather than hand-recorded:
+`scripts/record_demo.py` drives a real instance in headless Chrome over the
+DevTools Protocol, clicks the app's own buttons, and captures frames for ffmpeg
+to assemble. Point it at your own instance to re-shoot the loop.
 
 ### Keyboard shortcuts
 

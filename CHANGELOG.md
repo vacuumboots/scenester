@@ -1,5 +1,36 @@
 # Scenester Changelog
 
+## 2026-11-11 — v1.0.0 release: README rebuilt around a scan, compose file, demo loop
+
+The repo worked; it read like a working tree. This pass was about what a
+stranger sees in the first ninety seconds, without changing behaviour.
+
+- **README rebuilt** in the order a reader consumes it: pitch, demo loop,
+  what it does, mermaid architecture diagram, design decisions (each with the
+  failure that motivated it), a measured-numbers table, an honest limitations
+  list, one-command setup, configuration table, security posture.
+- **The demo loop is generated, not hand-recorded.** `scripts/record_demo.py`
+  drives a real instance in headless Chrome over the DevTools Protocol, clicks
+  the app's own buttons, and captures frames for ffmpeg. Re-shooting it is one
+  command against any instance, so the GIF cannot quietly go stale.
+- **`docker-compose.yml` ships.** The README used to say "add this to your
+  compose file" and hand over a `docker run` block. It now hands over the file:
+  loopback-only port, resource limits, `PUID`/`PGID`/`RENDER_GID`, optional
+  VAAPI device, and `docker compose config` verified.
+- **`CHANGELOG.md` is tracked.** It was gitignored as a working file, which hid
+  four months of real bug narratives — the most legible evidence in the repo —
+  from anyone reading it.
+- **"Proudly vibecoded with Deepseek" moved** from the second line of the README
+  to a "How this was built" section at the bottom. Same disclosure, better
+  sequencing: the tool first, the tooling second.
+- **Working docs moved to `docs/`** (audits, plans); `ROADMAP.md` at the root
+  carries what is next, phased by what it buys rather than by technology.
+- **Runtime version** in `/healthz` and `/api/auth/status`, so a bug report can
+  name a build.
+
+Verified: 94 tests, CI green, image published to `ghcr.io/vacuumboots/scenester`
+for `v1.0.0`, and the compose file validated with `docker compose config`.
+
 ## 2026-11-10 — v1.0.0: unprivileged container, no published port, access gate
 
 The API had no credential of its own and the container published 8096 on every
