@@ -172,14 +172,17 @@ Written to be pasted, with numbers that are measured rather than estimated:
   `.part` file, verified with `ffprobe` for a positive duration, and only then
   promoted, after finding that `-movflags +faststart` leaves a playable-looking
   file no player can open when an encode is killed.
-- Added 80+ backend tests covering artefact integrity, request validation,
-  filename uniqueness across non-Latin and duplicate titles, and readiness
-  reporting; gated image publishing on a passing test run so a red build cannot
+- Added 94 backend tests covering artefact integrity, request validation,
+  filename uniqueness across non-Latin and duplicate titles, readiness
+  reporting, the API access gate in both states, token rotation and PIN
+  binding; gated image publishing on a passing test run so a red build cannot
   overwrite `:latest`.
 - Hardened the deployment: container off the published host port behind a
   reverse proxy on a shared Docker network, non-root with all capabilities
-  dropped, shared-secret API layer, and CPU/memory limits so an export cannot
-  starve the host's transcoder.
+  dropped, shared-secret API layer with Plex PINs bound to the requesting
+  client, and CPU/memory limits so an export cannot starve the host's
+  transcoder. Pinned base images, ffmpeg and a hashed Python lockfile installed
+  with `--require-hashes`.
 
 ## Explicit non-goals
 
