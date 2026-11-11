@@ -186,7 +186,7 @@ In the order they're likely to bite:
 
 ## Setup
 
-One container and one command. Everything not shown below has a default.
+One container. Everything not shown below has a default.
 
 ```bash
 git clone https://github.com/vacuumboots/scenester.git
