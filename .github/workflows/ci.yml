@@ -57,6 +57,12 @@ jobs:
       - name: Smoke-test the image
         run: |
           mkdir -p /tmp/clips /tmp/data
+          # The image runs as uid 1000 (no root). A GitHub runner is uid 1001, so
+          # dirs it creates are unwritable for the container: /data fails its
+          # write probe, the app falls back to a temp cache, reports itself
+          # unhealthy and the smoke test fails on a perfectly good build. The
+          # production bind mounts are chowned to 1000 for exactly this reason.
+          sudo chown -R 1000:1000 /tmp/clips /tmp/data
           docker run -d --name smoke -p 8096:8096 \
             -v /tmp/clips:/tmp/clips -v /tmp/data:/data scenester:ci
           for i in $(seq 1 40); do
