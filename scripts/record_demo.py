@@ -14,6 +14,10 @@ with a 1,920-film Plex library, which is why the numbers in it are real.
       -loop 0 screenshots/demo.gif
 
 Requires: pip install websocket-client, and Chrome at the CHROME path below.
+Use an interpreter that actually has it: on a Homebrew Python (externally
+managed) `pip install` fails or installs somewhere else, and the error is a bare
+`ModuleNotFoundError` several frames later. `python3 -c "import websocket"`
+first.
 """
 
 import base64
@@ -27,7 +31,13 @@ import time
 import urllib.parse
 import urllib.request
 
-import websocket
+try:
+    import websocket
+except ModuleNotFoundError:  # pragma: no cover - operator error, not a code path
+    raise SystemExit(
+        "this script needs websocket-client: pip install websocket-client\n"
+        "and an interpreter that can see it (python3 -c 'import websocket')."
+    )
 
 CHROME = os.environ.get(
     "CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
